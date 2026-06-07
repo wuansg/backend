@@ -196,12 +196,35 @@ export class StartNodeProcessor extends WorkerHost {
             }
 
             const reqStartTime = getTime();
+            const activeNodeInboundsTags = new Set(
+                node.activeInbounds.map((inbound) => inbound.tag),
+            );
+            const preparedConfig = config.response.config as Record<string, unknown>;
 
             const startNodeResult = await this.axios.startXray(
-                {
-                    xrayConfig: config.response.config as unknown as Record<string, unknown>,
-                    internals: { hashes: config.response.hashesPayload, forceRestart: false },
-                },
+                config.response.coreType === 'SING_BOX'
+                    ? {
+                          coreType: 'SING_BOX' as const,
+                          singBoxConfig: {
+                              ...preparedConfig,
+                              inbounds: this.filterSingBoxInbounds(
+                                  preparedConfig.inbounds,
+                                  activeNodeInboundsTags,
+                              ),
+                          },
+                          internals: { hashes: config.response.hashesPayload, forceRestart: false },
+                      }
+                    : {
+                          coreType: 'XRAY' as const,
+                          xrayConfig: {
+                              ...preparedConfig,
+                              inbounds: this.filterXrayInbounds(
+                                  preparedConfig.inbounds,
+                                  activeNodeInboundsTags,
+                              ),
+                          },
+                          internals: { hashes: config.response.hashesPayload, forceRestart: false },
+                      },
                 node.address,
                 node.port,
             );
@@ -272,5 +295,51 @@ export class StartNodeProcessor extends WorkerHost {
         } catch (error) {
             this.logger.error(`Error handling "${NODES_JOB_NAMES.START_NODE}" job: ${error}`);
         }
+    }
+
+    private filterXrayInbounds(
+        inbounds: unknown,
+        activeNodeInboundsTags: Set<string>,
+    ): Array<Record<string, unknown>> {
+        if (!Array.isArray(inbounds)) {
+            return [];
+        }
+
+        return inbounds.filter((inbound) => {
+            if (!this.isRecord(inbound)) return false;
+            const tag = inbound.tag;
+            const protocol = inbound.protocol;
+            return (
+                (typeof tag === 'string' && activeNodeInboundsTags.has(tag)) ||
+                (typeof protocol === 'string' && this.isUnsecureInbound(protocol))
+            );
+        }) as Array<Record<string, unknown>>;
+    }
+
+    private filterSingBoxInbounds(
+        inbounds: unknown,
+        activeNodeInboundsTags: Set<string>,
+    ): Array<Record<string, unknown>> {
+        if (!Array.isArray(inbounds)) {
+            return [];
+        }
+
+        return inbounds.filter((inbound) => {
+            if (!this.isRecord(inbound)) return false;
+            const tag = inbound.tag;
+            const type = inbound.type;
+            return (
+                (typeof tag === 'string' && activeNodeInboundsTags.has(tag)) ||
+                (typeof type === 'string' && this.isUnsecureInbound(type))
+            );
+        }) as Array<Record<string, unknown>>;
+    }
+
+    private isRecord(value: unknown): value is Record<string, unknown> {
+        return typeof value === 'object' && value !== null;
+    }
+
+    private isUnsecureInbound(protocol: string): boolean {
+        return ['dokodemo-door', 'http', 'mixed', 'tunnel', 'wireguard'].includes(protocol);
     }
 }
