@@ -55,6 +55,8 @@ export class XrayGeneratorService {
                 return this.buildTrojanLink(host);
             case 'shadowsocks':
                 return this.buildShadowsocksLink(host);
+            case 'anytls':
+                return this.buildAnyTlsLink(host);
             default:
                 return null;
         }
@@ -123,6 +125,16 @@ export class XrayGeneratorService {
         const remark = encodeURIComponent(host.finalRemark);
 
         return `ss://${credentials}@${host.address}:${host.port}#${remark}`;
+    }
+
+    // ── AnyTLS ───────────────────────────────────────
+    // anytls://$(password)@host:port
+
+    private buildAnyTlsLink(host: Extract<ResolvedProxyConfig, { protocol: 'anytls' }>): string {
+        const remark = encodeURIComponent(host.finalRemark);
+        const password = encodeURIComponent(host.protocolOptions.password);
+
+        return `anytls://${password}@${host.address}:${host.port}#${remark}`;
     }
 
     // ── Transport Params ─────────────────────────────
