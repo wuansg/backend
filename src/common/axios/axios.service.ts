@@ -36,20 +36,27 @@ import { GetNodeJwtCommand } from '@modules/keygen/commands/get-node-jwt';
 
 import { fail, ok, TResult } from '../types';
 
-type CoreStartRequest = StartXrayCommand.Request & {
-    coreType?: 'XRAY' | 'SING_BOX';
-    singBoxConfig?: Record<string, unknown>;
-};
+type CoreStartRequest = (
+    | {
+          coreType?: 'XRAY';
+          xrayConfig: Record<string, unknown>;
+      }
+    | {
+          coreType: 'SING_BOX';
+          singBoxConfig: Record<string, unknown>;
+      }
+) &
+    Omit<StartXrayCommand.Request, 'xrayConfig'>;
 
-type CoreStartResponse = StartXrayCommand.Response & {
-    response: StartXrayCommand.Response['response'] & {
+type CoreStartResponse = {
+    response: {
         runningCore?: 'XRAY' | 'SING_BOX' | null;
         coreVersions?: {
             xray: string | null;
             singBox: string | null;
         };
-    };
-};
+    } & StartXrayCommand.Response['response'];
+} & StartXrayCommand.Response;
 
 @Injectable()
 export class AxiosService {

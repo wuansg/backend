@@ -53,8 +53,7 @@ export class GetPreparedConfigWithUsersHandler implements IQueryHandler<
 
             const activeInboundsTags = new Set(activeInbounds.map((inbound) => inbound.tag));
 
-            const coreType =
-                configProfile.response.coreType === 'SING_BOX' ? 'SING_BOX' : 'XRAY';
+            const coreType = configProfile.response.coreType === 'SING_BOX' ? 'SING_BOX' : 'XRAY';
 
             config =
                 coreType === 'SING_BOX'
@@ -62,7 +61,8 @@ export class GetPreparedConfigWithUsersHandler implements IQueryHandler<
                     : new XRayConfig(configProfile.response.config as object);
 
             if (coreType === 'SING_BOX') {
-                config.cleanInboundClients();
+                const singBoxConfig = config as SingBoxConfig;
+                singBoxConfig.cleanInboundClients();
             } else {
                 const xrayConfig = config as XRayConfig;
                 xrayConfig.cleanInboundClients(true);

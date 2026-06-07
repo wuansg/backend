@@ -5,8 +5,8 @@ import { Transactional } from '@nestjs-cls/transactional';
 import { Injectable, Logger } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 
-import { XRayConfig } from '@common/helpers/xray-config';
 import { SingBoxConfig } from '@common/helpers/sing-box-config';
+import { XRayConfig } from '@common/helpers/xray-config';
 import { fail, ok, TResult } from '@common/types';
 import { ERRORS } from '@libs/contracts/constants/errors';
 
@@ -269,7 +269,8 @@ export class ConfigProfileService {
         coreType?: 'XRAY' | 'SING_BOX',
     ): Promise<boolean> {
         try {
-            const targetCoreType = coreType ?? (existingConfigProfile.coreType as 'XRAY' | 'SING_BOX');
+            const targetCoreType =
+                coreType ?? (existingConfigProfile.coreType as 'XRAY' | 'SING_BOX');
             const configProfileEntity = new ConfigProfileEntity({
                 uuid,
                 name,

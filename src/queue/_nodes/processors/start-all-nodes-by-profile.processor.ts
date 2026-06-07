@@ -277,7 +277,15 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                 );
                 const preparedConfig = config.response.config as Record<string, unknown>;
 
-                const startRequestConfig =
+                const internals = {
+                    hashes: {
+                        emptyConfig: config.response.hashesPayload.emptyConfig,
+                        inbounds: filteredInboundsHashes,
+                    },
+                    forceRestart: payload.force ?? false,
+                };
+
+                const startXrayResponse = await this.axios.startXray(
                     config.response.coreType === 'SING_BOX'
                         ? {
                               coreType: 'SING_BOX' as const,
@@ -288,6 +296,7 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                                       activeNodeInboundsTags,
                                   ),
                               } as Record<string, unknown>,
+                              internals,
                           }
                         : {
                               coreType: 'XRAY' as const,
@@ -298,19 +307,8 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                                       activeNodeInboundsTags,
                                   ),
                               } as Record<string, unknown>,
-                          };
-
-                const startXrayResponse = await this.axios.startXray(
-                    {
-                        ...startRequestConfig,
-                        internals: {
-                            hashes: {
-                                emptyConfig: config.response.hashesPayload.emptyConfig,
-                                inbounds: filteredInboundsHashes,
-                            },
-                            forceRestart: payload.force ?? false,
-                        },
-                    },
+                              internals,
+                          },
                     node.address,
                     node.port,
                 );
@@ -349,9 +347,7 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                                               xray:
                                                   nodeResponse.coreVersions?.xray ??
                                                   nodeResponse.version,
-                                              singBox:
-                                                  nodeResponse.coreVersions?.singBox ??
-                                                  null,
+                                              singBox: nodeResponse.coreVersions?.singBox ?? null,
                                               node: nodeResponse.nodeInformation.version,
                                           }
                                         : null,

@@ -306,6 +306,8 @@ export class XrayJsonGeneratorService {
                 return PROTOCOL_BUILDERS.shadowsocks(host);
             case 'hysteria':
                 return PROTOCOL_BUILDERS.hysteria(host);
+            case 'anytls':
+                return {};
         }
     }
 
