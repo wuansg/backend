@@ -131,10 +131,9 @@ export class XrayGeneratorService {
     // anytls://$(password)@host:port
 
     private buildAnyTlsLink(host: Extract<ResolvedProxyConfig, { protocol: 'anytls' }>): string {
-        const remark = encodeURIComponent(host.finalRemark);
         const password = encodeURIComponent(host.protocolOptions.password);
 
-        return `anytls://${password}@${host.address}:${host.port}#${remark}`;
+        return `anytls://${password}@${host.address}:${host.port}`;
     }
 
     // ── Transport Params ─────────────────────────────
