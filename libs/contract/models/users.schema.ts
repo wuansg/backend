@@ -33,6 +33,7 @@ export const UsersSchema = z.object({
     trojanPassword: z.string(),
     vlessUuid: z.string().uuid(),
     ssPassword: z.string(),
+    anytlsPassword: z.string(),
 
     lastTriggeredThreshold: z.number().int().default(0),
     subRevokedAt: z.nullable(

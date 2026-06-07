@@ -9,7 +9,8 @@ import { TResult } from '@common/types';
 import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
 
 export interface IGetPreparedConfigWithUsersResponse {
-    config: XrayConfig;
+    coreType: 'XRAY' | 'SING_BOX';
+    config: XrayConfig | Record<string, unknown>;
     hashesPayload: StartXrayCommand.Request['internals']['hashes'];
 }
 

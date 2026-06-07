@@ -2,6 +2,7 @@ export class UserForConfigEntity {
     public trojanPassword: string;
     public vlessUuid: string;
     public ssPassword: string;
+    public anytlsPassword: string;
     public tags: string[];
     public tId: bigint;
 
@@ -9,6 +10,7 @@ export class UserForConfigEntity {
         this.trojanPassword = data.trojanPassword;
         this.vlessUuid = data.vlessUuid;
         this.ssPassword = data.ssPassword;
+        this.anytlsPassword = data.anytlsPassword;
         this.tags = data.tags;
         this.tId = data.tId;
     }

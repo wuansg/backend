@@ -275,17 +275,34 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                 const filteredInboundsHashes = config.response.hashesPayload.inbounds.filter(
                     (inbound) => activeNodeInboundsTags.has(inbound.tag),
                 );
+                const preparedConfig = config.response.config as Record<string, unknown>;
+
+                const startRequestConfig =
+                    config.response.coreType === 'SING_BOX'
+                        ? {
+                              coreType: 'SING_BOX' as const,
+                              singBoxConfig: {
+                                  ...preparedConfig,
+                                  inbounds: this.filterSingBoxInbounds(
+                                      preparedConfig.inbounds,
+                                      activeNodeInboundsTags,
+                                  ),
+                              } as Record<string, unknown>,
+                          }
+                        : {
+                              coreType: 'XRAY' as const,
+                              xrayConfig: {
+                                  ...preparedConfig,
+                                  inbounds: this.filterXrayInbounds(
+                                      preparedConfig.inbounds,
+                                      activeNodeInboundsTags,
+                                  ),
+                              } as Record<string, unknown>,
+                          };
 
                 const startXrayResponse = await this.axios.startXray(
                     {
-                        xrayConfig: {
-                            ...config.response.config,
-                            inbounds: config.response.config.inbounds!.filter(
-                                (inbound) =>
-                                    activeNodeInboundsTags.has(inbound.tag!) ||
-                                    this.isUnsecureInbound(inbound.protocol),
-                            ),
-                        } as unknown as Record<string, unknown>,
+                        ...startRequestConfig,
                         internals: {
                             hashes: {
                                 emptyConfig: config.response.hashesPayload.emptyConfig,
@@ -329,7 +346,12 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                                 value:
                                     nodeResponse.nodeInformation.version && nodeResponse.version
                                         ? {
-                                              xray: nodeResponse.version,
+                                              xray:
+                                                  nodeResponse.coreVersions?.xray ??
+                                                  nodeResponse.version,
+                                              singBox:
+                                                  nodeResponse.coreVersions?.singBox ??
+                                                  null,
                                               node: nodeResponse.nodeInformation.version,
                                           }
                                         : null,
@@ -363,6 +385,48 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
             await this.nodesQueuesService.queues.startNode.resume();
             await this.nodesQueuesService.queues.startAllNodes.resume();
         }
+    }
+
+    private filterXrayInbounds(
+        inbounds: unknown,
+        activeNodeInboundsTags: Set<string>,
+    ): Array<Record<string, unknown>> {
+        if (!Array.isArray(inbounds)) {
+            return [];
+        }
+
+        return inbounds.filter((inbound) => {
+            if (!this.isRecord(inbound)) return false;
+            const tag = inbound.tag;
+            const protocol = inbound.protocol;
+            return (
+                (typeof tag === 'string' && activeNodeInboundsTags.has(tag)) ||
+                (typeof protocol === 'string' && this.isUnsecureInbound(protocol))
+            );
+        }) as Array<Record<string, unknown>>;
+    }
+
+    private filterSingBoxInbounds(
+        inbounds: unknown,
+        activeNodeInboundsTags: Set<string>,
+    ): Array<Record<string, unknown>> {
+        if (!Array.isArray(inbounds)) {
+            return [];
+        }
+
+        return inbounds.filter((inbound) => {
+            if (!this.isRecord(inbound)) return false;
+            const tag = inbound.tag;
+            const type = inbound.type;
+            return (
+                (typeof tag === 'string' && activeNodeInboundsTags.has(tag)) ||
+                (typeof type === 'string' && this.isUnsecureInbound(type))
+            );
+        }) as Array<Record<string, unknown>>;
+    }
+
+    private isRecord(value: unknown): value is Record<string, unknown> {
+        return typeof value === 'object' && value !== null;
     }
 
     private isUnsecureInbound(protocol: string): boolean {

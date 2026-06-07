@@ -24,6 +24,7 @@ export namespace CreateConfigProfileCommand {
                 'Name can only contain letters, numbers, underscores, dashes and spaces',
             ),
         config: z.object({}).passthrough(),
+        coreType: z.enum(['SING_BOX', 'XRAY']).default('XRAY'),
     });
 
     export type Request = z.infer<typeof RequestSchema>;

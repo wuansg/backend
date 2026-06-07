@@ -28,6 +28,7 @@ export class GetFullUserResponseModel {
     public readonly trojanPassword: string;
     public readonly vlessUuid: string;
     public readonly ssPassword: string;
+    public readonly anytlsPassword: string;
 
     public readonly lastTriggeredThreshold: number;
     public readonly subRevokedAt: Date | null;
@@ -73,6 +74,7 @@ export class GetFullUserResponseModel {
         this.trojanPassword = entity.trojanPassword;
         this.vlessUuid = entity.vlessUuid;
         this.ssPassword = entity.ssPassword;
+        this.anytlsPassword = entity.anytlsPassword;
 
         this.lastTriggeredThreshold = entity.lastTriggeredThreshold;
         this.subRevokedAt = entity.subRevokedAt;

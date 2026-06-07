@@ -25,6 +25,7 @@ export namespace UpdateConfigProfileCommand {
                 'Name can only contain letters, numbers, underscores, dashes and spaces',
             )
             .optional(),
+        coreType: z.enum(['SING_BOX', 'XRAY']).optional(),
         config: z.object({}).passthrough().optional(),
     });
 

@@ -36,6 +36,21 @@ import { GetNodeJwtCommand } from '@modules/keygen/commands/get-node-jwt';
 
 import { fail, ok, TResult } from '../types';
 
+type CoreStartRequest = StartXrayCommand.Request & {
+    coreType?: 'XRAY' | 'SING_BOX';
+    singBoxConfig?: Record<string, unknown>;
+};
+
+type CoreStartResponse = StartXrayCommand.Response & {
+    response: StartXrayCommand.Response['response'] & {
+        runningCore?: 'XRAY' | 'SING_BOX' | null;
+        coreVersions?: {
+            xray: string | null;
+            singBox: string | null;
+        };
+    };
+};
+
 @Injectable()
 export class AxiosService {
     public axiosInstance: AxiosInstance;
@@ -94,10 +109,10 @@ export class AxiosService {
      */
 
     public async startXray(
-        data: StartXrayCommand.Request,
+        data: CoreStartRequest,
         url: string,
         port: null | number,
-    ): Promise<TResult<StartXrayCommand.Response>> {
+    ): Promise<TResult<CoreStartResponse>> {
         const nodeUrl = this.getNodeUrl(url, StartXrayCommand.url, port);
 
         try {
@@ -108,7 +123,7 @@ export class AxiosService {
                 `[ZSTD] [START XRAY] ${formatExecutionTime(startTime)} | ${prettyBytesUtil(compressedData.length)}`,
             );
 
-            const response = await this.axiosInstance.post<StartXrayCommand.Response>(
+            const response = await this.axiosInstance.post<CoreStartResponse>(
                 nodeUrl,
                 compressedData,
                 {

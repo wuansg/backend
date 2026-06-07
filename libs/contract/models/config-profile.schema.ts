@@ -6,6 +6,7 @@ export const ConfigProfileSchema = z.object({
     uuid: z.string().uuid(),
     viewPosition: z.number().int(),
     name: z.string(),
+    coreType: z.enum(['SING_BOX', 'XRAY']).default('XRAY'),
     config: z.unknown(),
     inbounds: z.array(ConfigProfileInboundsSchema),
     nodes: z.array(

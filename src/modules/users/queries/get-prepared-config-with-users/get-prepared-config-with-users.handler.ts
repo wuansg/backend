@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { HashedSet } from '@remnawave/hashed-set';
 
 import { XRayConfig } from '@common/helpers/xray-config/xray-config.validator';
+import { SingBoxConfig } from '@common/helpers/sing-box-config';
 import { fail, ok, TResult } from '@common/types';
 import { ERRORS } from '@libs/contracts/constants';
 
@@ -30,7 +31,7 @@ export class GetPreparedConfigWithUsersHandler implements IQueryHandler<
     async execute(
         query: GetPreparedConfigWithUsersQuery,
     ): Promise<TResult<IGetPreparedConfigWithUsersResponse>> {
-        let config: XRayConfig | null = null;
+        let config: XRayConfig | SingBoxConfig | null = null;
         const inboundsUserSets: Map<string, HashedSet> = new Map();
         const snippetsMap: Map<string, unknown> = new Map();
         try {
@@ -52,11 +53,21 @@ export class GetPreparedConfigWithUsersHandler implements IQueryHandler<
 
             const activeInboundsTags = new Set(activeInbounds.map((inbound) => inbound.tag));
 
-            config = new XRayConfig(configProfile.response.config as object);
+            const coreType =
+                configProfile.response.coreType === 'SING_BOX' ? 'SING_BOX' : 'XRAY';
 
-            config.cleanInboundClients(true);
+            config =
+                coreType === 'SING_BOX'
+                    ? new SingBoxConfig(configProfile.response.config as object)
+                    : new XRayConfig(configProfile.response.config as object);
 
-            config.processCertificates();
+            if (coreType === 'SING_BOX') {
+                config.cleanInboundClients();
+            } else {
+                const xrayConfig = config as XRayConfig;
+                xrayConfig.cleanInboundClients(true);
+                xrayConfig.processCertificates();
+            }
 
             config.replaceSnippets(snippetsMap);
 
@@ -75,6 +86,7 @@ export class GetPreparedConfigWithUsersHandler implements IQueryHandler<
             }
 
             return ok({
+                coreType,
                 config: config.getConfig(),
                 hashesPayload: {
                     emptyConfig: configHash,

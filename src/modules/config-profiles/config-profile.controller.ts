@@ -193,6 +193,7 @@ export class ConfigProfileController {
         const result = await this.configProfileService.createConfigProfile(
             createConfigProfileDto.name,
             createConfigProfileDto.config,
+            createConfigProfileDto.coreType,
         );
 
         const data = errorHandler(result);
@@ -223,6 +224,7 @@ export class ConfigProfileController {
             updateConfigProfileDto.uuid,
             updateConfigProfileDto.name,
             updateConfigProfileDto.config,
+            updateConfigProfileDto.coreType,
         );
 
         const data = errorHandler(result);

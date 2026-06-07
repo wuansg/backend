@@ -20,6 +20,7 @@ export class BaseUserEntity implements Users {
     public trojanPassword: string;
     public vlessUuid: string;
     public ssPassword: string;
+    public anytlsPassword: string;
 
     public description: null | string;
     public tag: string | null;

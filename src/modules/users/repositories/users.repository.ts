@@ -44,6 +44,7 @@ const USERS_FILTER_COLUMN_MAP = {
     uuid: sql.ref('users.uuid'),
     vlessUuid: sql.ref('users.vless_uuid'),
     trojanPassword: sql.ref('users.trojan_password'),
+    anytlsPassword: sql.ref('users.anytls_password'),
     externalSquadUuid: sql.ref('users.external_squad_uuid'),
     username: sql.ref('users.username'),
     status: sql.ref('users.status'),
@@ -721,6 +722,7 @@ export class UsersRepository {
                     'users.trojanPassword',
                     'users.vlessUuid',
                     'users.ssPassword',
+                    'users.anytlsPassword',
                     sql<
                         string[]
                     >`coalesce(json_agg(DISTINCT ${eb.ref('configProfileInbounds.tag')}), '[]')`.as(
@@ -732,6 +734,7 @@ export class UsersRepository {
                     'users.trojanPassword',
                     'users.vlessUuid',
                     'users.ssPassword',
+                    'users.anytlsPassword',
                 ])
                 .orderBy(sql<string>`users.t_id asc`)
                 .limit(BATCH_SIZE);
@@ -1092,6 +1095,7 @@ export class UsersRepository {
             | 'trojanPassword'
             | 'vlessUuid'
             | 'ssPassword'
+            | 'anytlsPassword'
             | 'subRevokedAt'
             | 'shortUuid'
             | 'updatedAt'
@@ -1104,6 +1108,7 @@ export class UsersRepository {
                 trojanPassword: dto.trojanPassword,
                 vlessUuid: getKyselyUuid(dto.vlessUuid),
                 ssPassword: dto.ssPassword,
+                anytlsPassword: dto.anytlsPassword,
                 shortUuid: dto.shortUuid,
                 updatedAt: dto.updatedAt,
             })
@@ -1123,6 +1128,7 @@ export class UsersRepository {
                 'users.trojanPassword',
                 'users.vlessUuid',
                 'users.ssPassword',
+                'users.anytlsPassword',
                 jsonArrayFrom(
                     eb
                         .selectFrom('internalSquadMembers')
@@ -1176,6 +1182,7 @@ export class UsersRepository {
                 'users.trojanPassword',
                 'users.vlessUuid',
                 'users.ssPassword',
+                'users.anytlsPassword',
                 jsonArrayFrom(
                     eb
                         .selectFrom('internalSquadMembers')

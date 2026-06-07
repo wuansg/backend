@@ -60,6 +60,7 @@ model Users {
   trojanPassword         String    @map("trojan_password")
   vlessUuid              String    @map("vless_uuid") @db.Uuid
   ssPassword             String    @map("ss_password")
+  anytlsPassword         String    @default(dbgenerated("gen_random_uuid()::text")) @map("anytls_password")
   description            String?   @map("description")
   tag                    String?   @map("tag")
   telegramId             BigInt?   @map("telegram_id")
@@ -411,6 +412,8 @@ model ConfigProfiles {
   uuid         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   viewPosition Int    @default(autoincrement()) @map("view_position")
   name         String @unique @map("name")
+  /// @kyselyType('XRAY' | 'SING_BOX')
+  coreType     String @default("XRAY") @map("core_type") @db.VarChar(16)
   config       Json   @map("config")
 
   createdAt DateTime @default(dbgenerated("now()")) @map("created_at")

@@ -57,6 +57,16 @@ interface IResolveProxyConfigOptions {
     };
 }
 
+interface SingBoxInbound {
+    type?: string;
+    tag?: string;
+    tls?: {
+        alpn?: string[];
+        server_name?: string;
+        [key: string]: unknown;
+    };
+}
+
 @Injectable()
 export class ResolveProxyConfigService {
     private readonly nanoid: ReturnType<typeof customAlphabet>;
@@ -518,6 +528,15 @@ export class ResolveProxyConfigService {
     }): ResolvedProxyConfig | null {
         const { inputHost, inbound, finalRemark, user } = ctx;
 
+        if (this.isAnyTlsInbound(inputHost.rawInbound)) {
+            return this.buildAnyTlsResolvedProxyConfig({
+                inputHost,
+                inbound: inputHost.rawInbound,
+                finalRemark,
+                user,
+            });
+        }
+
         const address = this.resolveRandomizedValue(inputHost.address);
 
         const protocol = this.resolveProtocolOptions(
@@ -580,6 +599,81 @@ export class ResolveProxyConfigService {
             ...security,
             ...transport,
         } satisfies ResolvedProxyConfig;
+    }
+
+    private buildAnyTlsResolvedProxyConfig(ctx: {
+        inputHost: HostWithRawInbound;
+        inbound: SingBoxInbound;
+        finalRemark: string;
+        user: UserEntity;
+    }): ResolvedProxyConfig {
+        const { inputHost, inbound, finalRemark, user } = ctx;
+        const address = this.resolveRandomizedValue(inputHost.address);
+        const serverName = this.resolveFinalServerName(
+            inputHost,
+            inbound.tls?.server_name,
+            address,
+        );
+
+        return {
+            finalRemark,
+            address,
+            port: inputHost.port,
+            streamOverrides: {
+                finalMask: toNonEmptyRecord(inputHost.finalMask),
+                sockopt: toNonEmptyRecord(inputHost.sockoptParams),
+            },
+            mux: toNonEmptyRecord(inputHost.muxParams),
+            clientOverrides: {
+                shuffleHost: inputHost.shuffleHost,
+                mihomoX25519: inputHost.mihomoX25519,
+                serverDescription: inputHost.serverDescription
+                    ? Buffer.from(inputHost.serverDescription).toString('base64')
+                    : null,
+                xrayJsonTemplate: inputHost.xrayJsonTemplate,
+            },
+            metadata: {
+                uuid: inputHost.uuid,
+                tag: inputHost.tag,
+                excludeFromSubscriptionTypes: inputHost.excludeFromSubscriptionTypes,
+                inboundTag: inputHost.inboundTag,
+                configProfileUuid: inputHost.configProfileUuid,
+                configProfileInboundUuid: inputHost.configProfileInboundUuid,
+                isDisabled: inputHost.isDisabled,
+                isHidden: inputHost.isHidden,
+                viewPosition: inputHost.viewPosition,
+                remark: inputHost.remark,
+                vlessRouteId: inputHost.vlessRouteId,
+                rawInbound: inputHost.rawInbound,
+            },
+            protocol: 'anytls',
+            protocolOptions: {
+                password: user.anytlsPassword,
+            },
+            security: 'tls',
+            securityOptions: {
+                allowInsecure: inputHost.allowInsecure,
+                alpn: override(inputHost.alpn, inbound.tls?.alpn?.join(',')) ?? '',
+                enableSessionResumption: false,
+                fingerprint: inputHost.fingerprint || 'chrome',
+                serverName,
+                echConfigList: null,
+                echForceQuery: null,
+            },
+            transport: 'tcp',
+            transportOptions: {
+                header: null,
+            },
+        } satisfies ResolvedProxyConfig;
+    }
+
+    private isAnyTlsInbound(rawInbound: object | null): rawInbound is SingBoxInbound {
+        return (
+            typeof rawInbound === 'object' &&
+            rawInbound !== null &&
+            'type' in rawInbound &&
+            rawInbound.type === 'anytls'
+        );
     }
 
     private resolveRandomizedValue(value: string): string {

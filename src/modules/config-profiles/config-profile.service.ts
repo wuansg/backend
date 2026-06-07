@@ -6,6 +6,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 
 import { XRayConfig } from '@common/helpers/xray-config';
+import { SingBoxConfig } from '@common/helpers/sing-box-config';
 import { fail, ok, TResult } from '@common/types';
 import { ERRORS } from '@libs/contracts/constants/errors';
 
@@ -36,9 +37,10 @@ export class ConfigProfileService {
             const configProfiles = await this.configProfileRepository.getAllConfigProfiles();
 
             for (const configProfile of configProfiles) {
-                configProfile.config = new XRayConfig(
+                configProfile.config = this.getSortedConfig(
+                    configProfile.coreType,
                     configProfile.config as object,
-                ).getSortedConfig();
+                );
             }
 
             const total = await this.configProfileRepository.getTotalConfigProfiles();
@@ -60,7 +62,10 @@ export class ConfigProfileService {
                 return fail(ERRORS.CONFIG_PROFILE_NOT_FOUND);
             }
 
-            configProfile.config = new XRayConfig(configProfile.config as object).getSortedConfig();
+            configProfile.config = this.getSortedConfig(
+                configProfile.coreType,
+                configProfile.config as object,
+            );
 
             return ok(new GetConfigProfileByUuidResponseModel(configProfile));
         } catch (error) {
@@ -90,7 +95,10 @@ export class ConfigProfileService {
                 snippetsMap.set(snippet.name, snippet.snippet);
             }
 
-            const config = new XRayConfig(configProfile.config as object);
+            const config = this.createConfigHelper(
+                configProfile.coreType,
+                configProfile.config as object,
+            );
             config.replaceSnippets(snippetsMap);
 
             configProfile.config = config.getSortedConfig();
@@ -131,17 +139,19 @@ export class ConfigProfileService {
     public async createConfigProfile(
         name: string,
         config: object,
+        coreType: 'XRAY' | 'SING_BOX' = 'XRAY',
     ): Promise<TResult<GetConfigProfileByUuidResponseModel>> {
         try {
             if (name === 'Default-Profile') {
                 return fail(ERRORS.RESERVED_CONFIG_PROFILE_NAME);
             }
 
-            const validatedConfig = new XRayConfig(config);
+            const validatedConfig = this.createConfigHelper(coreType, config);
             const sortedConfig = validatedConfig.getSortedConfig();
 
             const profileEntity = new ConfigProfileEntity({
                 name,
+                coreType,
                 config: sortedConfig as object,
             });
 
@@ -190,6 +200,7 @@ export class ConfigProfileService {
         uuid: string,
         name?: string,
         config?: object,
+        coreType?: 'XRAY' | 'SING_BOX',
     ): Promise<TResult<GetConfigProfileByUuidResponseModel>> {
         try {
             const existingConfigProfile =
@@ -199,13 +210,19 @@ export class ConfigProfileService {
                 return fail(ERRORS.CONFIG_PROFILE_NOT_FOUND);
             }
 
-            if (!name && !config) {
+            if (!name && !config && !coreType) {
                 return fail(ERRORS.NAME_OR_CONFIG_REQUIRED);
             }
 
-            await this.updateConfigProfileTransactional(existingConfigProfile, uuid, name, config);
+            await this.updateConfigProfileTransactional(
+                existingConfigProfile,
+                uuid,
+                name,
+                config,
+                coreType,
+            );
 
-            if (config) {
+            if (config || coreType) {
                 // No need for now
                 // await this.commandBus.execute(new SyncActiveProfileCommand());
 
@@ -249,19 +266,30 @@ export class ConfigProfileService {
         uuid: string,
         name?: string,
         config?: object,
+        coreType?: 'XRAY' | 'SING_BOX',
     ): Promise<boolean> {
         try {
+            const targetCoreType = coreType ?? (existingConfigProfile.coreType as 'XRAY' | 'SING_BOX');
             const configProfileEntity = new ConfigProfileEntity({
                 uuid,
                 name,
+                coreType,
             });
 
-            if (config) {
+            if (config || coreType) {
                 const existingInbounds = existingConfigProfile.inbounds;
 
-                const validatedConfig = new XRayConfig(config);
-                validatedConfig.cleanInboundClients(false);
-                validatedConfig.fixIncorrectServerNames();
+                const validatedConfig = this.createConfigHelper(
+                    targetCoreType,
+                    config ?? (existingConfigProfile.config as object),
+                );
+                if (targetCoreType === 'XRAY') {
+                    const xrayConfig = validatedConfig as XRayConfig;
+                    xrayConfig.cleanInboundClients(false);
+                    xrayConfig.fixIncorrectServerNames();
+                } else {
+                    (validatedConfig as SingBoxConfig).cleanInboundClients();
+                }
                 const sortedConfig = validatedConfig.getSortedConfig();
                 const inbounds = validatedConfig.getAllInbounds();
 
@@ -440,5 +468,20 @@ export class ConfigProfileService {
             }
             throw error;
         }
+    }
+
+    private createConfigHelper(
+        coreType: string | undefined,
+        config: object,
+    ): XRayConfig | SingBoxConfig {
+        if (coreType === 'SING_BOX') {
+            return new SingBoxConfig(config);
+        }
+
+        return new XRayConfig(config);
+    }
+
+    private getSortedConfig(coreType: string | undefined, config: object): object {
+        return this.createConfigHelper(coreType, config).getSortedConfig() as object;
     }
 }
