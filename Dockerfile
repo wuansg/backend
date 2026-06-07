@@ -1,4 +1,4 @@
-FROM node:24.14-alpine AS frontend
+FROM --platform=$BUILDPLATFORM node:24.14-alpine AS frontend
 WORKDIR /opt/frontend
 
 ARG BRANCH=main
