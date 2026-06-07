@@ -6,6 +6,15 @@ import { UserForConfigEntity } from '@modules/users/entities/users-for-config';
 
 type TCtrSingBoxConfig = object | Record<string, unknown> | string;
 
+const SING_BOX_KEY_ALIASES: Record<string, string> = {
+    autoDetectInterface: 'auto_detect_interface',
+    certificatePath: 'certificate_path',
+    domainSuffix: 'domain_suffix',
+    ipIsPrivate: 'ip_is_private',
+    keyPath: 'key_path',
+    listenPort: 'listen_port',
+};
+
 interface SingBoxInbound {
     type?: string;
     tag?: string;
@@ -200,19 +209,38 @@ export class SingBoxConfig {
     }
 
     private parseConfig(configInput: TCtrSingBoxConfig): SingBoxConfigObject {
+        let parsedConfig: SingBoxConfigObject;
+
         if (typeof configInput === 'string') {
             try {
-                return JSON.parse(configInput) as SingBoxConfigObject;
+                parsedConfig = JSON.parse(configInput) as SingBoxConfigObject;
             } catch (error) {
                 throw new Error(`Invalid JSON input: ${error}`);
             }
+        } else if (typeof configInput === 'object') {
+            parsedConfig = configInput as SingBoxConfigObject;
+        } else {
+            throw new Error('Invalid configuration format.');
         }
 
-        if (typeof configInput === 'object') {
-            return configInput as SingBoxConfigObject;
+        return this.normalizeSingBoxKeys(parsedConfig) as SingBoxConfigObject;
+    }
+
+    private normalizeSingBoxKeys(value: unknown): unknown {
+        if (Array.isArray(value)) {
+            return value.map((item) => this.normalizeSingBoxKeys(item));
         }
 
-        throw new Error('Invalid configuration format.');
+        if (!value || typeof value !== 'object') {
+            return value;
+        }
+
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+                SING_BOX_KEY_ALIASES[key] ?? key,
+                this.normalizeSingBoxKeys(item),
+            ]),
+        );
     }
 
     private validate(): void {
