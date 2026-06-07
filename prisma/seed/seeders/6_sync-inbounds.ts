@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import isEqual from 'lodash/isEqual';
 import consola from 'consola';
 
+import { SingBoxConfig } from '@common/helpers/sing-box-config';
 import { XRayConfig } from '@common/helpers/xray-config';
 
 export async function syncInbounds(prisma: PrismaClient) {
@@ -12,7 +13,10 @@ export async function syncInbounds(prisma: PrismaClient) {
     for (const configProfile of configProfiles) {
         consola.start(`Syncing ${configProfile.name}...`);
 
-        const validatedConfig = new XRayConfig(configProfile.config as object);
+        const validatedConfig =
+            configProfile.coreType === 'SING_BOX'
+                ? new SingBoxConfig(configProfile.config as object)
+                : new XRayConfig(configProfile.config as object);
 
         const configInbounds = validatedConfig.getAllInbounds();
 
