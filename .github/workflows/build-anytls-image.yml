@@ -42,6 +42,8 @@ jobs:
           context: .
           platforms: linux/arm64
           push: true
+          cache-from: type=gha,scope=backend-anytls-arm64
+          cache-to: type=gha,mode=max,scope=backend-anytls-arm64
           build-args: |
             FRONTEND_REPO=https://github.com/${{ github.repository_owner }}/frontend.git
             FRONTEND_REF=feature/anytls-singbox-mvp
