@@ -1,4 +1,4 @@
-import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
+import { ConfigProfileInboundWithNodesEntity } from '@modules/config-profiles/entities';
 
 import { InternalSquadWithInfoEntity } from '../entities/internal-squad-with-info.entity';
 
@@ -10,7 +10,7 @@ export class GetInternalSquadByUuidResponseModel {
         membersCount: number;
         inboundsCount: number;
     };
-    public readonly inbounds: ConfigProfileInboundEntity[];
+    public readonly inbounds: ConfigProfileInboundWithNodesEntity[];
 
     public readonly createdAt: Date;
     public readonly updatedAt: Date;

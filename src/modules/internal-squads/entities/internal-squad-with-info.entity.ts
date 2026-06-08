@@ -1,6 +1,6 @@
 import { InternalSquads } from '@prisma/client';
 
-import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
+import { ConfigProfileInboundWithNodesEntity } from '@modules/config-profiles/entities';
 
 export class InternalSquadWithInfoEntity implements InternalSquads {
     public uuid: string;
@@ -10,7 +10,7 @@ export class InternalSquadWithInfoEntity implements InternalSquads {
     public membersCount: number | string | bigint | null;
     public inboundsCount: number | string | bigint | null;
 
-    public inbounds: ConfigProfileInboundEntity[];
+    public inbounds: ConfigProfileInboundWithNodesEntity[];
 
     public createdAt: Date;
     public updatedAt: Date;

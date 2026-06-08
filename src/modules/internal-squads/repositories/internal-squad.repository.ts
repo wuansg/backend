@@ -132,10 +132,20 @@ export class InternalSquadRepository implements ICrud<InternalSquadEntity> {
 
                 jsonArrayFrom(
                     eb
-                        .selectFrom('configProfileInbounds')
-                        .selectAll()
+                        .selectFrom('configProfileInbounds as cpi')
+                        .selectAll('cpi')
+                        .select((subEb) => [
+                            jsonArrayFrom(
+                                subEb
+                                    .selectFrom('configProfileInboundsToNodes as cpin')
+                                    .innerJoin('nodes as n', 'n.uuid', 'cpin.nodeUuid')
+                                    .select(['n.uuid', 'n.name', 'n.countryCode'])
+                                    .whereRef('cpin.configProfileInboundUuid', '=', 'cpi.uuid')
+                                    .orderBy('n.viewPosition', 'asc'),
+                            ).as('nodes'),
+                        ])
                         .where(
-                            'configProfileInbounds.uuid',
+                            'cpi.uuid',
                             'in',
                             eb
                                 .selectFrom('internalSquadInbounds')
@@ -205,10 +215,20 @@ export class InternalSquadRepository implements ICrud<InternalSquadEntity> {
 
                 jsonArrayFrom(
                     eb
-                        .selectFrom('configProfileInbounds')
-                        .selectAll()
+                        .selectFrom('configProfileInbounds as cpi')
+                        .selectAll('cpi')
+                        .select((subEb) => [
+                            jsonArrayFrom(
+                                subEb
+                                    .selectFrom('configProfileInboundsToNodes as cpin')
+                                    .innerJoin('nodes as n', 'n.uuid', 'cpin.nodeUuid')
+                                    .select(['n.uuid', 'n.name', 'n.countryCode'])
+                                    .whereRef('cpin.configProfileInboundUuid', '=', 'cpi.uuid')
+                                    .orderBy('n.viewPosition', 'asc'),
+                            ).as('nodes'),
+                        ])
                         .where(
-                            'configProfileInbounds.uuid',
+                            'cpi.uuid',
                             'in',
                             eb
                                 .selectFrom('internalSquadInbounds')

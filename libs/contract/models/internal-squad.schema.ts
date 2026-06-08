@@ -2,6 +2,16 @@ import { z } from 'zod';
 
 import { ConfigProfileInboundsSchema } from './config-profile-inbounds.schema';
 
+export const InternalSquadInboundSchema = ConfigProfileInboundsSchema.extend({
+    nodes: z.array(
+        z.object({
+            uuid: z.string().uuid(),
+            name: z.string(),
+            countryCode: z.string(),
+        }),
+    ),
+});
+
 export const InternalSquadSchema = z.object({
     uuid: z.string().uuid(),
     viewPosition: z.number().int(),
@@ -12,7 +22,7 @@ export const InternalSquadSchema = z.object({
         inboundsCount: z.number(),
     }),
 
-    inbounds: z.array(ConfigProfileInboundsSchema),
+    inbounds: z.array(InternalSquadInboundSchema),
 
     createdAt: z
         .string()
