@@ -43,18 +43,31 @@ interface InboundsWithTagsAndType {
     rawInbound: object | null;
 }
 
-const MANAGED_CLIENT_TYPES = new Set(['anytls']);
+const MANAGED_CLIENT_TYPES = new Set([
+    'anytls',
+    'hysteria2',
+    'shadowsocks',
+    'shadowtls',
+    'trojan',
+    'tuic',
+    'vless',
+    'vmess',
+]);
 const ALLOWED_TYPES = new Set([
     'anytls',
+    'block',
     'direct',
     'http',
     'hysteria2',
     'mixed',
     'naive',
+    'redirect',
     'shadowsocks',
     'shadowtls',
     'socks',
+    'tproxy',
     'trojan',
+    'tun',
     'tuic',
     'vless',
     'vmess',
@@ -135,10 +148,10 @@ export class SingBoxConfig {
 
             inbound.users ??= [];
             for (const user of tagUsers) {
-                inbound.users.push({
-                    name: user.tId.toString(),
-                    password: user.anytlsPassword,
-                });
+                const inboundUser = this.buildInboundUser(inbound, user);
+                if (inboundUser) {
+                    inbound.users.push(inboundUser);
+                }
             }
         }
 
@@ -206,6 +219,51 @@ export class SingBoxConfig {
 
     private hasManagedClients(inbound: SingBoxInbound): boolean {
         return typeof inbound.type === 'string' && MANAGED_CLIENT_TYPES.has(inbound.type);
+    }
+
+    private buildInboundUser(
+        inbound: SingBoxInbound,
+        user: UserForConfigEntity,
+    ): Record<string, unknown> | null {
+        const name = user.tId.toString();
+
+        switch (inbound.type) {
+            case 'anytls':
+                return {
+                    name,
+                    password: user.anytlsPassword,
+                };
+            case 'hysteria2':
+                return {
+                    name,
+                    password: user.vlessUuid,
+                };
+            case 'shadowsocks':
+                return {
+                    name,
+                    password: user.ssPassword,
+                };
+            case 'shadowtls':
+            case 'trojan':
+                return {
+                    name,
+                    password: user.trojanPassword,
+                };
+            case 'tuic':
+                return {
+                    name,
+                    uuid: user.vlessUuid,
+                    password: user.trojanPassword,
+                };
+            case 'vless':
+            case 'vmess':
+                return {
+                    name,
+                    uuid: user.vlessUuid,
+                };
+            default:
+                return null;
+        }
     }
 
     private parseConfig(configInput: TCtrSingBoxConfig): SingBoxConfigObject {

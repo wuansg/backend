@@ -5,7 +5,11 @@ import { SubscriptionTemplateService } from '@modules/subscription-template/subs
 import { ResolvedProxyConfig } from '../resolve-proxy/interfaces';
 
 interface OutboundConfig {
+    alter_id?: number;
+    congestion_control?: string;
     flow?: string;
+    global_padding?: boolean;
+    heartbeat?: string;
     method?: string;
     multiplex?: unknown;
     network?: string;
@@ -17,11 +21,14 @@ interface OutboundConfig {
     tls?: TlsConfig;
     transport?: TransportConfig;
     type: string;
+    udp_relay_mode?: string;
     uuid?: string;
     udp_over_tcp?: {
         enabled: boolean;
         version: number;
     };
+    version?: number;
+    zero_rtt_handshake?: boolean;
 }
 
 interface TlsConfig {
@@ -50,8 +57,28 @@ interface TransportConfig {
 }
 
 const UNSUPPORTED_TRANSPORTS = new Set(['hysteria', 'kcp', 'xhttp']);
-const PROXY_PROTOCOL_TYPES = new Set(['anytls', 'hysteria', 'shadowsocks', 'trojan', 'vless']);
-const SELECTOR_TYPES = new Set(['anytls', 'shadowsocks', 'trojan', 'urltest', 'vless']);
+const PROXY_PROTOCOL_TYPES = new Set([
+    'anytls',
+    'hysteria',
+    'hysteria2',
+    'shadowsocks',
+    'shadowtls',
+    'trojan',
+    'tuic',
+    'vless',
+    'vmess',
+]);
+const SELECTOR_TYPES = new Set([
+    'anytls',
+    'hysteria2',
+    'shadowsocks',
+    'shadowtls',
+    'trojan',
+    'tuic',
+    'urltest',
+    'vless',
+    'vmess',
+]);
 
 @Injectable()
 export class SingBoxGeneratorService {
@@ -131,6 +158,44 @@ export class SingBoxGeneratorService {
 
             case 'anytls':
                 config.password = host.protocolOptions.password;
+                return true;
+
+            case 'vmess':
+                config.uuid = host.protocolOptions.uuid;
+                config.alter_id = host.protocolOptions.alterId;
+                config.method = host.protocolOptions.security;
+                return true;
+
+            case 'hysteria':
+                config.type = 'hysteria2';
+                config.password = host.protocolOptions.password;
+                return true;
+
+            case 'hysteria2':
+                config.password = host.protocolOptions.password;
+                return true;
+
+            case 'tuic':
+                config.uuid = host.protocolOptions.uuid;
+                config.password = host.protocolOptions.password;
+
+                if (host.protocolOptions.congestionControl) {
+                    config.congestion_control = host.protocolOptions.congestionControl;
+                }
+                if (host.protocolOptions.udpRelayMode) {
+                    config.udp_relay_mode = host.protocolOptions.udpRelayMode;
+                }
+                if (host.protocolOptions.heartbeat) {
+                    config.heartbeat = host.protocolOptions.heartbeat;
+                }
+                if (host.protocolOptions.zeroRtt) {
+                    config.zero_rtt_handshake = true;
+                }
+                return true;
+
+            case 'shadowtls':
+                config.password = host.protocolOptions.password;
+                config.version = host.protocolOptions.version;
                 return true;
 
             default:

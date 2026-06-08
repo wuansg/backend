@@ -23,10 +23,35 @@ export interface IShadowsocksProtocolOptions {
 
 export interface IHysteriaProtocolOptions {
     version: number;
+    password: string;
 }
 
 export interface IAnyTlsProtocolOptions {
     password: string;
+}
+
+export interface IVmessProtocolOptions {
+    alterId: number;
+    security: string;
+    uuid: string;
+}
+
+export interface IHysteria2ProtocolOptions {
+    password: string;
+}
+
+export interface ITuicProtocolOptions {
+    congestionControl: string | null;
+    heartbeat: string | null;
+    password: string;
+    udpRelayMode: string | null;
+    uuid: string;
+    zeroRtt: boolean;
+}
+
+export interface IShadowTlsProtocolOptions {
+    password: string;
+    version: number;
 }
 
 // ─── Transport Options ───────────────────────────────────
@@ -120,12 +145,36 @@ export type AnyTlsProtocol = {
     protocolOptions: IAnyTlsProtocolOptions;
 };
 
+export type VmessProtocol = {
+    protocol: 'vmess';
+    protocolOptions: IVmessProtocolOptions;
+};
+
+export type Hysteria2Protocol = {
+    protocol: 'hysteria2';
+    protocolOptions: IHysteria2ProtocolOptions;
+};
+
+export type TuicProtocol = {
+    protocol: 'tuic';
+    protocolOptions: ITuicProtocolOptions;
+};
+
+export type ShadowTlsProtocol = {
+    protocol: 'shadowtls';
+    protocolOptions: IShadowTlsProtocolOptions;
+};
+
 export type ProtocolVariant =
     | VlessProtocol
     | TrojanProtocol
     | ShadowsocksProtocol
     | HysteriaProtocol
-    | AnyTlsProtocol;
+    | AnyTlsProtocol
+    | VmessProtocol
+    | Hysteria2Protocol
+    | TuicProtocol
+    | ShadowTlsProtocol;
 
 // ─── Transport Variants ──────────────────────────────────
 

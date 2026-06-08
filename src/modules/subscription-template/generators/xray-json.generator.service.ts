@@ -308,6 +308,11 @@ export class XrayJsonGeneratorService {
                 return PROTOCOL_BUILDERS.hysteria(host);
             case 'anytls':
                 return {};
+            case 'vmess':
+            case 'hysteria2':
+            case 'tuic':
+            case 'shadowtls':
+                return {};
         }
     }
 

@@ -60,11 +60,28 @@ interface IResolveProxyConfigOptions {
 interface SingBoxInbound {
     type?: string;
     tag?: string;
+    listen_port?: number | string;
+    method?: string;
+    network?: string;
+    transport?: {
+        headers?: Record<string, string>;
+        host?: string;
+        path?: string;
+        service_name?: string;
+        type?: string;
+    };
     tls?: {
         alpn?: string[];
         server_name?: string;
         [key: string]: unknown;
     };
+    users?: Array<Record<string, unknown>>;
+    version?: number;
+    congestion_control?: string;
+    heartbeat?: string;
+    udp_relay_mode?: string;
+    zero_rtt_handshake?: boolean;
+    [key: string]: unknown;
 }
 
 @Injectable()
@@ -510,6 +527,7 @@ export class ResolveProxyConfigService {
                     protocol: 'hysteria',
                     protocolOptions: {
                         version: 2,
+                        password: user.vlessUuid,
                     },
                 };
             default:
@@ -528,8 +546,8 @@ export class ResolveProxyConfigService {
     }): ResolvedProxyConfig | null {
         const { inputHost, inbound, finalRemark, user } = ctx;
 
-        if (this.isAnyTlsInbound(inputHost.rawInbound)) {
-            return this.buildAnyTlsResolvedProxyConfig({
+        if (this.isSingBoxManagedInbound(inputHost.rawInbound)) {
+            return this.buildSingBoxResolvedProxyConfig({
                 inputHost,
                 inbound: inputHost.rawInbound,
                 finalRemark,
@@ -601,12 +619,12 @@ export class ResolveProxyConfigService {
         } satisfies ResolvedProxyConfig;
     }
 
-    private buildAnyTlsResolvedProxyConfig(ctx: {
+    private buildSingBoxResolvedProxyConfig(ctx: {
         inputHost: HostWithRawInbound;
         inbound: SingBoxInbound;
         finalRemark: string;
         user: UserEntity;
-    }): ResolvedProxyConfig {
+    }): ResolvedProxyConfig | null {
         const { inputHost, inbound, finalRemark, user } = ctx;
         const address = this.resolveRandomizedValue(inputHost.address);
         const serverName = this.resolveFinalServerName(
@@ -614,6 +632,27 @@ export class ResolveProxyConfigService {
             inbound.tls?.server_name,
             address,
         );
+        const protocol = this.resolveSingBoxProtocolOptions(inbound, user);
+
+        if (!protocol) {
+            return null;
+        }
+        const security: SecurityVariant = inbound.tls
+            ? {
+                  security: 'tls',
+                  securityOptions: {
+                      allowInsecure: inputHost.allowInsecure,
+                      alpn: override(inputHost.alpn, inbound.tls.alpn?.join(',')) ?? '',
+                      enableSessionResumption: false,
+                      fingerprint: inputHost.fingerprint || 'chrome',
+                      serverName,
+                      echConfigList: null,
+                      echForceQuery: null,
+                  },
+              }
+            : {
+                  security: 'none',
+              };
 
         return {
             finalRemark,
@@ -646,33 +685,156 @@ export class ResolveProxyConfigService {
                 vlessRouteId: inputHost.vlessRouteId,
                 rawInbound: inputHost.rawInbound,
             },
-            protocol: 'anytls',
-            protocolOptions: {
-                password: user.anytlsPassword,
-            },
-            security: 'tls',
-            securityOptions: {
-                allowInsecure: inputHost.allowInsecure,
-                alpn: override(inputHost.alpn, inbound.tls?.alpn?.join(',')) ?? '',
-                enableSessionResumption: false,
-                fingerprint: inputHost.fingerprint || 'chrome',
-                serverName,
-                echConfigList: null,
-                echForceQuery: null,
-            },
-            transport: 'tcp',
-            transportOptions: {
-                header: null,
-            },
+            ...protocol,
+            ...security,
+            ...this.resolveSingBoxTransport(inbound, inputHost),
         } satisfies ResolvedProxyConfig;
     }
 
-    private isAnyTlsInbound(rawInbound: object | null): rawInbound is SingBoxInbound {
+    private resolveSingBoxProtocolOptions(
+        inbound: SingBoxInbound,
+        user: UserEntity,
+    ): ProtocolVariant | null {
+        switch (inbound.type) {
+            case 'anytls':
+                return {
+                    protocol: 'anytls',
+                    protocolOptions: {
+                        password: user.anytlsPassword,
+                    },
+                };
+            case 'vless':
+                return {
+                    protocol: 'vless',
+                    protocolOptions: {
+                        id: user.vlessUuid,
+                        encryption: 'none',
+                        flow: '',
+                    },
+                };
+            case 'vmess':
+                return {
+                    protocol: 'vmess',
+                    protocolOptions: {
+                        uuid: user.vlessUuid,
+                        alterId: 0,
+                        security: 'auto',
+                    },
+                };
+            case 'trojan':
+                return {
+                    protocol: 'trojan',
+                    protocolOptions: {
+                        password: user.trojanPassword,
+                    },
+                };
+            case 'shadowsocks':
+                return {
+                    protocol: 'shadowsocks',
+                    protocolOptions: {
+                        method: inbound.method || 'chacha20-ietf-poly1305',
+                        password: user.ssPassword,
+                        uot: false,
+                        uotVersion: 1,
+                    },
+                };
+            case 'hysteria2':
+                return {
+                    protocol: 'hysteria2',
+                    protocolOptions: {
+                        password: user.vlessUuid,
+                    },
+                };
+            case 'tuic':
+                return {
+                    protocol: 'tuic',
+                    protocolOptions: {
+                        uuid: user.vlessUuid,
+                        password: user.trojanPassword,
+                        congestionControl: inbound.congestion_control ?? null,
+                        heartbeat: inbound.heartbeat ?? null,
+                        udpRelayMode: inbound.udp_relay_mode ?? null,
+                        zeroRtt: inbound.zero_rtt_handshake ?? false,
+                    },
+                };
+            case 'shadowtls':
+                return {
+                    protocol: 'shadowtls',
+                    protocolOptions: {
+                        password: user.trojanPassword,
+                        version: inbound.version ?? 3,
+                    },
+                };
+            default:
+                return null;
+        }
+    }
+
+    private resolveSingBoxTransport(
+        inbound: SingBoxInbound,
+        inputHost: HostWithRawInbound,
+    ): TransportVariant {
+        const transport = inbound.transport;
+
+        switch (transport?.type) {
+            case 'ws':
+                return {
+                    transport: 'ws',
+                    transportOptions: {
+                        host: this.resolveRandomizedValue(
+                            override(inputHost.host, transport.host) ?? '',
+                        ),
+                        path: override(inputHost.path, transport.path),
+                        headers: transport.headers ?? null,
+                        heartbeatPeriod: null,
+                    },
+                };
+            case 'httpupgrade':
+                return {
+                    transport: 'httpupgrade',
+                    transportOptions: {
+                        host: this.resolveRandomizedValue(
+                            override(inputHost.host, transport.host) ?? '',
+                        ),
+                        path: override(inputHost.path, transport.path),
+                        headers: transport.headers ?? null,
+                    },
+                };
+            case 'grpc':
+                return {
+                    transport: 'grpc',
+                    transportOptions: {
+                        authority: this.resolveRandomizedValue(inputHost.host ?? ''),
+                        serviceName: override(inputHost.path, transport.service_name),
+                        multiMode: false,
+                    },
+                };
+            default:
+                return {
+                    transport: 'tcp',
+                    transportOptions: {
+                        header: null,
+                    },
+                };
+        }
+    }
+
+    private isSingBoxManagedInbound(rawInbound: object | null): rawInbound is SingBoxInbound {
         return (
             typeof rawInbound === 'object' &&
             rawInbound !== null &&
             'type' in rawInbound &&
-            rawInbound.type === 'anytls'
+            typeof rawInbound.type === 'string' &&
+            [
+                'anytls',
+                'hysteria2',
+                'shadowsocks',
+                'shadowtls',
+                'trojan',
+                'tuic',
+                'vless',
+                'vmess',
+            ].includes(rawInbound.type)
         );
     }
 

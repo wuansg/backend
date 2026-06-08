@@ -83,10 +83,35 @@ export const KcpTransportOptionsSchema = z.object({
 
 export const HysteriaProtocolOptionsSchema = z.object({
     version: z.number().int(),
+    password: z.string(),
 });
 
 export const AnyTlsProtocolOptionsSchema = z.object({
     password: z.string(),
+});
+
+export const VmessProtocolOptionsSchema = z.object({
+    alterId: z.number().int(),
+    security: z.string(),
+    uuid: z.string(),
+});
+
+export const Hysteria2ProtocolOptionsSchema = z.object({
+    password: z.string(),
+});
+
+export const TuicProtocolOptionsSchema = z.object({
+    congestionControl: z.string().nullable(),
+    heartbeat: z.string().nullable(),
+    password: z.string(),
+    udpRelayMode: z.string().nullable(),
+    uuid: z.string(),
+    zeroRtt: z.boolean(),
+});
+
+export const ShadowTlsProtocolOptionsSchema = z.object({
+    password: z.string(),
+    version: z.number().int(),
 });
 
 export const HysteriaTransportOptionsSchema = z.object({
@@ -138,12 +163,36 @@ const AnyTlsProtocolSchema = z.object({
     protocolOptions: AnyTlsProtocolOptionsSchema,
 });
 
+const VmessProtocolSchema = z.object({
+    protocol: z.literal('vmess'),
+    protocolOptions: VmessProtocolOptionsSchema,
+});
+
+const Hysteria2ProtocolSchema = z.object({
+    protocol: z.literal('hysteria2'),
+    protocolOptions: Hysteria2ProtocolOptionsSchema,
+});
+
+const TuicProtocolSchema = z.object({
+    protocol: z.literal('tuic'),
+    protocolOptions: TuicProtocolOptionsSchema,
+});
+
+const ShadowTlsProtocolSchema = z.object({
+    protocol: z.literal('shadowtls'),
+    protocolOptions: ShadowTlsProtocolOptionsSchema,
+});
+
 export const ProtocolVariantSchema = z.discriminatedUnion('protocol', [
     VlessProtocolSchema,
     TrojanProtocolSchema,
     ShadowsocksProtocolSchema,
     HysteriaProtocolSchema,
     AnyTlsProtocolSchema,
+    VmessProtocolSchema,
+    Hysteria2ProtocolSchema,
+    TuicProtocolSchema,
+    ShadowTlsProtocolSchema,
 ]);
 
 const TcpTransportSchema = z.object({
@@ -231,13 +280,27 @@ export const ResolvedProxyConfigSchema = z.object({
     address: z.string(),
     port: z.number().int().positive(),
 
-    protocol: z.enum(['vless', 'trojan', 'shadowsocks', 'hysteria', 'anytls']),
+    protocol: z.enum([
+        'vless',
+        'trojan',
+        'shadowsocks',
+        'hysteria',
+        'anytls',
+        'vmess',
+        'hysteria2',
+        'tuic',
+        'shadowtls',
+    ]),
     protocolOptions: z.union([
         VlessProtocolOptionsSchema,
         TrojanProtocolOptionsSchema,
         ShadowsocksProtocolOptionsSchema,
         HysteriaProtocolOptionsSchema,
         AnyTlsProtocolOptionsSchema,
+        VmessProtocolOptionsSchema,
+        Hysteria2ProtocolOptionsSchema,
+        TuicProtocolOptionsSchema,
+        ShadowTlsProtocolOptionsSchema,
     ]),
 
     transport: z.enum(['tcp', 'xhttp', 'ws', 'httpupgrade', 'grpc', 'kcp', 'hysteria']),
