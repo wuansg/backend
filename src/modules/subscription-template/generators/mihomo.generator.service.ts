@@ -160,6 +160,34 @@ export class MihomoGeneratorService {
                 node['udp-over-tcp-version'] = host.protocolOptions.uotVersion;
                 return true;
 
+            case 'hysteria2':
+                node.password = host.protocolOptions.password;
+                return true;
+
+            case 'tuic':
+                node.uuid = host.protocolOptions.uuid;
+                node.password = host.protocolOptions.password;
+
+                if (host.protocolOptions.congestionControl) {
+                    node['congestion-controller'] = host.protocolOptions.congestionControl;
+                }
+
+                if (host.protocolOptions.heartbeat) {
+                    const heartbeat = Number.parseInt(host.protocolOptions.heartbeat, 10);
+                    if (!Number.isNaN(heartbeat)) {
+                        node['heartbeat-interval'] = heartbeat;
+                    }
+                }
+
+                if (host.protocolOptions.udpRelayMode) {
+                    node['udp-relay-mode'] = host.protocolOptions.udpRelayMode;
+                }
+
+                if (host.protocolOptions.zeroRtt) {
+                    node['reduce-rtt'] = true;
+                }
+                return true;
+
             default:
                 return false;
         }
