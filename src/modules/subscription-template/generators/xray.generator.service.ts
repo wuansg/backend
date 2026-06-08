@@ -57,6 +57,10 @@ export class XrayGeneratorService {
                 return this.buildShadowsocksLink(host);
             case 'anytls':
                 return this.buildAnyTlsLink(host);
+            case 'hysteria2':
+                return this.buildHysteria2Link(host);
+            case 'tuic':
+                return this.buildTuicLink(host);
             default:
                 return null;
         }
@@ -135,6 +139,62 @@ export class XrayGeneratorService {
         const password = encodeURIComponent(host.protocolOptions.password);
 
         return `anytls://${password}@${host.address}:${host.port}#${remark}`;
+    }
+
+    // ── Hysteria2 ───────────────────────────────────
+    // hysteria2://$(password)@host:port?params#remark
+
+    private buildHysteria2Link(host: Extract<ResolvedProxyConfig, { protocol: 'hysteria2' }>): string {
+        const params: Record<string, unknown> = {};
+        const tlsOptions = host.security === 'tls' ? host.securityOptions : undefined;
+
+        if (tlsOptions?.serverName) {
+            params.sni = tlsOptions.serverName;
+        }
+
+        if (tlsOptions?.allowInsecure) {
+            params.insecure = 1;
+        }
+
+        const query = this.buildQueryString(params);
+        const remark = encodeURIComponent(host.finalRemark);
+        const password = encodeURIComponent(host.protocolOptions.password);
+
+        return `hysteria2://${password}@${host.address}:${host.port}${query ? `?${query}` : ''}#${remark}`;
+    }
+
+    // ── TUIC ─────────────────────────────────────────
+    // tuic://$(uuid):$(password)@host:port?params#remark
+
+    private buildTuicLink(host: Extract<ResolvedProxyConfig, { protocol: 'tuic' }>): string {
+        const params: Record<string, unknown> = {};
+        const tlsOptions = host.security === 'tls' ? host.securityOptions : undefined;
+
+        params.alpn = tlsOptions?.alpn ?? 'h3';
+        params.congestion_control = host.protocolOptions.congestionControl ?? 'bbr';
+        params.udp_relay_mode = host.protocolOptions.udpRelayMode ?? 'native';
+
+        if (host.protocolOptions.heartbeat) {
+            params.heartbeat_interval = host.protocolOptions.heartbeat;
+        }
+
+        if (tlsOptions?.serverName) {
+            params.sni = tlsOptions.serverName;
+            params.disable_sni = 0;
+        } else {
+            params.disable_sni = 1;
+        }
+
+        if (tlsOptions?.allowInsecure) {
+            params.allow_insecure = 1;
+        }
+
+        const query = this.buildQueryString(params);
+        const remark = encodeURIComponent(host.finalRemark);
+        const uuid = encodeURIComponent(host.protocolOptions.uuid);
+        const password = encodeURIComponent(host.protocolOptions.password);
+
+        return `tuic://${uuid}:${password}@${host.address}:${host.port}?${query}#${remark}`;
     }
 
     // ── Transport Params ─────────────────────────────
