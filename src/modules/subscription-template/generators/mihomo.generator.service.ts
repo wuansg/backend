@@ -160,6 +160,10 @@ export class MihomoGeneratorService {
                 node['udp-over-tcp-version'] = host.protocolOptions.uotVersion;
                 return true;
 
+            case 'anytls':
+                node.password = host.protocolOptions.password;
+                return true;
+
             case 'hysteria2':
                 node.password = host.protocolOptions.password;
                 return true;
@@ -199,7 +203,7 @@ export class MihomoGeneratorService {
                 const opts = host.securityOptions;
                 node.tls = true;
 
-                if (node.type === 'trojan') {
+                if (node.type === 'trojan' || node.type === 'anytls') {
                     node.sni = opts.serverName ?? '';
                 } else {
                     node.servername = opts.serverName ?? '';
