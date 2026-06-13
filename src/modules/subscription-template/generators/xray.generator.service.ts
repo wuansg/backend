@@ -135,10 +135,31 @@ export class XrayGeneratorService {
     // anytls://$(password)@host:port
 
     private buildAnyTlsLink(host: Extract<ResolvedProxyConfig, { protocol: 'anytls' }>): string {
+        const params: Record<string, unknown> = {};
+        const tlsOptions = host.security === 'tls' ? host.securityOptions : undefined;
+
+        if (tlsOptions?.serverName) {
+            params.sni = tlsOptions.serverName;
+        }
+
+        if (tlsOptions?.fingerprint) {
+            params.fp = tlsOptions.fingerprint;
+        }
+
+        if (tlsOptions?.alpn) {
+            params.alpn = tlsOptions.alpn;
+        }
+
+        if (tlsOptions?.allowInsecure) {
+            params.insecure = 1;
+            params.allowInsecure = 1;
+        }
+
+        const query = this.buildQueryString(params);
         const remark = encodeURIComponent(host.finalRemark);
         const password = encodeURIComponent(host.protocolOptions.password);
 
-        return `anytls://${password}@${host.address}:${host.port}#${remark}`;
+        return `anytls://${password}@${host.address}:${host.port}${query ? `?${query}` : ''}#${remark}`;
     }
 
     // ── Hysteria2 ───────────────────────────────────

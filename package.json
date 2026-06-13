@@ -34,6 +34,7 @@
     "lint:fix:imports": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix --rule 'perfectionist/sort-imports: error'",
     "prepare": "husky",
     "test:sing-box": "ts-node -r tsconfig-paths/register scripts/test-sing-box-config.ts",
+    "test:xray-generator": "node -r ts-node/register/transpile-only -r tsconfig-paths/register scripts/test-xray-generator.ts",
     "migrate:dev": "prisma migrate dev",
     "migrate:generate": "prisma generate",
     "migrate:deploy": "prisma migrate deploy",
