@@ -257,7 +257,8 @@ export class StartNodeProcessor extends WorkerHost {
                     value:
                         nodeResponse.nodeInformation.version && nodeResponse.version
                             ? {
-                                  xray: nodeResponse.version,
+                                  xray: nodeResponse.coreVersions?.xray ?? nodeResponse.version,
+                                  singBox: nodeResponse.coreVersions?.singBox ?? null,
                                   node: nodeResponse.nodeInformation.version,
                               }
                             : null,

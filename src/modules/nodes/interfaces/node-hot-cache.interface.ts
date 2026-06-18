@@ -2,6 +2,7 @@ import { INodeSystem } from './node-host-info.interface';
 
 export interface INodeVersions {
     xray: string;
+    singBox: string | null;
     node: string;
 }
 
