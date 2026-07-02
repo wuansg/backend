@@ -1,10 +1,13 @@
 export const BANDWIDTH_STATS_CONTROLLER = 'bandwidth-stats' as const;
 
 export const BANDWIDTH_STATS_NODES_ROUTE = 'nodes' as const;
+export const BANDWIDTH_STATS_HOSTS_ROUTE = 'hosts' as const;
 export const BANDWIDTH_STATS_USERS_ROUTE = 'users' as const;
 
 export const BANDWIDTH_STATS_NODES_CONTROLLER =
     `${BANDWIDTH_STATS_CONTROLLER}/${BANDWIDTH_STATS_NODES_ROUTE}` as const;
+export const BANDWIDTH_STATS_HOSTS_CONTROLLER =
+    `${BANDWIDTH_STATS_CONTROLLER}/${BANDWIDTH_STATS_HOSTS_ROUTE}` as const;
 export const BANDWIDTH_STATS_USERS_CONTROLLER =
     `${BANDWIDTH_STATS_CONTROLLER}/${BANDWIDTH_STATS_USERS_ROUTE}` as const;
 
@@ -21,6 +24,10 @@ export const BANDWIDTH_STATS_ROUTES = {
         GET_REALTIME: 'realtime',
         // GET /bandwidth-stats/nodes/:nodeUuid/users –– Nodes -> Management -> Show usage
         GET_USERS: (uuid: string) => `${uuid}/users`,
+    },
+    HOSTS: {
+        // GET /bandwidth-stats/hosts –– Hosts -> Metrics
+        GET: '',
     },
     USERS: {
         // GET /bandwidth-stats/users/:userUuid –– Users -> User -> Show Usage

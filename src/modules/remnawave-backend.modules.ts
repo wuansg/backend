@@ -11,6 +11,7 @@ import { SubscriptionTemplateModule } from './subscription-template/subscription
 import { SubscriptionSettingsModule } from './subscription-settings/subscription-settings.module';
 import { SubscriptionPageConfigModule } from './subscription-page-configs/subpage-configs.module';
 import { NodesUsageHistoryModule } from './nodes-usage-history/nodes-usage-history.module';
+import { HostsUsageHistoryModule } from './hosts-usage-history/hosts-usage-history.module';
 import { RemnawaveSettingsModule } from './remnawave-settings/remnawave-settings.module';
 import { RemnawaveServiceModule } from './remnawave-service/remnawave-service.module';
 import { HwidUserDevicesModule } from './hwid-user-devices/hwid-user-devices.module';
@@ -52,6 +53,7 @@ import { AuthModule } from './auth/auth.module';
         NodesUserUsageHistoryModule,
         HwidUserDevicesModule,
         NodesUsageHistoryModule,
+        HostsUsageHistoryModule,
         InfraBillingModule,
         UserSubscriptionRequestHistoryModule,
         ConditionalModule.registerWhen(SystemModule, () => isRestApi()),

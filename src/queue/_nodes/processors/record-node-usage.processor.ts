@@ -11,6 +11,7 @@ import { MESSAGING_NAMES, MICROSERVICES_NAMES } from '@common/microservices';
 import { AxiosService } from '@common/axios';
 
 import { UpsertHistoryEntryCommand } from '@modules/nodes-usage-history/commands/upsert-history-entry';
+import { RecordHostUsageCommand } from '@modules/hosts-usage-history/commands/record-host-usage';
 import { IncrementUsedTrafficCommand } from '@modules/nodes/commands/increment-used-traffic';
 import { NodesUsageHistoryEntity } from '@modules/nodes-usage-history';
 
@@ -112,6 +113,10 @@ export class RecordNodeUsageQueueProcessor extends WorkerHost {
 
         await this.commandBus.execute(
             new IncrementUsedTrafficCommand(nodeUuid, BigInt(totalBytes)),
+        );
+
+        await this.commandBus.execute(
+            new RecordHostUsageCommand(nodeUuid, combinedStats.inbounds, new Date()),
         );
 
         combinedStats.outbounds.forEach((outbound) => {

@@ -199,6 +199,7 @@ model Nodes {
   nodesTrafficUsageHistory     NodesTrafficUsageHistory[]
   nodesUserUsageHistory        NodesUserUsageHistory[]
   nodesUsageHistory            NodesUsageHistory[]
+  hostsUsageHistory            HostsUsageHistory[]
   configProfileInboundsToNodes ConfigProfileInboundsToNodes[]
   infraBillingNodes            InfraBillingNodes[]
   hosts                        HostsToNodes[]
@@ -257,6 +258,27 @@ model NodesUsageHistory {
   @@map("nodes_usage_history")
 }
 
+model HostsUsageHistory {
+  hostUuid      String  @map("host_uuid") @db.Uuid
+  nodeUuid      String  @map("node_uuid") @db.Uuid
+  inboundTag    String  @map("inbound_tag")
+  downloadBytes BigInt  @map("download_bytes")
+  uploadBytes   BigInt  @map("upload_bytes")
+  totalBytes    BigInt  @map("total_bytes")
+  isShared      Boolean @default(false) @map("is_shared")
+
+  createdAt DateTime @default(dbgenerated("date_trunc('hour', now())")) @map("created_at")
+  updatedAt DateTime @default(dbgenerated("now()")) @updatedAt @map("updated_at")
+
+  host Hosts @relation(fields: [hostUuid], references: [uuid], onDelete: Cascade)
+  node Nodes @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+
+  @@id([hostUuid, nodeUuid, inboundTag, createdAt])
+  @@index([hostUuid, createdAt(sort: Desc)])
+  @@index([nodeUuid, inboundTag, createdAt(sort: Desc)])
+  @@map("hosts_usage_history")
+}
+
 model Hosts {
   uuid                         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   viewPosition                 Int      @default(autoincrement()) @map("view_position")
@@ -296,6 +318,7 @@ model Hosts {
   xrayJsonTemplate      SubscriptionTemplate?  @relation(fields: [xrayJsonTemplateUuid], references: [uuid], onDelete: SetNull)
 
   nodes                  HostsToNodes[]
+  hostsUsageHistory      HostsUsageHistory[]
   excludedInternalSquads InternalSquadHostExclusions[]
 
   @@map("hosts")

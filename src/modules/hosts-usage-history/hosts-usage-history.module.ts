@@ -1,0 +1,20 @@
+import { CqrsModule } from '@nestjs/cqrs';
+import { Module } from '@nestjs/common';
+
+import { HostsUsageHistoryRepository } from './repositories/hosts-usage-history.repository';
+import { HostsUsageHistoryController } from './hosts-usage-history.controller';
+import { HostsUsageHistoryConverter } from './hosts-usage-history.converter';
+import { HostsUsageHistoryService } from './hosts-usage-history.service';
+import { COMMANDS } from './commands';
+
+@Module({
+    imports: [CqrsModule],
+    controllers: [HostsUsageHistoryController],
+    providers: [
+        HostsUsageHistoryService,
+        HostsUsageHistoryRepository,
+        HostsUsageHistoryConverter,
+        ...COMMANDS,
+    ],
+})
+export class HostsUsageHistoryModule {}
