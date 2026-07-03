@@ -16,5 +16,6 @@ import { COMMANDS } from './commands';
         HostsUsageHistoryConverter,
         ...COMMANDS,
     ],
+    exports: [HostsUsageHistoryService],
 })
 export class HostsUsageHistoryModule {}

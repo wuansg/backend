@@ -14,20 +14,28 @@ import { errorHandler } from '@common/helpers/error-handler.helper';
 import { Endpoint } from '@common/decorators/base-endpoint';
 import { Roles } from '@common/decorators/roles/roles';
 import { RolesGuard } from '@common/guards/roles';
-import { GetLegacyStatsUserUsageCommand, GetStatsUserUsageCommand } from '@libs/contracts/commands';
+import {
+    GetLegacyStatsUserUsageCommand,
+    GetStatsUserHostsUsageCommand,
+    GetStatsUserUsageCommand,
+} from '@libs/contracts/commands';
 import { BANDWIDTH_STATS_USERS_CONTROLLER, CONTROLLERS_INFO } from '@libs/contracts/api';
 import { ROLE } from '@libs/contracts/constants';
 
+import {
+    GetStatsUserHostsUsageRequestDto,
+    GetStatsUserHostsUsageRequestQueryDto,
+    GetStatsUserHostsUsageResponseDto,
+    GetStatsUserUsageRequestDto,
+    GetStatsUserUsageRequestQueryDto,
+    GetStatsUserUsageResponseDto,
+} from './dtos';
 import {
     GetLegacyStatsUserUsageRequestDto,
     GetLegacyStatsUserUsageRequestQueryDto,
     GetLegacyStatsUserUsageResponseDto,
 } from './dtos/get-legacy-stats-users-usage.dto';
-import {
-    GetStatsUserUsageRequestDto,
-    GetStatsUserUsageRequestQueryDto,
-    GetStatsUserUsageResponseDto,
-} from './dtos';
+import { HostsUsageHistoryService } from '../hosts-usage-history/hosts-usage-history.service';
 import { NodesUserUsageHistoryService } from './nodes-user-usage-history.service';
 import { GetLegacyStatsUserUsageResponseModel } from './models';
 
@@ -38,7 +46,10 @@ import { GetLegacyStatsUserUsageResponseModel } from './models';
 @UseFilters(HttpExceptionFilter)
 @Controller(BANDWIDTH_STATS_USERS_CONTROLLER)
 export class BandwidthStatsUsersController {
-    constructor(private readonly nodesUserUsageHistoryService: NodesUserUsageHistoryService) {}
+    constructor(
+        private readonly nodesUserUsageHistoryService: NodesUserUsageHistoryService,
+        private readonly hostsUsageHistoryService: HostsUsageHistoryService,
+    ) {}
 
     @ApiNotFoundResponse({
         description: 'User not found',
@@ -77,6 +88,57 @@ export class BandwidthStatsUsersController {
         const data = errorHandler(result);
         return {
             response: data.map((item) => new GetLegacyStatsUserUsageResponseModel(item)),
+        };
+    }
+
+    @ApiNotFoundResponse({
+        description: 'User not found',
+    })
+    @ApiOkResponse({
+        type: GetStatsUserHostsUsageResponseDto,
+        description: 'Stats user hosts usage fetched successfully',
+    })
+    @ApiParam({ name: 'uuid', type: String, description: 'UUID of the user', required: true })
+    @ApiQuery({
+        name: 'end',
+        type: String,
+        description: 'End date (YYYY-MM-DD)',
+        required: true,
+        example: '2026-01-01',
+        format: 'date',
+    })
+    @ApiQuery({
+        name: 'start',
+        type: String,
+        description: 'Start date (YYYY-MM-DD)',
+        required: true,
+        example: '2026-01-31',
+        format: 'date',
+    })
+    @ApiQuery({
+        name: 'topHostsLimit',
+        type: Number,
+        description: 'Limit of top hosts to return',
+        required: true,
+    })
+    @Endpoint({
+        command: GetStatsUserHostsUsageCommand,
+        httpCode: HttpStatus.OK,
+    })
+    async getStatsUserHostsUsage(
+        @Query() query: GetStatsUserHostsUsageRequestQueryDto,
+        @Param() paramData: GetStatsUserHostsUsageRequestDto,
+    ): Promise<GetStatsUserHostsUsageResponseDto> {
+        const result = await this.hostsUsageHistoryService.getStatsUserHostsUsage(
+            paramData.uuid,
+            query.start,
+            query.end,
+            query.topHostsLimit,
+        );
+
+        const data = errorHandler(result);
+        return {
+            response: data,
         };
     }
 

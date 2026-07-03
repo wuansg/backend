@@ -162,6 +162,28 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         end: Date,
         dates: string[],
     ): Promise<IGetHostsUsageByRange[]> {
+        return await this.getHostsUsageByRangeFiltered(start, end, dates);
+    }
+
+    public async getHostsUsageByRangeForHostUuids(
+        hostUuids: string[],
+        start: Date,
+        end: Date,
+        dates: string[],
+    ): Promise<IGetHostsUsageByRange[]> {
+        return await this.getHostsUsageByRangeFiltered(start, end, dates, hostUuids);
+    }
+
+    private async getHostsUsageByRangeFiltered(
+        start: Date,
+        end: Date,
+        dates: string[],
+        hostUuids?: string[],
+    ): Promise<IGetHostsUsageByRange[]> {
+        const hostUuidFilter = hostUuids
+            ? Prisma.sql`AND h.uuid IN (${Prisma.join(hostUuids)})`
+            : Prisma.empty;
+
         const query = Prisma.sql`
             WITH daily_usage AS (
                 SELECT
@@ -178,6 +200,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 WHERE
                     huh.created_at >= ${start}
                     AND huh.created_at <= ${end}
+                    ${hostUuidFilter}
                 GROUP BY h.uuid, h.remark, h.address, h.port, h.tag, DATE_TRUNC('day', huh.created_at)
             ),
             hosts_with_totals AS (
@@ -241,7 +264,56 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
             .execute();
     }
 
+    public async getTopHostsByTrafficForHostUuids(
+        hostUuids: string[],
+        start: Date,
+        end: Date,
+        limit: number = 5,
+    ): Promise<ITopHost[]> {
+        return await this.qb.kysely
+            .selectFrom('hosts as h')
+            .innerJoin('hostsUsageHistory as huh', 'huh.hostUuid', 'h.uuid')
+            .select([
+                'h.uuid',
+                'h.remark',
+                'h.address',
+                'h.port',
+                'h.tag',
+                (eb) => eb.fn.sum<bigint>('huh.totalBytes').as('total'),
+                (eb) => eb.fn<boolean>('bool_or', ['huh.isShared']).as('isShared'),
+            ])
+            .where('h.uuid', 'in', hostUuids)
+            .where('huh.createdAt', '>=', start)
+            .where('huh.createdAt', '<=', end)
+            .groupBy(['h.uuid', 'h.remark', 'h.address', 'h.port', 'h.tag'])
+            .orderBy((eb) => eb.fn.sum<bigint>('huh.totalBytes'), 'desc')
+            .limit(limit)
+            .execute();
+    }
+
     public async getDailyTrafficSum(start: Date, end: Date, dates: string[]): Promise<number[]> {
+        return await this.getDailyTrafficSumFiltered(start, end, dates);
+    }
+
+    public async getDailyTrafficSumForHostUuids(
+        hostUuids: string[],
+        start: Date,
+        end: Date,
+        dates: string[],
+    ): Promise<number[]> {
+        return await this.getDailyTrafficSumFiltered(start, end, dates, hostUuids);
+    }
+
+    private async getDailyTrafficSumFiltered(
+        start: Date,
+        end: Date,
+        dates: string[],
+        hostUuids?: string[],
+    ): Promise<number[]> {
+        const hostUuidFilter = hostUuids
+            ? Prisma.sql`AND host_uuid IN (${Prisma.join(hostUuids)})`
+            : Prisma.empty;
+
         const query = Prisma.sql`
             WITH daily_traffic AS (
                 SELECT
@@ -251,6 +323,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 WHERE
                     created_at >= ${start}
                     AND created_at <= ${end}
+                    ${hostUuidFilter}
                 GROUP BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
             )
             SELECT
