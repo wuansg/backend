@@ -6,6 +6,7 @@ import { Injectable } from '@nestjs/common';
 
 import { TxKyselyService } from '@common/database/tx-kysely.service';
 import { ICrudHistoricalRecords } from '@common/types/crud-port';
+import { getKyselyUuid } from '@common/helpers/kysely';
 
 import { HostsUsageHistoryConverter } from '../hosts-usage-history.converter';
 import { IGetHostsUsageByRange, ITopHost } from '../interfaces';
@@ -181,7 +182,9 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         hostUuids?: string[],
     ): Promise<IGetHostsUsageByRange[]> {
         const hostUuidFilter = hostUuids
-            ? Prisma.sql`AND h.uuid IN (${Prisma.join(hostUuids)})`
+            ? Prisma.sql`AND h.uuid IN (${Prisma.join(
+                  hostUuids.map((hostUuid) => Prisma.sql`${hostUuid}::uuid`),
+              )})`
             : Prisma.empty;
 
         const query = Prisma.sql`
@@ -282,7 +285,11 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 (eb) => eb.fn.sum<bigint>('huh.totalBytes').as('total'),
                 (eb) => eb.fn<boolean>('bool_or', ['huh.isShared']).as('isShared'),
             ])
-            .where('h.uuid', 'in', hostUuids)
+            .where(
+                'h.uuid',
+                'in',
+                hostUuids.map((hostUuid) => getKyselyUuid(hostUuid)),
+            )
             .where('huh.createdAt', '>=', start)
             .where('huh.createdAt', '<=', end)
             .groupBy(['h.uuid', 'h.remark', 'h.address', 'h.port', 'h.tag'])
@@ -311,7 +318,9 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         hostUuids?: string[],
     ): Promise<number[]> {
         const hostUuidFilter = hostUuids
-            ? Prisma.sql`AND host_uuid IN (${Prisma.join(hostUuids)})`
+            ? Prisma.sql`AND host_uuid IN (${Prisma.join(
+                  hostUuids.map((hostUuid) => Prisma.sql`${hostUuid}::uuid`),
+              )})`
             : Prisma.empty;
 
         const query = Prisma.sql`
