@@ -35,6 +35,7 @@ jobs:
         run: |
           echo "version=$(jq -r .version package.json)-anytls" >> "$GITHUB_OUTPUT"
           echo "build_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          echo "frontend_commit=$(curl -s https://api.github.com/repos/${{ github.repository_owner }}/frontend/commits/feature/anytls-singbox-mvp | jq -r '.sha')" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -47,12 +48,13 @@ jobs:
           build-args: |
             FRONTEND_REPO=https://github.com/${{ github.repository_owner }}/frontend.git
             FRONTEND_REF=feature/anytls-singbox-mvp
+            FRONTEND_CACHE_BUST=${{ steps.meta.outputs.frontend_commit }}
             __RW_METADATA_GIT_BRANCH=feature/anytls-singbox-mvp
             __RW_METADATA_BUILD_TIME=${{ steps.meta.outputs.build_time }}
             __RW_METADATA_BUILD_NUMBER=${{ github.run_number }}
             __RW_METADATA_VERSION=${{ steps.meta.outputs.version }}
             __RW_METADATA_GIT_BACKEND_COMMIT=${{ github.sha }}
-            __RW_METADATA_GIT_FRONTEND_COMMIT=feature/anytls-singbox-mvp
+            __RW_METADATA_GIT_FRONTEND_COMMIT=${{ steps.meta.outputs.frontend_commit }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/backend:anytls-singbox-mvp
             ghcr.io/${{ github.repository_owner }}/backend:anytls-${{ github.sha }}

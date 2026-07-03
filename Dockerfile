@@ -5,8 +5,10 @@ ARG BRANCH=main
 ARG FRONTEND_URL=https://github.com/remnawave/frontend/releases/latest/download/remnawave-frontend.zip
 ARG FRONTEND_REPO=
 ARG FRONTEND_REF=main
+ARG FRONTEND_CACHE_BUST=
 
 RUN apk add --no-cache curl unzip ca-certificates git \
+    && echo "frontend cache key: ${FRONTEND_REF}:${FRONTEND_CACHE_BUST}" \
     && if [ -n "${FRONTEND_REPO}" ]; then \
         git clone --depth 1 --branch "${FRONTEND_REF}" "${FRONTEND_REPO}" frontend_src \
         && (cd frontend_src && npm ci && npm run start:build) \
