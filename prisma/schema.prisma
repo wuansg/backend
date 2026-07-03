@@ -279,6 +279,26 @@ model HostsUsageHistory {
   @@map("hosts_usage_history")
 }
 
+model UserHostsUsageHistory {
+  userId        BigInt  @map("user_id")
+  hostUuid      String  @map("host_uuid") @db.Uuid
+  nodeUuid      String  @map("node_uuid") @db.Uuid
+  inboundTag    String  @map("inbound_tag")
+  downloadBytes BigInt  @map("download_bytes")
+  uploadBytes   BigInt  @map("upload_bytes")
+  totalBytes    BigInt  @map("total_bytes")
+  isShared      Boolean @default(false) @map("is_shared")
+
+  createdAt DateTime @default(dbgenerated("date_trunc('hour', now())")) @map("created_at")
+  updatedAt DateTime @default(dbgenerated("now()")) @updatedAt @map("updated_at")
+
+  @@id([userId, hostUuid, nodeUuid, inboundTag, createdAt])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([hostUuid, createdAt(sort: Desc)])
+  @@index([nodeUuid, inboundTag, createdAt(sort: Desc)])
+  @@map("user_hosts_usage_history")
+}
+
 model Hosts {
   uuid                         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   viewPosition                 Int      @default(autoincrement()) @map("view_position")

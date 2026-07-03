@@ -8,7 +8,6 @@ import { fail, ok, TResult } from '@common/types';
 import { ERRORS } from '@libs/contracts/constants';
 
 import { GetUserByUniqueFieldQuery } from '@modules/users/queries/get-user-by-unique-field';
-import { GetHostsForUserQuery } from '@modules/hosts/queries/get-hosts-for-user';
 
 import { HostsUsageHistoryRepository } from './repositories/hosts-usage-history.repository';
 import { GetStatsHostsUsageResponseModel } from './models';
@@ -76,53 +75,31 @@ export class HostsUsageHistoryService {
                 return fail(ERRORS.USER_NOT_FOUND);
             }
 
-            const hosts = await this.queryBus.execute(
-                new GetHostsForUserQuery(user.response.tId, false, true),
-            );
-            if (!hosts.isOk) {
-                return fail(ERRORS.GET_ALL_HOSTS_ERROR);
-            }
-
             const { startDate, endDate, dates } = getDateRangeArrayUtil(
                 dayjs.utc(start).startOf('day').toDate(),
                 dayjs.utc(end).endOf('day').toDate(),
             );
 
-            const hostUuids = hosts.response.map((host) => host.uuid);
-            if (hostUuids.length === 0) {
-                return ok(
-                    new GetStatsHostsUsageResponseModel({
-                        categories: dates,
-                        series: [],
-                        sparklineData: dates.map(() => 0),
-                        topHosts: [],
-                    }),
-                );
-            }
+            const dailyTraffic = await this.hostsUsageHistoryRepository.getDailyUserHostsTrafficSum(
+                user.response.tId,
+                startDate,
+                endDate,
+                dates,
+            );
 
-            const dailyTraffic =
-                await this.hostsUsageHistoryRepository.getDailyTrafficSumForHostUuids(
-                    hostUuids,
-                    startDate,
-                    endDate,
-                    dates,
-                );
+            const topHosts = await this.hostsUsageHistoryRepository.getTopUserHostsByTraffic(
+                user.response.tId,
+                startDate,
+                endDate,
+                topHostsLimit,
+            );
 
-            const topHosts =
-                await this.hostsUsageHistoryRepository.getTopHostsByTrafficForHostUuids(
-                    hostUuids,
-                    startDate,
-                    endDate,
-                    topHostsLimit,
-                );
-
-            const hostsUsage =
-                await this.hostsUsageHistoryRepository.getHostsUsageByRangeForHostUuids(
-                    hostUuids,
-                    startDate,
-                    endDate,
-                    dates,
-                );
+            const hostsUsage = await this.hostsUsageHistoryRepository.getUserHostsUsageByRange(
+                user.response.tId,
+                startDate,
+                endDate,
+                dates,
+            );
 
             return ok(
                 new GetStatsHostsUsageResponseModel({

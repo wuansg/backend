@@ -18,6 +18,10 @@ export interface IInboundUsageStat {
     downlink: number;
 }
 
+export interface IUserInboundUsageStat extends IInboundUsageStat {
+    username: string;
+}
+
 @Injectable()
 export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<HostsUsageHistoryEntity> {
     constructor(
@@ -158,6 +162,132 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         }
     }
 
+    public async recordNodeUserHostUsage(
+        nodeUuid: string,
+        userInbounds: IUserInboundUsageStat[],
+        createdAt: Date,
+    ): Promise<void> {
+        createdAt.setMinutes(0, 0, 0);
+
+        const inboundStats = new Map<
+            string,
+            Array<{
+                userId: bigint;
+                downloadBytes: bigint;
+                uploadBytes: bigint;
+            }>
+        >();
+
+        for (const inbound of userInbounds) {
+            if (!inbound.inbound) {
+                continue;
+            }
+
+            let userId: bigint;
+            try {
+                userId = BigInt(inbound.username);
+            } catch {
+                continue;
+            }
+
+            const downloadBytes = BigInt(inbound.downlink || 0);
+            const uploadBytes = BigInt(inbound.uplink || 0);
+            if (downloadBytes === BigInt(0) && uploadBytes === BigInt(0)) {
+                continue;
+            }
+
+            const stats = inboundStats.get(inbound.inbound) ?? [];
+            stats.push({ userId, downloadBytes, uploadBytes });
+            inboundStats.set(inbound.inbound, stats);
+        }
+
+        if (inboundStats.size === 0) {
+            return;
+        }
+
+        const hosts = await this.prisma.tx.hosts.findMany({
+            where: {
+                isDisabled: false,
+                configProfileInboundUuid: { not: null },
+                nodes: {
+                    some: {
+                        nodeUuid,
+                    },
+                },
+            },
+            select: {
+                uuid: true,
+                configProfileInbounds: {
+                    select: {
+                        tag: true,
+                    },
+                },
+            },
+        });
+
+        const hostsByInbound = new Map<string, string[]>();
+        for (const host of hosts) {
+            const tag = host.configProfileInbounds?.tag;
+            if (!tag || !inboundStats.has(tag)) {
+                continue;
+            }
+            hostsByInbound.set(tag, [...(hostsByInbound.get(tag) ?? []), host.uuid]);
+        }
+
+        const rows: Prisma.Sql[] = [];
+        for (const [inboundTag, hostUuids] of hostsByInbound) {
+            const stats = inboundStats.get(inboundTag);
+            if (!stats) {
+                continue;
+            }
+
+            const isShared = hostUuids.length > 1;
+
+            for (const stat of stats) {
+                const totalBytes = stat.downloadBytes + stat.uploadBytes;
+                for (const hostUuid of hostUuids) {
+                    rows.push(Prisma.sql`(
+                        ${stat.userId},
+                        ${hostUuid}::uuid,
+                        ${nodeUuid}::uuid,
+                        ${inboundTag},
+                        ${stat.downloadBytes},
+                        ${stat.uploadBytes},
+                        ${totalBytes},
+                        ${isShared},
+                        ${createdAt}
+                    )`);
+                }
+            }
+        }
+
+        if (rows.length === 0) {
+            return;
+        }
+
+        await this.prisma.tx.$executeRaw(Prisma.sql`
+            INSERT INTO user_hosts_usage_history (
+                user_id,
+                host_uuid,
+                node_uuid,
+                inbound_tag,
+                download_bytes,
+                upload_bytes,
+                total_bytes,
+                is_shared,
+                created_at
+            )
+            VALUES ${Prisma.join(rows)}
+            ON CONFLICT ON CONSTRAINT user_hosts_usage_history_pkey
+            DO UPDATE SET
+                download_bytes = user_hosts_usage_history.download_bytes + EXCLUDED.download_bytes,
+                upload_bytes = user_hosts_usage_history.upload_bytes + EXCLUDED.upload_bytes,
+                total_bytes = user_hosts_usage_history.total_bytes + EXCLUDED.total_bytes,
+                is_shared = EXCLUDED.is_shared,
+                updated_at = now();
+        `);
+    }
+
     public async getHostsUsageByRange(
         start: Date,
         end: Date,
@@ -173,6 +303,67 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         dates: string[],
     ): Promise<IGetHostsUsageByRange[]> {
         return await this.getHostsUsageByRangeFiltered(start, end, dates, hostUuids);
+    }
+
+    public async getUserHostsUsageByRange(
+        userId: bigint,
+        start: Date,
+        end: Date,
+        dates: string[],
+    ): Promise<IGetHostsUsageByRange[]> {
+        const query = Prisma.sql`
+            WITH daily_usage AS (
+                SELECT
+                    h.uuid,
+                    h.remark,
+                    h.address,
+                    h.port,
+                    h.tag,
+                    BOOL_OR(uhuh.is_shared) AS is_shared,
+                    DATE_TRUNC('day', uhuh.created_at)::date AS date,
+                    SUM(uhuh.total_bytes) AS bytes
+                FROM hosts h
+                INNER JOIN user_hosts_usage_history uhuh ON uhuh.host_uuid = h.uuid
+                WHERE
+                    uhuh.user_id = ${userId}
+                    AND uhuh.created_at >= ${start}
+                    AND uhuh.created_at <= ${end}
+                GROUP BY h.uuid, h.remark, h.address, h.port, h.tag, DATE_TRUNC('day', uhuh.created_at)
+            ),
+            hosts_with_totals AS (
+                SELECT
+                    uuid,
+                    remark,
+                    address,
+                    port,
+                    tag,
+                    BOOL_OR(is_shared) AS is_shared,
+                    SUM(bytes) AS total_bytes
+                FROM daily_usage
+                GROUP BY uuid, remark, address, port, tag
+            )
+            SELECT
+                ht.uuid as "uuid",
+                ht.remark as "remark",
+                ht.address as "address",
+                ht.port as "port",
+                ht.tag as "tag",
+                ht.is_shared as "isShared",
+                ht.total_bytes as "total",
+                ARRAY_AGG(
+                    COALESCE(du.bytes, 0)
+                    ORDER BY d.ord
+                ) AS "data"
+            FROM hosts_with_totals ht
+            CROSS JOIN unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
+            LEFT JOIN daily_usage du
+                ON du.uuid = ht.uuid
+                AND du.date = d.date
+            GROUP BY ht.uuid, ht.remark, ht.address, ht.port, ht.tag, ht.is_shared, ht.total_bytes
+            ORDER BY ht.total_bytes DESC;
+        `;
+
+        return await this.prisma.tx.$queryRaw<IGetHostsUsageByRange[]>(query);
     }
 
     private async getHostsUsageByRangeFiltered(
@@ -298,6 +489,35 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
             .execute();
     }
 
+    public async getTopUserHostsByTraffic(
+        userId: bigint,
+        start: Date,
+        end: Date,
+        limit: number = 5,
+    ): Promise<ITopHost[]> {
+        const query = Prisma.sql`
+            SELECT
+                h.uuid as "uuid",
+                h.remark as "remark",
+                h.address as "address",
+                h.port as "port",
+                h.tag as "tag",
+                SUM(uhuh.total_bytes) as "total",
+                BOOL_OR(uhuh.is_shared) as "isShared"
+            FROM hosts h
+            INNER JOIN user_hosts_usage_history uhuh ON uhuh.host_uuid = h.uuid
+            WHERE
+                uhuh.user_id = ${userId}
+                AND uhuh.created_at >= ${start}
+                AND uhuh.created_at <= ${end}
+            GROUP BY h.uuid, h.remark, h.address, h.port, h.tag
+            ORDER BY SUM(uhuh.total_bytes) DESC
+            LIMIT ${limit};
+        `;
+
+        return await this.prisma.tx.$queryRaw<ITopHost[]>(query);
+    }
+
     public async getDailyTrafficSum(start: Date, end: Date, dates: string[]): Promise<number[]> {
         return await this.getDailyTrafficSumFiltered(start, end, dates);
     }
@@ -309,6 +529,35 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         dates: string[],
     ): Promise<number[]> {
         return await this.getDailyTrafficSumFiltered(start, end, dates, hostUuids);
+    }
+
+    public async getDailyUserHostsTrafficSum(
+        userId: bigint,
+        start: Date,
+        end: Date,
+        dates: string[],
+    ): Promise<number[]> {
+        const query = Prisma.sql`
+            WITH daily_traffic AS (
+                SELECT
+                    DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
+                    SUM(total_bytes) AS bytes
+                FROM user_hosts_usage_history
+                WHERE
+                    user_id = ${userId}
+                    AND created_at >= ${start}
+                    AND created_at <= ${end}
+                GROUP BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
+            )
+            SELECT
+                COALESCE(dt.bytes, 0) AS value
+            FROM unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
+            LEFT JOIN daily_traffic dt ON dt.date = d.date
+            ORDER BY d.ord;
+        `;
+
+        const result = await this.prisma.tx.$queryRaw<Array<{ value: bigint }>>(query);
+        return result.map((item) => Number(item.value));
     }
 
     private async getDailyTrafficSumFiltered(

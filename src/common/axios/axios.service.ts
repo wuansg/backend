@@ -58,6 +58,17 @@ type CoreStartResponse = {
     } & StartXrayCommand.Response['response'];
 } & StartXrayCommand.Response;
 
+export interface GetUsersInboundStatsResponse {
+    response: {
+        users: Array<{
+            username: string;
+            inbound: string;
+            uplink: number;
+            downlink: number;
+        }>;
+    };
+}
+
 @Injectable()
 export class AxiosService {
     public axiosInstance: AxiosInstance;
@@ -246,6 +257,42 @@ export class AxiosService {
                 return fail(ERRORS.NODE_ERROR_WITH_MSG.withMessage(JSON.stringify(error.message)));
             } else {
                 this.logger.error('Error in getUsersStats:', error);
+
+                return fail(
+                    ERRORS.NODE_ERROR_WITH_MSG.withMessage(
+                        JSON.stringify(error) ?? 'Unknown error',
+                    ),
+                );
+            }
+        }
+    }
+
+    public async getUsersInboundStats(
+        data: GetUsersStatsCommand.Request,
+        url: string,
+        port: null | number,
+    ): Promise<TResult<GetUsersInboundStatsResponse>> {
+        const nodeUrl = this.getNodeUrl(url, '/node/stats/get-users-inbound-stats', port);
+
+        try {
+            const response = await this.axiosInstance.post<GetUsersInboundStatsResponse>(
+                nodeUrl,
+                data,
+                {
+                    timeout: 15_000,
+                },
+            );
+
+            return ok(response.data);
+        } catch (error) {
+            if (error instanceof AxiosError) {
+                this.logger.error(
+                    `Error in Axios getUsersInboundStats: ${error.message}, JSON: ${JSON.stringify(error.response?.data)}`,
+                );
+
+                return fail(ERRORS.NODE_ERROR_WITH_MSG.withMessage(JSON.stringify(error.message)));
+            } else {
+                this.logger.error('Error in getUsersInboundStats:', error);
 
                 return fail(
                     ERRORS.NODE_ERROR_WITH_MSG.withMessage(

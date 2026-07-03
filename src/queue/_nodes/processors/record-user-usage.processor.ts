@@ -19,12 +19,21 @@ import {
     INTERNAL_CACHE_KEYS_TTL,
 } from '@libs/contracts/constants';
 
+import { RecordUserHostUsageCommand } from '@modules/hosts-usage-history/commands/record-user-host-usage';
+
 import { PushFromRedisQueueService } from '@queue/push-from-redis/push-from-redis.service';
 import { UsersQueuesService } from '@queue/_users';
 import { QUEUES_NAMES } from '@queue/queue.enum';
 
 import { NODES_JOB_NAMES } from '../constants/nodes-job-name.constant';
 import { IRecordUserUsagePayload } from '../interfaces';
+
+type UserInboundUsageStat = {
+    username: string;
+    inbound: string;
+    uplink: number;
+    downlink: number;
+};
 
 @Processor(QUEUES_NAMES.NODES.RECORD_USER_USAGE, {
     concurrency: 20,
@@ -52,6 +61,24 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
         try {
             const { nodeUuid, nodeAddress, nodePort, consumptionMultiplier, nodeId } = job.data;
 
+            const usersInboundStats = await this.axios.getUsersInboundStats(
+                {
+                    reset: true,
+                },
+                nodeAddress,
+                nodePort,
+            );
+
+            if (usersInboundStats.isOk) {
+                return await this.handleOk(
+                    nodeUuid,
+                    BigInt(nodeId),
+                    this.aggregateUsersStats(usersInboundStats.response!.response.users),
+                    consumptionMultiplier,
+                    usersInboundStats.response!.response.users,
+                );
+            }
+
             const response = await this.axios.getUsersStats(
                 {
                     reset: true,
@@ -67,6 +94,7 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
                         BigInt(nodeId),
                         response.response!,
                         consumptionMultiplier,
+                        [],
                     );
                 case false:
                     await this.rawCacheService.set(
@@ -96,6 +124,7 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
         nodeId: bigint,
         response: GetUsersStatsCommand.Response,
         consumptionMultiplier: string,
+        userInbounds: UserInboundUsageStat[],
     ) {
         const start = performance.now();
 
@@ -153,6 +182,16 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
 
             await this.usersQueuesService.updateUserUsage(userUsageList.slice(0, userUsageIndex));
 
+            if (userInbounds.length > 0) {
+                await this.commandBus.execute(
+                    new RecordUserHostUsageCommand(
+                        nodeUuid,
+                        userInbounds.filter((user) => user.inbound),
+                        new Date(),
+                    ),
+                );
+            }
+
             await this.pushFromRedisQueueService.recordUserUsageDelayed({
                 redisKey: nodeRedisKey,
             });
@@ -174,6 +213,37 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
                 );
             }
         }
+    }
+
+    private aggregateUsersStats(
+        userInbounds: UserInboundUsageStat[],
+    ): GetUsersStatsCommand.Response {
+        const users = new Map<
+            string,
+            {
+                username: string;
+                uplink: number;
+                downlink: number;
+            }
+        >();
+
+        userInbounds.forEach((userInbound) => {
+            const user = users.get(userInbound.username) ?? {
+                username: userInbound.username,
+                uplink: 0,
+                downlink: 0,
+            };
+
+            user.uplink += userInbound.uplink || 0;
+            user.downlink += userInbound.downlink || 0;
+            users.set(userInbound.username, user);
+        });
+
+        return {
+            response: {
+                users: Array.from(users.values()),
+            },
+        };
     }
 
     private multiplyConsumption(consumptionMultiplier: string, totalBytes: number): bigint {
