@@ -18,3 +18,9 @@ export interface ITopHost {
     isShared: boolean;
     total: bigint;
 }
+
+export interface ITopHostUser {
+    uuid: string;
+    username: string;
+    total: bigint;
+}

@@ -8,9 +8,10 @@ import { fail, ok, TResult } from '@common/types';
 import { ERRORS } from '@libs/contracts/constants';
 
 import { GetUserByUniqueFieldQuery } from '@modules/users/queries/get-user-by-unique-field';
+import { HostsRepository } from '@modules/hosts/repositories/hosts.repository';
 
+import { GetStatsHostsUsageResponseModel, GetStatsHostUsersUsageResponseModel } from './models';
 import { HostsUsageHistoryRepository } from './repositories/hosts-usage-history.repository';
-import { GetStatsHostsUsageResponseModel } from './models';
 
 @Injectable()
 export class HostsUsageHistoryService {
@@ -18,6 +19,7 @@ export class HostsUsageHistoryService {
     constructor(
         private readonly hostsUsageHistoryRepository: HostsUsageHistoryRepository,
         private readonly queryBus: QueryBus,
+        private readonly hostsRepository: HostsRepository,
     ) {}
 
     async getStatsHostsUsage(
@@ -107,6 +109,50 @@ export class HostsUsageHistoryService {
                     series: hostsUsage,
                     sparklineData: dailyTraffic,
                     topHosts,
+                }),
+            );
+        } catch (error) {
+            this.logger.error(error);
+            return fail(ERRORS.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    async getStatsHostUsersUsage(
+        uuid: string,
+        start: string,
+        end: string,
+        topUsersLimit: number,
+    ): Promise<TResult<GetStatsHostUsersUsageResponseModel>> {
+        try {
+            const host = await this.hostsRepository.findByUUID(uuid);
+            if (!host) {
+                return fail(ERRORS.HOST_NOT_FOUND);
+            }
+
+            const { startDate, endDate, dates } = getDateRangeArrayUtil(
+                dayjs.utc(start).startOf('day').toDate(),
+                dayjs.utc(end).endOf('day').toDate(),
+            );
+
+            const dailyTraffic = await this.hostsUsageHistoryRepository.getHostDailyUsersTrafficSum(
+                uuid,
+                startDate,
+                endDate,
+                dates,
+            );
+
+            const topUsers = await this.hostsUsageHistoryRepository.getTopHostUsersByTraffic(
+                uuid,
+                startDate,
+                endDate,
+                topUsersLimit,
+            );
+
+            return ok(
+                new GetStatsHostUsersUsageResponseModel({
+                    categories: dates,
+                    sparklineData: dailyTraffic,
+                    topUsers,
                 }),
             );
         } catch (error) {

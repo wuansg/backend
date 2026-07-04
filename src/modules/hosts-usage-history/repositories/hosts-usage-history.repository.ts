@@ -9,7 +9,7 @@ import { ICrudHistoricalRecords } from '@common/types/crud-port';
 import { getKyselyUuid } from '@common/helpers/kysely';
 
 import { HostsUsageHistoryConverter } from '../hosts-usage-history.converter';
-import { IGetHostsUsageByRange, ITopHost } from '../interfaces';
+import { IGetHostsUsageByRange, ITopHost, ITopHostUser } from '../interfaces';
 import { HostsUsageHistoryEntity } from '../entities';
 
 export interface IInboundUsageStat {
@@ -518,6 +518,31 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         return await this.prisma.tx.$queryRaw<ITopHost[]>(query);
     }
 
+    public async getTopHostUsersByTraffic(
+        hostUuid: string,
+        start: Date,
+        end: Date,
+        limit: number = 100,
+    ): Promise<ITopHostUser[]> {
+        const query = Prisma.sql`
+            SELECT
+                u.uuid as "uuid",
+                u.username as "username",
+                SUM(uhuh.total_bytes) as "total"
+            FROM users u
+            INNER JOIN user_hosts_usage_history uhuh ON uhuh.user_id = u.t_id
+            WHERE
+                uhuh.host_uuid = ${hostUuid}::uuid
+                AND uhuh.created_at >= ${start}
+                AND uhuh.created_at <= ${end}
+            GROUP BY u.uuid, u.username
+            ORDER BY SUM(uhuh.total_bytes) DESC
+            LIMIT ${limit};
+        `;
+
+        return await this.prisma.tx.$queryRaw<ITopHostUser[]>(query);
+    }
+
     public async getDailyTrafficSum(start: Date, end: Date, dates: string[]): Promise<number[]> {
         return await this.getDailyTrafficSumFiltered(start, end, dates);
     }
@@ -545,6 +570,35 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 FROM user_hosts_usage_history
                 WHERE
                     user_id = ${userId}
+                    AND created_at >= ${start}
+                    AND created_at <= ${end}
+                GROUP BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
+            )
+            SELECT
+                COALESCE(dt.bytes, 0) AS value
+            FROM unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
+            LEFT JOIN daily_traffic dt ON dt.date = d.date
+            ORDER BY d.ord;
+        `;
+
+        const result = await this.prisma.tx.$queryRaw<Array<{ value: bigint }>>(query);
+        return result.map((item) => Number(item.value));
+    }
+
+    public async getHostDailyUsersTrafficSum(
+        hostUuid: string,
+        start: Date,
+        end: Date,
+        dates: string[],
+    ): Promise<number[]> {
+        const query = Prisma.sql`
+            WITH daily_traffic AS (
+                SELECT
+                    DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
+                    SUM(total_bytes) AS bytes
+                FROM user_hosts_usage_history
+                WHERE
+                    host_uuid = ${hostUuid}::uuid
                     AND created_at >= ${start}
                     AND created_at <= ${end}
                 GROUP BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
