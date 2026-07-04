@@ -4,9 +4,7 @@ import { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-pr
 import { TransactionHost } from '@nestjs-cls/transactional';
 import { Injectable } from '@nestjs/common';
 
-import { TxKyselyService } from '@common/database/tx-kysely.service';
 import { ICrudHistoricalRecords } from '@common/types/crud-port';
-import { getKyselyUuid } from '@common/helpers/kysely';
 
 import { HostsUsageHistoryConverter } from '../hosts-usage-history.converter';
 import { IGetHostsUsageByRange, ITopHost, ITopHostUser } from '../interfaces';
@@ -26,7 +24,6 @@ export interface IUserInboundUsageStat extends IInboundUsageStat {
 export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<HostsUsageHistoryEntity> {
     constructor(
         private readonly prisma: TransactionHost<TransactionalAdapterPrisma>,
-        private readonly qb: TxKyselyService,
         private readonly converter: HostsUsageHistoryConverter,
     ) {}
 
@@ -312,55 +309,141 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         dates: string[],
     ): Promise<IGetHostsUsageByRange[]> {
         const query = Prisma.sql`
-            WITH daily_usage AS (
-                SELECT
-                    h.uuid,
-                    h.remark,
-                    h.address,
-                    h.port,
-                    h.tag,
-                    BOOL_OR(uhuh.is_shared) AS is_shared,
-                    DATE_TRUNC('day', uhuh.created_at)::date AS date,
-                    SUM(uhuh.total_bytes) AS bytes
-                FROM hosts h
-                INNER JOIN user_hosts_usage_history uhuh ON uhuh.host_uuid = h.uuid
+            WITH selected_groups AS (
+                SELECT DISTINCT
+                    uhuh.node_uuid,
+                    uhuh.inbound_tag
+                FROM user_hosts_usage_history uhuh
                 WHERE
                     uhuh.user_id = ${userId}
                     AND uhuh.created_at >= ${start}
                     AND uhuh.created_at <= ${end}
-                GROUP BY h.uuid, h.remark, h.address, h.port, h.tag, DATE_TRUNC('day', uhuh.created_at)
             ),
-            hosts_with_totals AS (
+            host_rows AS (
                 SELECT
-                    uuid,
-                    remark,
-                    address,
-                    port,
-                    tag,
-                    BOOL_OR(is_shared) AS is_shared,
+                    uhuh.node_uuid,
+                    uhuh.inbound_tag,
+                    h.uuid,
+                    h.remark,
+                    h.address,
+                    h.port,
+                    h.view_position,
+                    h.tag,
+                    BOOL_OR(uhuh.is_shared) AS is_shared
+                FROM user_hosts_usage_history uhuh
+                INNER JOIN selected_groups sg
+                    ON sg.node_uuid = uhuh.node_uuid
+                    AND sg.inbound_tag = uhuh.inbound_tag
+                INNER JOIN hosts h ON h.uuid = uhuh.host_uuid
+                WHERE
+                    uhuh.user_id = ${userId}
+                    AND uhuh.created_at >= ${start}
+                    AND uhuh.created_at <= ${end}
+                GROUP BY
+                    uhuh.node_uuid,
+                    uhuh.inbound_tag,
+                    h.uuid,
+                    h.remark,
+                    h.address,
+                    h.port,
+                    h.view_position,
+                    h.tag
+            ),
+            group_hosts AS (
+                SELECT
+                    node_uuid,
+                    inbound_tag,
+                    (ARRAY_AGG(uuid ORDER BY view_position, remark))[1] AS uuid,
+                    CASE
+                        WHEN COUNT(*) > 1 THEN STRING_AGG(remark, ' + ' ORDER BY view_position, remark)
+                        ELSE (ARRAY_AGG(remark ORDER BY view_position, remark))[1]
+                    END AS remark,
+                    (ARRAY_AGG(address ORDER BY view_position, remark))[1] AS address,
+                    (ARRAY_AGG(port ORDER BY view_position, remark))[1] AS port,
+                    (ARRAY_AGG(tag ORDER BY view_position, remark))[1] AS tag,
+                    (BOOL_OR(is_shared) OR COUNT(*) > 1) AS is_shared,
+                    JSONB_AGG(
+                        JSONB_BUILD_OBJECT(
+                            'uuid', uuid,
+                            'remark', remark,
+                            'address', address,
+                            'port', port
+                        )
+                        ORDER BY view_position, remark
+                    ) AS hosts
+                FROM host_rows
+                GROUP BY node_uuid, inbound_tag
+            ),
+            dedup_hourly AS (
+                SELECT
+                    uhuh.node_uuid,
+                    uhuh.inbound_tag,
+                    uhuh.created_at,
+                    MAX(uhuh.total_bytes) AS total_bytes
+                FROM user_hosts_usage_history uhuh
+                INNER JOIN selected_groups sg
+                    ON sg.node_uuid = uhuh.node_uuid
+                    AND sg.inbound_tag = uhuh.inbound_tag
+                WHERE
+                    uhuh.user_id = ${userId}
+                    AND uhuh.created_at >= ${start}
+                    AND uhuh.created_at <= ${end}
+                GROUP BY uhuh.node_uuid, uhuh.inbound_tag, uhuh.created_at
+            ),
+            daily_usage AS (
+                SELECT
+                    node_uuid,
+                    inbound_tag,
+                    DATE_TRUNC('day', created_at)::date AS date,
+                    SUM(total_bytes) AS bytes
+                FROM dedup_hourly
+                GROUP BY node_uuid, inbound_tag, DATE_TRUNC('day', created_at)
+            ),
+            groups_with_totals AS (
+                SELECT
+                    node_uuid,
+                    inbound_tag,
                     SUM(bytes) AS total_bytes
                 FROM daily_usage
-                GROUP BY uuid, remark, address, port, tag
+                GROUP BY node_uuid, inbound_tag
             )
             SELECT
-                ht.uuid as "uuid",
-                ht.remark as "remark",
-                ht.address as "address",
-                ht.port as "port",
-                ht.tag as "tag",
-                ht.is_shared as "isShared",
-                ht.total_bytes as "total",
+                gh.uuid as "uuid",
+                gh.node_uuid::text || ':' || gh.inbound_tag as "groupKey",
+                gh.node_uuid as "nodeUuid",
+                gh.inbound_tag as "inboundTag",
+                gh.remark as "remark",
+                gh.address as "address",
+                gh.port as "port",
+                gh.tag as "tag",
+                gh.is_shared as "isShared",
+                gh.hosts as "hosts",
+                gt.total_bytes as "total",
                 ARRAY_AGG(
                     COALESCE(du.bytes, 0)
                     ORDER BY d.ord
                 ) AS "data"
-            FROM hosts_with_totals ht
+            FROM groups_with_totals gt
+            INNER JOIN group_hosts gh
+                ON gh.node_uuid = gt.node_uuid
+                AND gh.inbound_tag = gt.inbound_tag
             CROSS JOIN unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
             LEFT JOIN daily_usage du
-                ON du.uuid = ht.uuid
+                ON du.node_uuid = gt.node_uuid
+                AND du.inbound_tag = gt.inbound_tag
                 AND du.date = d.date
-            GROUP BY ht.uuid, ht.remark, ht.address, ht.port, ht.tag, ht.is_shared, ht.total_bytes
-            ORDER BY ht.total_bytes DESC;
+            GROUP BY
+                gh.uuid,
+                gh.node_uuid,
+                gh.inbound_tag,
+                gh.remark,
+                gh.address,
+                gh.port,
+                gh.tag,
+                gh.is_shared,
+                gh.hosts,
+                gt.total_bytes
+            ORDER BY gt.total_bytes DESC;
         `;
 
         return await this.prisma.tx.$queryRaw<IGetHostsUsageByRange[]>(query);
@@ -373,61 +456,145 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         hostUuids?: string[],
     ): Promise<IGetHostsUsageByRange[]> {
         const hostUuidFilter = hostUuids
-            ? Prisma.sql`AND h.uuid IN (${Prisma.join(
+            ? Prisma.sql`AND huh.host_uuid IN (${Prisma.join(
                   hostUuids.map((hostUuid) => Prisma.sql`${hostUuid}::uuid`),
               )})`
             : Prisma.empty;
 
         const query = Prisma.sql`
-            WITH daily_usage AS (
-                SELECT
-                    h.uuid,
-                    h.remark,
-                    h.address,
-                    h.port,
-                    h.tag,
-                    BOOL_OR(huh.is_shared) AS is_shared,
-                    DATE_TRUNC('day', huh.created_at)::date AS date,
-                    SUM(huh.total_bytes) AS bytes
-                FROM hosts h
-                INNER JOIN hosts_usage_history huh ON huh.host_uuid = h.uuid
+            WITH selected_groups AS (
+                SELECT DISTINCT
+                    huh.node_uuid,
+                    huh.inbound_tag
+                FROM hosts_usage_history huh
                 WHERE
                     huh.created_at >= ${start}
                     AND huh.created_at <= ${end}
                     ${hostUuidFilter}
-                GROUP BY h.uuid, h.remark, h.address, h.port, h.tag, DATE_TRUNC('day', huh.created_at)
             ),
-            hosts_with_totals AS (
+            host_rows AS (
                 SELECT
-                    uuid,
-                    remark,
-                    address,
-                    port,
-                    tag,
-                    BOOL_OR(is_shared) AS is_shared,
+                    huh.node_uuid,
+                    huh.inbound_tag,
+                    h.uuid,
+                    h.remark,
+                    h.address,
+                    h.port,
+                    h.view_position,
+                    h.tag,
+                    BOOL_OR(huh.is_shared) AS is_shared
+                FROM hosts_usage_history huh
+                INNER JOIN selected_groups sg
+                    ON sg.node_uuid = huh.node_uuid
+                    AND sg.inbound_tag = huh.inbound_tag
+                INNER JOIN hosts h ON h.uuid = huh.host_uuid
+                WHERE
+                    huh.created_at >= ${start}
+                    AND huh.created_at <= ${end}
+                GROUP BY
+                    huh.node_uuid,
+                    huh.inbound_tag,
+                    h.uuid,
+                    h.remark,
+                    h.address,
+                    h.port,
+                    h.view_position,
+                    h.tag
+            ),
+            group_hosts AS (
+                SELECT
+                    node_uuid,
+                    inbound_tag,
+                    (ARRAY_AGG(uuid ORDER BY view_position, remark))[1] AS uuid,
+                    CASE
+                        WHEN COUNT(*) > 1 THEN STRING_AGG(remark, ' + ' ORDER BY view_position, remark)
+                        ELSE (ARRAY_AGG(remark ORDER BY view_position, remark))[1]
+                    END AS remark,
+                    (ARRAY_AGG(address ORDER BY view_position, remark))[1] AS address,
+                    (ARRAY_AGG(port ORDER BY view_position, remark))[1] AS port,
+                    (ARRAY_AGG(tag ORDER BY view_position, remark))[1] AS tag,
+                    (BOOL_OR(is_shared) OR COUNT(*) > 1) AS is_shared,
+                    JSONB_AGG(
+                        JSONB_BUILD_OBJECT(
+                            'uuid', uuid,
+                            'remark', remark,
+                            'address', address,
+                            'port', port
+                        )
+                        ORDER BY view_position, remark
+                    ) AS hosts
+                FROM host_rows
+                GROUP BY node_uuid, inbound_tag
+            ),
+            dedup_hourly AS (
+                SELECT
+                    huh.node_uuid,
+                    huh.inbound_tag,
+                    huh.created_at,
+                    MAX(huh.total_bytes) AS total_bytes
+                FROM hosts_usage_history huh
+                INNER JOIN selected_groups sg
+                    ON sg.node_uuid = huh.node_uuid
+                    AND sg.inbound_tag = huh.inbound_tag
+                WHERE
+                    huh.created_at >= ${start}
+                    AND huh.created_at <= ${end}
+                GROUP BY huh.node_uuid, huh.inbound_tag, huh.created_at
+            ),
+            daily_usage AS (
+                SELECT
+                    node_uuid,
+                    inbound_tag,
+                    DATE_TRUNC('day', created_at)::date AS date,
+                    SUM(total_bytes) AS bytes
+                FROM dedup_hourly
+                GROUP BY node_uuid, inbound_tag, DATE_TRUNC('day', created_at)
+            ),
+            groups_with_totals AS (
+                SELECT
+                    node_uuid,
+                    inbound_tag,
                     SUM(bytes) AS total_bytes
                 FROM daily_usage
-                GROUP BY uuid, remark, address, port, tag
+                GROUP BY node_uuid, inbound_tag
             )
             SELECT
-                ht.uuid as "uuid",
-                ht.remark as "remark",
-                ht.address as "address",
-                ht.port as "port",
-                ht.tag as "tag",
-                ht.is_shared as "isShared",
-                ht.total_bytes as "total",
+                gh.uuid as "uuid",
+                gh.node_uuid::text || ':' || gh.inbound_tag as "groupKey",
+                gh.node_uuid as "nodeUuid",
+                gh.inbound_tag as "inboundTag",
+                gh.remark as "remark",
+                gh.address as "address",
+                gh.port as "port",
+                gh.tag as "tag",
+                gh.is_shared as "isShared",
+                gh.hosts as "hosts",
+                gt.total_bytes as "total",
                 ARRAY_AGG(
                     COALESCE(du.bytes, 0)
                     ORDER BY d.ord
                 ) AS "data"
-            FROM hosts_with_totals ht
+            FROM groups_with_totals gt
+            INNER JOIN group_hosts gh
+                ON gh.node_uuid = gt.node_uuid
+                AND gh.inbound_tag = gt.inbound_tag
             CROSS JOIN unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
             LEFT JOIN daily_usage du
-                ON du.uuid = ht.uuid
+                ON du.node_uuid = gt.node_uuid
+                AND du.inbound_tag = gt.inbound_tag
                 AND du.date = d.date
-            GROUP BY ht.uuid, ht.remark, ht.address, ht.port, ht.tag, ht.is_shared, ht.total_bytes
-            ORDER BY ht.total_bytes DESC;
+            GROUP BY
+                gh.uuid,
+                gh.node_uuid,
+                gh.inbound_tag,
+                gh.remark,
+                gh.address,
+                gh.port,
+                gh.tag,
+                gh.is_shared,
+                gh.hosts,
+                gt.total_bytes
+            ORDER BY gt.total_bytes DESC;
         `;
 
         return await this.prisma.tx.$queryRaw<IGetHostsUsageByRange[]>(query);
@@ -438,24 +605,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         end: Date,
         limit: number = 5,
     ): Promise<ITopHost[]> {
-        return await this.qb.kysely
-            .selectFrom('hosts as h')
-            .innerJoin('hostsUsageHistory as huh', 'huh.hostUuid', 'h.uuid')
-            .select([
-                'h.uuid',
-                'h.remark',
-                'h.address',
-                'h.port',
-                'h.tag',
-                (eb) => eb.fn.sum<bigint>('huh.totalBytes').as('total'),
-                (eb) => eb.fn<boolean>('bool_or', ['huh.isShared']).as('isShared'),
-            ])
-            .where('huh.createdAt', '>=', start)
-            .where('huh.createdAt', '<=', end)
-            .groupBy(['h.uuid', 'h.remark', 'h.address', 'h.port', 'h.tag'])
-            .orderBy((eb) => eb.fn.sum<bigint>('huh.totalBytes'), 'desc')
-            .limit(limit)
-            .execute();
+        return await this.getTopHostsByTrafficFiltered(start, end, limit);
     }
 
     public async getTopHostsByTrafficForHostUuids(
@@ -464,29 +614,130 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         end: Date,
         limit: number = 5,
     ): Promise<ITopHost[]> {
-        return await this.qb.kysely
-            .selectFrom('hosts as h')
-            .innerJoin('hostsUsageHistory as huh', 'huh.hostUuid', 'h.uuid')
-            .select([
-                'h.uuid',
-                'h.remark',
-                'h.address',
-                'h.port',
-                'h.tag',
-                (eb) => eb.fn.sum<bigint>('huh.totalBytes').as('total'),
-                (eb) => eb.fn<boolean>('bool_or', ['huh.isShared']).as('isShared'),
-            ])
-            .where(
-                'h.uuid',
-                'in',
-                hostUuids.map((hostUuid) => getKyselyUuid(hostUuid)),
+        return await this.getTopHostsByTrafficFiltered(start, end, limit, hostUuids);
+    }
+
+    private async getTopHostsByTrafficFiltered(
+        start: Date,
+        end: Date,
+        limit: number = 5,
+        hostUuids?: string[],
+    ): Promise<ITopHost[]> {
+        const hostUuidFilter = hostUuids
+            ? Prisma.sql`AND huh.host_uuid IN (${Prisma.join(
+                  hostUuids.map((hostUuid) => Prisma.sql`${hostUuid}::uuid`),
+              )})`
+            : Prisma.empty;
+
+        const query = Prisma.sql`
+            WITH selected_groups AS (
+                SELECT DISTINCT
+                    huh.node_uuid,
+                    huh.inbound_tag
+                FROM hosts_usage_history huh
+                WHERE
+                    huh.created_at >= ${start}
+                    AND huh.created_at <= ${end}
+                    ${hostUuidFilter}
+            ),
+            host_rows AS (
+                SELECT
+                    huh.node_uuid,
+                    huh.inbound_tag,
+                    h.uuid,
+                    h.remark,
+                    h.address,
+                    h.port,
+                    h.view_position,
+                    h.tag,
+                    BOOL_OR(huh.is_shared) AS is_shared
+                FROM hosts_usage_history huh
+                INNER JOIN selected_groups sg
+                    ON sg.node_uuid = huh.node_uuid
+                    AND sg.inbound_tag = huh.inbound_tag
+                INNER JOIN hosts h ON h.uuid = huh.host_uuid
+                WHERE
+                    huh.created_at >= ${start}
+                    AND huh.created_at <= ${end}
+                GROUP BY
+                    huh.node_uuid,
+                    huh.inbound_tag,
+                    h.uuid,
+                    h.remark,
+                    h.address,
+                    h.port,
+                    h.view_position,
+                    h.tag
+            ),
+            group_hosts AS (
+                SELECT
+                    node_uuid,
+                    inbound_tag,
+                    (ARRAY_AGG(uuid ORDER BY view_position, remark))[1] AS uuid,
+                    CASE
+                        WHEN COUNT(*) > 1 THEN STRING_AGG(remark, ' + ' ORDER BY view_position, remark)
+                        ELSE (ARRAY_AGG(remark ORDER BY view_position, remark))[1]
+                    END AS remark,
+                    (ARRAY_AGG(address ORDER BY view_position, remark))[1] AS address,
+                    (ARRAY_AGG(port ORDER BY view_position, remark))[1] AS port,
+                    (ARRAY_AGG(tag ORDER BY view_position, remark))[1] AS tag,
+                    (BOOL_OR(is_shared) OR COUNT(*) > 1) AS is_shared,
+                    JSONB_AGG(
+                        JSONB_BUILD_OBJECT(
+                            'uuid', uuid,
+                            'remark', remark,
+                            'address', address,
+                            'port', port
+                        )
+                        ORDER BY view_position, remark
+                    ) AS hosts
+                FROM host_rows
+                GROUP BY node_uuid, inbound_tag
+            ),
+            dedup_hourly AS (
+                SELECT
+                    huh.node_uuid,
+                    huh.inbound_tag,
+                    huh.created_at,
+                    MAX(huh.total_bytes) AS total_bytes
+                FROM hosts_usage_history huh
+                INNER JOIN selected_groups sg
+                    ON sg.node_uuid = huh.node_uuid
+                    AND sg.inbound_tag = huh.inbound_tag
+                WHERE
+                    huh.created_at >= ${start}
+                    AND huh.created_at <= ${end}
+                GROUP BY huh.node_uuid, huh.inbound_tag, huh.created_at
+            ),
+            group_totals AS (
+                SELECT
+                    node_uuid,
+                    inbound_tag,
+                    SUM(total_bytes) AS total_bytes
+                FROM dedup_hourly
+                GROUP BY node_uuid, inbound_tag
             )
-            .where('huh.createdAt', '>=', start)
-            .where('huh.createdAt', '<=', end)
-            .groupBy(['h.uuid', 'h.remark', 'h.address', 'h.port', 'h.tag'])
-            .orderBy((eb) => eb.fn.sum<bigint>('huh.totalBytes'), 'desc')
-            .limit(limit)
-            .execute();
+            SELECT
+                gh.uuid as "uuid",
+                gh.node_uuid::text || ':' || gh.inbound_tag as "groupKey",
+                gh.node_uuid as "nodeUuid",
+                gh.inbound_tag as "inboundTag",
+                gh.remark as "remark",
+                gh.address as "address",
+                gh.port as "port",
+                gh.tag as "tag",
+                gh.is_shared as "isShared",
+                gh.hosts as "hosts",
+                gt.total_bytes as "total"
+            FROM group_totals gt
+            INNER JOIN group_hosts gh
+                ON gh.node_uuid = gt.node_uuid
+                AND gh.inbound_tag = gt.inbound_tag
+            ORDER BY gt.total_bytes DESC
+            LIMIT ${limit};
+        `;
+
+        return await this.prisma.tx.$queryRaw<ITopHost[]>(query);
     }
 
     public async getTopUserHostsByTraffic(
@@ -496,22 +747,112 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         limit: number = 5,
     ): Promise<ITopHost[]> {
         const query = Prisma.sql`
+            WITH selected_groups AS (
+                SELECT DISTINCT
+                    uhuh.node_uuid,
+                    uhuh.inbound_tag
+                FROM user_hosts_usage_history uhuh
+                WHERE
+                    uhuh.user_id = ${userId}
+                    AND uhuh.created_at >= ${start}
+                    AND uhuh.created_at <= ${end}
+            ),
+            host_rows AS (
+                SELECT
+                    uhuh.node_uuid,
+                    uhuh.inbound_tag,
+                    h.uuid,
+                    h.remark,
+                    h.address,
+                    h.port,
+                    h.view_position,
+                    h.tag,
+                    BOOL_OR(uhuh.is_shared) AS is_shared
+                FROM user_hosts_usage_history uhuh
+                INNER JOIN selected_groups sg
+                    ON sg.node_uuid = uhuh.node_uuid
+                    AND sg.inbound_tag = uhuh.inbound_tag
+                INNER JOIN hosts h ON h.uuid = uhuh.host_uuid
+                WHERE
+                    uhuh.user_id = ${userId}
+                    AND uhuh.created_at >= ${start}
+                    AND uhuh.created_at <= ${end}
+                GROUP BY
+                    uhuh.node_uuid,
+                    uhuh.inbound_tag,
+                    h.uuid,
+                    h.remark,
+                    h.address,
+                    h.port,
+                    h.view_position,
+                    h.tag
+            ),
+            group_hosts AS (
+                SELECT
+                    node_uuid,
+                    inbound_tag,
+                    (ARRAY_AGG(uuid ORDER BY view_position, remark))[1] AS uuid,
+                    CASE
+                        WHEN COUNT(*) > 1 THEN STRING_AGG(remark, ' + ' ORDER BY view_position, remark)
+                        ELSE (ARRAY_AGG(remark ORDER BY view_position, remark))[1]
+                    END AS remark,
+                    (ARRAY_AGG(address ORDER BY view_position, remark))[1] AS address,
+                    (ARRAY_AGG(port ORDER BY view_position, remark))[1] AS port,
+                    (ARRAY_AGG(tag ORDER BY view_position, remark))[1] AS tag,
+                    (BOOL_OR(is_shared) OR COUNT(*) > 1) AS is_shared,
+                    JSONB_AGG(
+                        JSONB_BUILD_OBJECT(
+                            'uuid', uuid,
+                            'remark', remark,
+                            'address', address,
+                            'port', port
+                        )
+                        ORDER BY view_position, remark
+                    ) AS hosts
+                FROM host_rows
+                GROUP BY node_uuid, inbound_tag
+            ),
+            dedup_hourly AS (
+                SELECT
+                    uhuh.node_uuid,
+                    uhuh.inbound_tag,
+                    uhuh.created_at,
+                    MAX(uhuh.total_bytes) AS total_bytes
+                FROM user_hosts_usage_history uhuh
+                INNER JOIN selected_groups sg
+                    ON sg.node_uuid = uhuh.node_uuid
+                    AND sg.inbound_tag = uhuh.inbound_tag
+                WHERE
+                    uhuh.user_id = ${userId}
+                    AND uhuh.created_at >= ${start}
+                    AND uhuh.created_at <= ${end}
+                GROUP BY uhuh.node_uuid, uhuh.inbound_tag, uhuh.created_at
+            ),
+            group_totals AS (
+                SELECT
+                    node_uuid,
+                    inbound_tag,
+                    SUM(total_bytes) AS total_bytes
+                FROM dedup_hourly
+                GROUP BY node_uuid, inbound_tag
+            )
             SELECT
-                h.uuid as "uuid",
-                h.remark as "remark",
-                h.address as "address",
-                h.port as "port",
-                h.tag as "tag",
-                SUM(uhuh.total_bytes) as "total",
-                BOOL_OR(uhuh.is_shared) as "isShared"
-            FROM hosts h
-            INNER JOIN user_hosts_usage_history uhuh ON uhuh.host_uuid = h.uuid
-            WHERE
-                uhuh.user_id = ${userId}
-                AND uhuh.created_at >= ${start}
-                AND uhuh.created_at <= ${end}
-            GROUP BY h.uuid, h.remark, h.address, h.port, h.tag
-            ORDER BY SUM(uhuh.total_bytes) DESC
+                gh.uuid as "uuid",
+                gh.node_uuid::text || ':' || gh.inbound_tag as "groupKey",
+                gh.node_uuid as "nodeUuid",
+                gh.inbound_tag as "inboundTag",
+                gh.remark as "remark",
+                gh.address as "address",
+                gh.port as "port",
+                gh.tag as "tag",
+                gh.is_shared as "isShared",
+                gh.hosts as "hosts",
+                gt.total_bytes as "total"
+            FROM group_totals gt
+            INNER JOIN group_hosts gh
+                ON gh.node_uuid = gt.node_uuid
+                AND gh.inbound_tag = gt.inbound_tag
+            ORDER BY gt.total_bytes DESC
             LIMIT ${limit};
         `;
 
@@ -563,15 +904,24 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         dates: string[],
     ): Promise<number[]> {
         const query = Prisma.sql`
-            WITH daily_traffic AS (
+            WITH dedup_hourly AS (
                 SELECT
-                    DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
-                    SUM(total_bytes) AS bytes
+                    node_uuid,
+                    inbound_tag,
+                    created_at,
+                    MAX(total_bytes) AS total_bytes
                 FROM user_hosts_usage_history
                 WHERE
                     user_id = ${userId}
                     AND created_at >= ${start}
                     AND created_at <= ${end}
+                GROUP BY node_uuid, inbound_tag, created_at
+            ),
+            daily_traffic AS (
+                SELECT
+                    DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
+                    SUM(total_bytes) AS bytes
+                FROM dedup_hourly
                 GROUP BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
             )
             SELECT
@@ -627,15 +977,36 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
             : Prisma.empty;
 
         const query = Prisma.sql`
-            WITH daily_traffic AS (
-                SELECT
-                    DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
-                    SUM(total_bytes) AS bytes
+            WITH selected_groups AS (
+                SELECT DISTINCT
+                    node_uuid,
+                    inbound_tag
                 FROM hosts_usage_history
                 WHERE
                     created_at >= ${start}
                     AND created_at <= ${end}
                     ${hostUuidFilter}
+            ),
+            dedup_hourly AS (
+                SELECT
+                    huh.node_uuid,
+                    huh.inbound_tag,
+                    huh.created_at,
+                    MAX(huh.total_bytes) AS total_bytes
+                FROM hosts_usage_history huh
+                INNER JOIN selected_groups sg
+                    ON sg.node_uuid = huh.node_uuid
+                    AND sg.inbound_tag = huh.inbound_tag
+                WHERE
+                    huh.created_at >= ${start}
+                    AND huh.created_at <= ${end}
+                GROUP BY huh.node_uuid, huh.inbound_tag, huh.created_at
+            ),
+            daily_traffic AS (
+                SELECT
+                    DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
+                    SUM(total_bytes) AS bytes
+                FROM dedup_hourly
                 GROUP BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
             )
             SELECT

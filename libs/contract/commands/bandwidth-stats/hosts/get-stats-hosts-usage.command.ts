@@ -21,14 +21,25 @@ export namespace GetStatsHostsUsageCommand {
 
     export type RequestQuery = z.infer<typeof RequestQuerySchema>;
 
+    const HostUsageMemberSchema = z.object({
+        uuid: z.string().uuid(),
+        remark: z.string(),
+        address: z.string(),
+        port: z.number(),
+    });
+
     const HostUsageItemSchema = z.object({
         uuid: z.string().uuid(),
+        groupKey: z.string(),
+        nodeUuid: z.string().uuid(),
+        inboundTag: z.string(),
         color: z.string(),
         remark: z.string(),
         address: z.string(),
         port: z.number(),
         tag: z.string().nullable(),
         isShared: z.boolean(),
+        hosts: z.array(HostUsageMemberSchema),
         total: z.number(),
     });
 
