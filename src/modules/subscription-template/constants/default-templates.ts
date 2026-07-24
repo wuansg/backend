@@ -174,16 +174,133 @@ rules:
 
 export const DEFAULT_TEMPLATE_SURGE = `[General]
 loglevel = notify
-dns-server = system, 1.1.1.1, 8.8.8.8
+dns-server = system, 223.5.5.5, 119.29.29.29, 8.8.8.8
+encrypted-dns-server = tls://dot.pub
+encrypted-dns-follow-outbound-mode = false
+skip-proxy = 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, localhost, *.local, e.crashlynatics.com
+internet-test-url = http://wifi.vivo.com.cn/generate_204
+proxy-test-url = http://www.google.com/generate_204
+test-timeout = 4
+ipv6 = false
+ipv6-vif = disabled
+allow-wifi-access = false
+exclude-simple-hostnames = true
+show-error-page-for-reject = true
+udp-priority = false
+compatibility-mode = 1
 
 [Proxy]
 #!remnawave-proxies
 
 [Proxy Group]
-→ Remnawave = select, #!remnawave-proxy-names
+escapee = select, DIRECT, include-all-proxies=1, no-alert=0, hidden=0, icon-url=https://raw.githubusercontent.com/lige47/QuanX-icon-rule/main/icon/06jichang/FishPort.png
+emby = select, DIRECT, include-all-proxies=1, no-alert=1, hidden=0, icon-url=https://raw.githubusercontent.com/lige47/QuanX-icon-rule/main/icon/04ProxySoft/emby(1).png
+Telegram = smart, include-all-proxies=1, no-alert=0, hidden=0, icon-url=https://raw.githubusercontent.com/lige47/QuanX-icon-rule/main/icon/04ProxySoft/telegram.png
+YouTube = smart, include-all-proxies=1, no-alert=0, hidden=0, icon-url=https://raw.githubusercontent.com/lige47/QuanX-icon-rule/main/icon/04ProxySoft/Youtube.png, url=http://redirector.googlevideo.com/report_mapping
+APPLE = smart, include-all-proxies=1, no-alert=0, hidden=0, icon-url=https://raw.githubusercontent.com/lige47/QuanX-icon-rule/main/icon/03CNSoft/apple.png
+ai = select, DIRECT, include-all-proxies=1, no-alert=0, hidden=0, icon-url=https://raw.githubusercontent.com/lige47/QuanX-icon-rule/main/icon/04ProxySoft/chatgpt(balck).png
+tg-nl = smart, include-all-proxies=1, no-alert=0, hidden=0, icon-url=https://raw.githubusercontent.com/lige47/QuanX-icon-rule/main/icon/04ProxySoft/telegram.png
+tg-us = smart, include-all-proxies=1, no-alert=0, hidden=0, icon-url=https://raw.githubusercontent.com/lige47/QuanX-icon-rule/main/icon/04ProxySoft/telegram.png
+speedtest = select, DIRECT, include-all-proxies=1, update-interval=0, no-alert=0, hidden=0, icon-url=https://raw.githubusercontent.com/lige47/QuanX-icon-rule/main/icon/03CNSoft/speedtest.png
 
 [Rule]
-FINAL,→ Remnawave
+DOMAIN-SUFFIX,challenges.cloudflare.com,escapee
+DOMAIN-SUFFIX,stun.cloudflare.com,escapee
+DOMAIN-SUFFIX,sdl.mugi.uk,DIRECT
+DOMAIN-SUFFIX,uhdnow.online,DIRECT
+DOMAIN-SUFFIX,uhdnow.com,DIRECT
+RULE-SET,https://raw.githubusercontent.com/QuixoticHeart/rule-set/refs/heads/ruleset/loon/apns.list,escapee
+DOMAIN-SUFFIX,aemby.de,emby
+DOMAIN-SUFFIX,28.al,emby
+DOMAIN,1dot1dot1dot1.cloudflare-dns.com,DIRECT
+DOMAIN-SUFFIX,hdslb.com,DIRECT
+DOMAIN-SUFFIX,biliapi.com,DIRECT
+DOMAIN-SUFFIX,bilibili.com,DIRECT
+DOMAIN-SUFFIX,xhscdn.com,DIRECT
+DOMAIN-SUFFIX,xiaohongshu.com,DIRECT
+DOMAIN-SUFFIX,qq.com,DIRECT
+IP-CIDR,43.174.154.21/32,DIRECT,no-resolve
+DOMAIN-SUFFIX,meituan.com,DIRECT
+DOMAIN-SUFFIX,alibabausercontent.com,DIRECT
+DOMAIN-SUFFIX,taobao.com,DIRECT
+DOMAIN-SUFFIX,xxlb.net,DIRECT
+DOMAIN-SUFFIX,emby.pro,emby
+DOMAIN,proactivebackend-pa.googleapis.com,ai
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Surge/Google/Google.list,YouTube
+DOMAIN-SUFFIX,miraiemby.com,emby
+DOMAIN-SUFFIX,startspoint.com,emby
+RULE-SET,https://kelee.one/Tool/Loon/Lsr/SpeedtestChina.lsr,DIRECT
+RULE-SET,https://kelee.one/Tool/Loon/Lsr/SpeedtestInternational.lsr,speedtest
+RULE-SET,https://raw.githubusercontent.com/lige47/QuanX-icon-rule/main/rule/openai.list,ai
+DOMAIN,www.r34anim.com,escapee
+DOMAIN,panel.silverspoon.top,escapee
+DOMAIN-SUFFIX,longemby.com,emby
+DOMAIN-SUFFIX,nodeseek.com,escapee
+DOMAIN-SUFFIX,push.apple.com,APPLE
+DOMAIN,46-courier.push.apple.com,APPLE
+DOMAIN,free.28.al,emby
+DOMAIN-SUFFIX,aliapp.org,DIRECT
+DOMAIN-SUFFIX,alicdn.com,DIRECT
+DOMAIN-SUFFIX,nube.sh,DIRECT
+DOMAIN-SUFFIX,aws.a2z.com,DIRECT
+DOMAIN-SUFFIX,amazon.com,DIRECT
+DOMAIN,speed.cloudflare.com,speedtest
+DOMAIN,arm2.silverspoon.top,escapee
+DOMAIN,stream2.jingzhe.pro,emby
+DOMAIN,emby.jingzhe.pro,emby
+DOMAIN-SUFFIX,apple-cdn.net,emby
+DOMAIN,aaa.silverspoon.top,escapee
+DOMAIN,gateway.icloud.com,APPLE
+DOMAIN,ch.silverspoon.top,DIRECT
+DOMAIN,lite.cn2gias.uk,emby
+DOMAIN,status.silverspoon.top,escapee
+DOMAIN,lala-jpiij.010004.xyz,emby
+DOMAIN-SUFFIX,emby.my,emby
+DOMAIN,eggtartemby.itsmyduty.top,emby
+IP-CIDR,5.28.192.0/18,tg-nl,no-resolve
+DOMAIN-SUFFIX,nanflix.net,emby
+DOMAIN,ll.892818.xyz,emby
+DOMAIN-SUFFIX,ooklaserver.net,speedtest
+DOMAIN,api.iturrit.com,Telegram
+DOMAIN-SUFFIX,jsq.vban.xyz,emby
+DOMAIN-SUFFIX,sfcj.org,emby
+IP-CIDR,95.161.76.100/31,REJECT-DROP,no-resolve
+DOMAIN-SUFFIX,silverspoon.top,DIRECT
+DOMAIN,emby.heisi.org,emby
+DOMAIN,emby3.mcjoker.xyz,emby
+DOMAIN-SUFFIX,lite.saturdayvideo.top,emby
+DOMAIN-SUFFIX,misty.cx,emby
+DOMAIN,emby.bangumi.ca,emby
+DOMAIN,ch.feiyue.lol,emby
+USER-AGENT,Forward*/*,emby
+DOMAIN,image.tmdb.org,emby
+USER-AGENT,Forward/**,emby
+DOMAIN-SUFFIX,misaka.be,DIRECT
+IP-CIDR,91.108.56.130/32,Telegram,no-resolve
+IP-CIDR6,2001:b28:f23f:f005::a/128,Telegram,no-resolve
+IP-CIDR,149.154.175.53/32,tg-us,no-resolve
+IP-CIDR6,2001:b28:f23d:f001::a/128,tg-us,no-resolve
+IP-CIDR,149.154.167.51/32,tg-nl,no-resolve
+IP-CIDR6,2001:67c:4e8:f002::a/128,tg-nl,no-resolve
+IP-CIDR,149.154.167.91/32,tg-nl,no-resolve
+IP-CIDR6,2001:67c:4e8:f004::a/128,tg-nl,no-resolve
+IP-CIDR,149.154.160.0/20,Telegram,no-resolve
+IP-CIDR,91.108.0.0/16,Telegram,no-resolve
+IP-CIDR,185.76.151.0/24,Telegram,no-resolve
+IP-CIDR,91.105.192.0/23,Telegram,no-resolve
+IP-CIDR6,2001:b28:f23c::/48,Telegram,no-resolve
+IP-CIDR6,2001:b28:f23d::/48,Telegram,no-resolve
+IP-CIDR6,2001:b28:f23f::/48,Telegram,no-resolve
+IP-CIDR6,2001:67c:4e8::/48,Telegram,no-resolve
+IP-CIDR6,2a0a:f280::/32,Telegram,no-resolve
+RULE-SET,https://raw.githubusercontent.com/Loon0x00/LoonLiteRules/main/proxy/YouTube.list,YouTube
+RULE-SET,https://raw.githubusercontent.com/Loon0x00/LoonLiteRules/main/direct/cn.list,DIRECT
+GEOIP,CN,DIRECT
+FINAL,escapee,dns-failed
+
+[Host]
+91.108.56.106 = 91.108.56.147
+91.108.56.131 = 91.108.56.147
 `;
 
 export const DEFAULT_TEMPLATE_SINGBOX = {
