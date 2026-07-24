@@ -172,6 +172,20 @@ proxy-groups:
 rules:
   - MATCH,→ Remnawave`;
 
+export const DEFAULT_TEMPLATE_SURGE = `[General]
+loglevel = notify
+dns-server = system, 1.1.1.1, 8.8.8.8
+
+[Proxy]
+#!remnawave-proxies
+
+[Proxy Group]
+→ Remnawave = select, #!remnawave-proxy-names
+
+[Rule]
+FINAL,→ Remnawave
+`;
+
 export const DEFAULT_TEMPLATE_SINGBOX = {
     log: {
         disabled: true,

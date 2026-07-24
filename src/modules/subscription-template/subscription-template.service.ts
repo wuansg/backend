@@ -13,6 +13,7 @@ import {
     DEFAULT_TEMPLATE_MIHOMO,
     DEFAULT_TEMPLATE_SINGBOX,
     DEFAULT_TEMPLATE_STASH,
+    DEFAULT_TEMPLATE_SURGE,
     DEFAULT_TEMPLATE_XRAY_JSON,
 } from './constants';
 import { SubscriptionTemplateRepository } from './repositories/subscription-template.repository';
@@ -79,7 +80,8 @@ export class SubscriptionTemplateService {
             const isYamlTemplate =
                 template.templateType === 'MIHOMO' ||
                 template.templateType === 'STASH' ||
-                template.templateType === 'CLASH';
+                template.templateType === 'CLASH' ||
+                template.templateType === 'SURGE';
 
             const isJsonTemplate =
                 template.templateType === 'XRAY_JSON' || template.templateType === 'SINGBOX';
@@ -216,6 +218,9 @@ export class SubscriptionTemplateService {
                 case 'STASH':
                     templateYaml = DEFAULT_TEMPLATE_STASH;
                     break;
+                case 'SURGE':
+                    templateYaml = DEFAULT_TEMPLATE_SURGE;
+                    break;
                 case 'SINGBOX':
                     templateJson = DEFAULT_TEMPLATE_SINGBOX;
                     break;
@@ -351,6 +356,41 @@ export class SubscriptionTemplateService {
         }
 
         return templateContent;
+    }
+
+    public async getCachedTextTemplateByType(
+        type: TSubscriptionTemplateType,
+        name: string = DEFAULT_TEMPLATE_NAME,
+    ): Promise<string> {
+        const cached = await this.rawCacheService.get<string>(
+            CACHE_KEYS.SUBSCRIPTION_TEMPLATE(name, type),
+        );
+
+        if (cached) {
+            return cached;
+        }
+
+        const template =
+            await this.subscriptionTemplateRepository.getTemplateByNameAndTypeOrGetDefault(
+                name,
+                type,
+            );
+
+        if (!template || !template.templateYaml) {
+            this.logger.error(
+                `Template text not found: ${name} ${type}! Database modification detected. Restart Remnawave!`,
+            );
+
+            throw new Error('Template text not found');
+        }
+
+        await this.rawCacheService.set(
+            CACHE_KEYS.SUBSCRIPTION_TEMPLATE(name, type),
+            template.templateYaml,
+            3_600,
+        );
+
+        return template.templateYaml;
     }
 
     private async removeCachedTemplate(
