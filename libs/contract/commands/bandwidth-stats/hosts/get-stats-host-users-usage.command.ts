@@ -11,6 +11,7 @@ export namespace GetStatsHostUsersUsageCommand {
         BANDWIDTH_STATS_ROUTES.HOSTS.GET_USERS(':uuid'),
         'get',
         'Get Host Users Usage by Host UUID',
+        { scope: 'host-users-usage', kind: 'read' },
     );
 
     export const RequestQuerySchema = z.object({

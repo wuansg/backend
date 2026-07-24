@@ -11,6 +11,7 @@ export namespace GetStatsHostsUsageCommand {
         BANDWIDTH_STATS_ROUTES.HOSTS.GET,
         'get',
         'Get Hosts Usage by Range',
+        { scope: 'hosts-usage', kind: 'read' },
     );
 
     export const RequestQuerySchema = z.object({

@@ -2,6 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 
 import { ResolvedProxyConfig } from '../resolve-proxy/interfaces';
 
+interface Hysteria2FinalMask {
+    quicParams?: {
+        brutalUp?: string | number;
+        brutalDown?: string | number;
+        udpHop?: {
+            ports?: string | number;
+            interval?: string | number;
+        };
+    };
+    udp?: Array<{
+        type?: string;
+        settings?: { password?: string };
+    }>;
+}
+
 /**
  * Generates VLESS/Trojan/Shadowsocks share links per the standard:
  * https://github.com/XTLS/Xray-core/discussions/716
@@ -57,8 +72,10 @@ export class XrayGeneratorService {
                 return this.buildShadowsocksLink(host);
             case 'anytls':
                 return this.buildAnyTlsLink(host);
+            case 'hysteria':
+                return this.buildHysteriaLink(host);
             case 'hysteria2':
-                return this.buildHysteria2Link(host);
+                return this.buildSingBoxHysteria2Link(host);
             case 'tuic':
                 return this.buildTuicLink(host);
             default:
@@ -86,7 +103,6 @@ export class XrayGeneratorService {
         // Security (4.3.1 + 4.4)
         this.applySecurityParams(params, host);
 
-        // Remnawave: finalmask for kcp
         if (host.streamOverrides.finalMask) {
             params.fm = JSON.stringify(host.streamOverrides.finalMask);
         }
@@ -137,6 +153,8 @@ export class XrayGeneratorService {
     private buildAnyTlsLink(host: Extract<ResolvedProxyConfig, { protocol: 'anytls' }>): string {
         const params: Record<string, unknown> = {};
         const tlsOptions = host.security === 'tls' ? host.securityOptions : undefined;
+        const allowInsecure = (tlsOptions as { allowInsecure?: boolean } | undefined)
+            ?.allowInsecure;
 
         if (tlsOptions?.serverName) {
             params.sni = tlsOptions.serverName;
@@ -150,9 +168,17 @@ export class XrayGeneratorService {
             params.alpn = tlsOptions.alpn;
         }
 
-        if (tlsOptions?.allowInsecure) {
+        if (allowInsecure) {
             params.insecure = 1;
             params.allowInsecure = 1;
+        }
+
+        if (tlsOptions?.pinnedPeerCertSha256) {
+            params.pinSHA256 = tlsOptions.pinnedPeerCertSha256;
+        }
+
+        if (host.streamOverrides.finalMask) {
+            params.fm = JSON.stringify(host.streamOverrides.finalMask);
         }
 
         const query = this.buildQueryString(params);
@@ -162,19 +188,72 @@ export class XrayGeneratorService {
         return `anytls://${password}@${host.address}:${host.port}${query ? `?${query}` : ''}#${remark}`;
     }
 
-    // ── Hysteria2 ───────────────────────────────────
+    // ── Hysteria 2 ───────────────────────────────────
+    // hysteria2://auth@host:port/?params#remark
+
+    private buildHysteriaLink(
+        host: Extract<ResolvedProxyConfig, { protocol: 'hysteria' }>,
+    ): string | null {
+        if (host.transport !== 'hysteria') return null;
+
+        const params: Record<string, unknown> = {};
+
+        // Obfuscation
+        const finalMask = host.streamOverrides.finalMask as Hysteria2FinalMask | null;
+        const obfsPassword = finalMask?.udp?.find((m) => m?.type === 'salamander')?.settings
+            ?.password;
+        if (obfsPassword) {
+            params.obfs = 'salamander';
+            params['obfs-password'] = obfsPassword;
+        }
+
+        // TLS
+        if (host.security === 'tls') {
+            if (host.securityOptions.serverName) {
+                params.sni = host.securityOptions.serverName;
+            }
+            if (host.securityOptions.pinnedPeerCertSha256) {
+                params.pinSHA256 = host.securityOptions.pinnedPeerCertSha256;
+            }
+        }
+
+        if (host.streamOverrides.finalMask) {
+            params.fm = JSON.stringify(host.streamOverrides.finalMask);
+        }
+
+        const query = this.buildQueryString(params);
+        const remark = encodeURIComponent(host.finalRemark);
+        const auth = encodeURIComponent(host.transportOptions.auth);
+        const queryPart = query ? `?${query}` : '';
+
+        return `hysteria2://${auth}@${host.address}:${host.port}/${queryPart}#${remark}`;
+    }
+
+    // ── Hysteria2 (sing-box) ─────────────────────────
     // hysteria2://$(password)@host:port?params#remark
 
-    private buildHysteria2Link(host: Extract<ResolvedProxyConfig, { protocol: 'hysteria2' }>): string {
+    private buildSingBoxHysteria2Link(
+        host: Extract<ResolvedProxyConfig, { protocol: 'hysteria2' }>,
+    ): string {
         const params: Record<string, unknown> = {};
         const tlsOptions = host.security === 'tls' ? host.securityOptions : undefined;
+        const allowInsecure = (tlsOptions as { allowInsecure?: boolean } | undefined)
+            ?.allowInsecure;
 
         if (tlsOptions?.serverName) {
             params.sni = tlsOptions.serverName;
         }
 
-        if (tlsOptions?.allowInsecure) {
+        if (allowInsecure) {
             params.insecure = 1;
+        }
+
+        if (tlsOptions?.pinnedPeerCertSha256) {
+            params.pinSHA256 = tlsOptions.pinnedPeerCertSha256;
+        }
+
+        if (host.streamOverrides.finalMask) {
+            params.fm = JSON.stringify(host.streamOverrides.finalMask);
         }
 
         const query = this.buildQueryString(params);
@@ -190,6 +269,8 @@ export class XrayGeneratorService {
     private buildTuicLink(host: Extract<ResolvedProxyConfig, { protocol: 'tuic' }>): string {
         const params: Record<string, unknown> = {};
         const tlsOptions = host.security === 'tls' ? host.securityOptions : undefined;
+        const allowInsecure = (tlsOptions as { allowInsecure?: boolean } | undefined)
+            ?.allowInsecure;
 
         params.alpn = tlsOptions?.alpn ?? 'h3';
         params.congestion_control = host.protocolOptions.congestionControl ?? 'bbr';
@@ -206,8 +287,16 @@ export class XrayGeneratorService {
             params.disable_sni = 1;
         }
 
-        if (tlsOptions?.allowInsecure) {
+        if (allowInsecure) {
             params.allow_insecure = 1;
+        }
+
+        if (tlsOptions?.pinnedPeerCertSha256) {
+            params.pinSHA256 = tlsOptions.pinnedPeerCertSha256;
+        }
+
+        if (host.streamOverrides.finalMask) {
+            params.fm = JSON.stringify(host.streamOverrides.finalMask);
         }
 
         const query = this.buildQueryString(params);
@@ -241,8 +330,20 @@ export class XrayGeneratorService {
                 this.applyXhttpParams(params, host);
                 break;
             case 'kcp':
-                // 4.3.6: headerType — not available in current interface
+                this.applyKcpParams(params, host);
                 break;
+        }
+    }
+
+    private applyKcpParams(
+        params: Record<string, unknown>,
+        host: Extract<ResolvedProxyConfig, { transport: 'kcp' }>,
+    ): void {
+        if (host.transportOptions.clientMtu) {
+            params.mtu = host.transportOptions.clientMtu;
+        }
+        if (host.transportOptions.clientTti) {
+            params.tti = host.transportOptions.clientTti;
         }
     }
 
@@ -252,9 +353,14 @@ export class XrayGeneratorService {
         host: Extract<ResolvedProxyConfig, { transport: 'tcp' }>,
     ): void {
         const header = host.transportOptions.header;
-        if (header) {
-            params.headerType = header.type;
-        }
+        if (!header) return;
+
+        params.headerType = header.type;
+
+        if (header.type !== 'http' || !header.request) return;
+
+        params.path = header.request.path?.join(',') ?? '';
+        params.host = header.request.headers?.Host?.join(',') ?? '';
     }
 
     // 4.3.4-5 WebSocket: path, host
@@ -341,7 +447,7 @@ export class XrayGeneratorService {
         }
     }
 
-    // 4.4 TLS: sni, fp, alpn, allowInsecure
+    // 4.4 TLS: sni, fp, alpn, pcs
     private applyTlsParams(
         params: Record<string, unknown>,
         host: Extract<ResolvedProxyConfig, { security: 'tls' }>,
@@ -363,8 +469,14 @@ export class XrayGeneratorService {
             params.alpn = opts.alpn;
         }
 
-        if (opts.allowInsecure) {
-            params.allowInsecure = 1;
+        // 4.4.4: pcs (pinnedPeerCertSha256)
+        if (opts.pinnedPeerCertSha256) {
+            params.pcs = opts.pinnedPeerCertSha256;
+        }
+
+        // 4.4.4: vcn (verifyPeerCertByName)
+        if (opts.verifyPeerCertByName) {
+            params.vcn = opts.verifyPeerCertByName;
         }
     }
 
@@ -407,13 +519,13 @@ export class XrayGeneratorService {
     // ── Query String Builder ─────────────────────────
 
     private buildQueryString(params: Record<string, unknown>): string {
-        const stringParams: Record<string, string> = {};
+        const parts: string[] = [];
 
         for (const [key, value] of Object.entries(params)) {
             if (value === undefined || value === null) continue;
-            stringParams[key] = String(value);
+            parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
         }
 
-        return new URLSearchParams(stringParams).toString();
+        return parts.join('&');
     }
 }

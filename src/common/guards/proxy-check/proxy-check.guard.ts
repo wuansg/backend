@@ -1,5 +1,5 @@
-import { Observable } from 'rxjs';
 import { Request } from 'express';
+import { Observable } from 'rxjs';
 
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Logger } from '@nestjs/common';
@@ -26,11 +26,11 @@ export class ProxyCheckGuard implements CanActivate {
         const isProxy = Boolean(request.headers['x-forwarded-for']);
         const isHttps = Boolean(request.headers['x-forwarded-proto'] === 'https');
 
-        this.logger.debug(
-            `X-Forwarded-For: ${request.headers['x-forwarded-for']}, X-Forwarded-Proto: ${request.headers['x-forwarded-proto']}`,
-        );
-
         if (!isHttps || !isProxy) {
+            this.logger.debug(
+                `X-Forwarded-For: ${request.headers['x-forwarded-for']}, X-Forwarded-Proto: ${request.headers['x-forwarded-proto']}`,
+            );
+
             const response = context.switchToHttp().getResponse();
             response.socket?.destroy();
 

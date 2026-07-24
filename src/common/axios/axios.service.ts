@@ -1,8 +1,7 @@
-import axios, { AxiosError, AxiosInstance } from 'axios';
-import { compress } from '@mongodb-js/zstd';
-import https from 'node:https';
-
 import { ERRORS } from '@contract/constants';
+import { compress } from '@mongodb-js/zstd';
+import axios, { AxiosError, AxiosInstance } from 'axios';
+import https from 'node:https';
 
 import { Injectable, Logger } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
@@ -29,12 +28,14 @@ import {
     UnblockIpsCommand,
 } from '@remnawave/node-contract';
 
-import { formatExecutionTime, getTime } from '@common/utils/get-elapsed-time';
 import { prettyBytesUtil } from '@common/utils/bytes';
+import { formatExecutionTime, getTime } from '@common/utils/get-elapsed-time';
 
 import { GetNodeJwtCommand } from '@modules/keygen/commands/get-node-jwt';
 
 import { fail, ok, TResult } from '../types';
+import { INodeConnectionOpts, IMtlsOptions } from './axios.interfaces';
+import { MtlsSocksProxyAgent } from './mtls-agent';
 
 type CoreStartRequest = (
     | {
@@ -71,8 +72,12 @@ export interface GetUsersInboundStatsResponse {
 
 @Injectable()
 export class AxiosService {
-    public axiosInstance: AxiosInstance;
     private readonly logger = new Logger(AxiosService.name);
+
+    public axiosInstance: AxiosInstance;
+    private mtlsOptions: IMtlsOptions;
+    private readonly socksAgentCache = new Map<string, MtlsSocksProxyAgent>();
+
     constructor(private readonly commandBus: CommandBus) {
         this.axiosInstance = axios.create({
             timeout: 45_000,
@@ -97,13 +102,18 @@ export class AxiosService {
 
             this.axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${jwt.jwtToken}`;
 
-            const httpsAgent = new https.Agent({
+            this.mtlsOptions = {
                 cert: jwt.clientCert,
                 key: jwt.clientKey,
                 ca: jwt.caCert,
+            };
+
+            const httpsAgent = new https.Agent({
+                ...this.mtlsOptions,
                 checkServerIdentity: () => undefined,
                 rejectUnauthorized: true,
                 keepAlive: true,
+                minVersion: 'TLSv1.3',
             });
 
             this.axiosInstance.defaults.httpsAgent = httpsAgent;
@@ -113,6 +123,30 @@ export class AxiosService {
             this.logger.error(`Error in onApplicationBootstrap: ${error}`);
             throw error;
         }
+    }
+
+    private resolveAgentAndUrl(
+        path: string,
+        opts: INodeConnectionOpts,
+    ): { httpsAgent: https.Agent; url: string } {
+        const url = this.getNodeUrl(opts.address, path, opts.port);
+        if (!opts.proxyUrl) {
+            return {
+                httpsAgent: this.axiosInstance.defaults.httpsAgent as https.Agent,
+                url,
+            };
+        }
+
+        const cached = this.socksAgentCache.get(opts.proxyUrl);
+        if (cached)
+            return {
+                httpsAgent: cached,
+                url,
+            };
+
+        const httpsAgent = new MtlsSocksProxyAgent(opts.proxyUrl, this.mtlsOptions);
+        this.socksAgentCache.set(opts.proxyUrl, httpsAgent);
+        return { httpsAgent, url };
     }
 
     private getNodeUrl(url: string, path: string, port: null | number): string {
@@ -128,10 +162,9 @@ export class AxiosService {
 
     public async startXray(
         data: CoreStartRequest,
-        url: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<CoreStartResponse>> {
-        const nodeUrl = this.getNodeUrl(url, StartXrayCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(StartXrayCommand.url, opts);
 
         try {
             const startTime = getTime();
@@ -142,13 +175,14 @@ export class AxiosService {
             );
 
             const response = await this.axiosInstance.post<CoreStartResponse>(
-                nodeUrl,
+                url,
                 compressedData,
                 {
                     timeout: 60_000,
                     headers: {
                         'Content-Encoding': 'zstd',
                     },
+                    httpsAgent,
                 },
             );
 
@@ -169,13 +203,12 @@ export class AxiosService {
         }
     }
 
-    public async stopXray(
-        url: string,
-        port: null | number,
-    ): Promise<TResult<StopXrayCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(url, StopXrayCommand.url, port);
+    public async stopXray(opts: INodeConnectionOpts): Promise<TResult<StopXrayCommand.Response>> {
+        const { url, httpsAgent } = this.resolveAgentAndUrl(StopXrayCommand.url, opts);
         try {
-            const response = await this.axiosInstance.get<StopXrayCommand.Response>(nodeUrl);
+            const response = await this.axiosInstance.get<StopXrayCommand.Response>(url, {
+                httpsAgent,
+            });
 
             return ok(response.data);
         } catch (error) {
@@ -199,17 +232,17 @@ export class AxiosService {
     }
 
     public async getNodeHealth(
-        url: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<GetNodeHealthCheckCommand.Response['response']>> {
         try {
-            const nodeUrl = this.getNodeUrl(url, GetNodeHealthCheckCommand.url, port);
-            const { data } = await this.axiosInstance.get<GetNodeHealthCheckCommand.Response>(
-                nodeUrl,
-                {
-                    timeout: 15_000,
-                },
+            const { url, httpsAgent } = this.resolveAgentAndUrl(
+                GetNodeHealthCheckCommand.url,
+                opts,
             );
+            const { data } = await this.axiosInstance.get<GetNodeHealthCheckCommand.Response>(url, {
+                timeout: 15_000,
+                httpsAgent,
+            });
 
             return ok(data.response);
         } catch (error) {
@@ -233,17 +266,17 @@ export class AxiosService {
 
     public async getUsersStats(
         data: GetUsersStatsCommand.Request,
-        url: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<GetUsersStatsCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(url, GetUsersStatsCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(GetUsersStatsCommand.url, opts);
 
         try {
             const response = await this.axiosInstance.post<GetUsersStatsCommand.Response>(
-                nodeUrl,
+                url,
                 data,
                 {
                     timeout: 15_000,
+                    httpsAgent,
                 },
             );
 
@@ -269,17 +302,20 @@ export class AxiosService {
 
     public async getUsersInboundStats(
         data: GetUsersStatsCommand.Request,
-        url: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<GetUsersInboundStatsResponse>> {
-        const nodeUrl = this.getNodeUrl(url, '/node/stats/get-users-inbound-stats', port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(
+            '/node/stats/get-users-inbound-stats',
+            opts,
+        );
 
         try {
             const response = await this.axiosInstance.post<GetUsersInboundStatsResponse>(
-                nodeUrl,
+                url,
                 data,
                 {
                     timeout: 15_000,
+                    httpsAgent,
                 },
             );
 
@@ -305,17 +341,17 @@ export class AxiosService {
 
     public async getIpsList(
         data: GetUserIpListCommand.Request,
-        url: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<GetUserIpListCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(url, GetUserIpListCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(GetUserIpListCommand.url, opts);
 
         try {
             const response = await this.axiosInstance.post<GetUserIpListCommand.Response>(
-                nodeUrl,
+                url,
                 data,
                 {
                     timeout: 5_000,
+                    httpsAgent,
                 },
             );
 
@@ -336,17 +372,17 @@ export class AxiosService {
     }
 
     public async getUsersIpsList(
-        url: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<GetUsersIpListCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(url, GetUsersIpListCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(GetUsersIpListCommand.url, opts);
 
         try {
             const response = await this.axiosInstance.get<GetUsersIpListCommand.Response>(
-                nodeUrl,
+                url,
 
                 {
                     timeout: 10_000,
+                    httpsAgent,
                 },
             );
 
@@ -367,14 +403,14 @@ export class AxiosService {
     }
 
     public async getSystemStats(
-        url: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<GetSystemStatsCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(url, GetSystemStatsCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(GetSystemStatsCommand.url, opts);
 
         try {
-            const response = await this.axiosInstance.get<GetSystemStatsCommand.Response>(nodeUrl, {
+            const response = await this.axiosInstance.get<GetSystemStatsCommand.Response>(url, {
                 timeout: 15_000,
+                httpsAgent,
             });
 
             return ok(response.data);
@@ -403,15 +439,17 @@ export class AxiosService {
 
     public async getCombinedStats(
         data: GetCombinedStatsCommand.Request,
-        url: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<GetCombinedStatsCommand.Response['response']>> {
-        const nodeUrl = this.getNodeUrl(url, GetCombinedStatsCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(GetCombinedStatsCommand.url, opts);
 
         try {
             const nodeResult = await this.axiosInstance.post<GetCombinedStatsCommand.Response>(
-                nodeUrl,
+                url,
                 data,
+                {
+                    httpsAgent,
+                },
             );
 
             return ok(nodeResult.data.response);
@@ -442,14 +480,14 @@ export class AxiosService {
 
     public async addUser(
         data: AddUserCommand.Request,
-        url: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<AddUserCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(url, AddUserCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(AddUserCommand.url, opts);
 
         try {
-            const response = await this.axiosInstance.post<AddUserCommand.Response>(nodeUrl, data, {
+            const response = await this.axiosInstance.post<AddUserCommand.Response>(url, data, {
                 timeout: 20_000,
+                httpsAgent,
             });
 
             return ok(response.data);
@@ -472,19 +510,15 @@ export class AxiosService {
 
     public async deleteUser(
         data: RemoveUserCommand.Request,
-        url: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<RemoveUserCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(url, RemoveUserCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(RemoveUserCommand.url, opts);
 
         try {
-            const response = await this.axiosInstance.post<RemoveUserCommand.Response>(
-                nodeUrl,
-                data,
-                {
-                    timeout: 20_000,
-                },
-            );
+            const response = await this.axiosInstance.post<RemoveUserCommand.Response>(url, data, {
+                timeout: 20_000,
+                httpsAgent,
+            });
 
             return ok(response.data);
         } catch (error) {
@@ -500,10 +534,9 @@ export class AxiosService {
 
     public async addUsers(
         data: AddUsersCommand.Request,
-        url: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<AddUsersCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(url, AddUsersCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(AddUsersCommand.url, opts);
 
         try {
             const startTime = getTime();
@@ -514,13 +547,14 @@ export class AxiosService {
             );
 
             const response = await this.axiosInstance.post<AddUsersCommand.Response>(
-                nodeUrl,
+                url,
                 compressedData,
                 {
                     timeout: 20_000,
                     headers: {
                         'Content-Encoding': 'zstd',
                     },
+                    httpsAgent,
                 },
             );
 
@@ -544,10 +578,9 @@ export class AxiosService {
 
     public async deleteUsers(
         data: RemoveUsersCommand.Request,
-        url: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<RemoveUsersCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(url, RemoveUsersCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(RemoveUsersCommand.url, opts);
 
         try {
             const startTime = getTime();
@@ -558,13 +591,14 @@ export class AxiosService {
             );
 
             const response = await this.axiosInstance.post<RemoveUsersCommand.Response>(
-                nodeUrl,
+                url,
                 compressedData,
                 {
                     timeout: 20_000,
                     headers: {
                         'Content-Encoding': 'zstd',
                     },
+                    httpsAgent,
                 },
             );
 
@@ -582,17 +616,17 @@ export class AxiosService {
 
     public async dropUsersConnections(
         data: DropUsersConnectionsCommand.Request,
-        address: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<DropUsersConnectionsCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(address, DropUsersConnectionsCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(DropUsersConnectionsCommand.url, opts);
 
         try {
             const response = await this.axiosInstance.post<DropUsersConnectionsCommand.Response>(
-                nodeUrl,
+                url,
                 data,
                 {
                     timeout: 10_000,
+                    httpsAgent,
                 },
             );
 
@@ -616,14 +650,14 @@ export class AxiosService {
 
     public async dropIpsConnections(
         data: DropIpsCommand.Request,
-        address: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<DropIpsCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(address, DropIpsCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(DropIpsCommand.url, opts);
 
         try {
-            const response = await this.axiosInstance.post<DropIpsCommand.Response>(nodeUrl, data, {
+            const response = await this.axiosInstance.post<DropIpsCommand.Response>(url, data, {
                 timeout: 10_000,
+                httpsAgent,
             });
 
             return ok(response.data);
@@ -646,10 +680,9 @@ export class AxiosService {
 
     public async syncNodePlugins(
         data: SyncCommand.Request,
-        address: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<SyncCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(address, SyncCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(SyncCommand.url, opts);
 
         try {
             const startTime = getTime();
@@ -660,13 +693,14 @@ export class AxiosService {
             );
 
             const response = await this.axiosInstance.post<SyncCommand.Response>(
-                nodeUrl,
+                url,
                 compressedData,
                 {
                     timeout: 10_000,
                     headers: {
                         'Content-Encoding': 'zstd',
                     },
+                    httpsAgent,
                 },
             );
 
@@ -683,17 +717,17 @@ export class AxiosService {
     }
 
     public async collectTorrentBlockerReports(
-        address: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<CollectReportsCommand.Response['response']>> {
-        const nodeUrl = this.getNodeUrl(address, CollectReportsCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(CollectReportsCommand.url, opts);
 
         try {
             const response = await this.axiosInstance.post<CollectReportsCommand.Response>(
-                nodeUrl,
+                url,
                 {},
                 {
                     timeout: 20_000,
+                    httpsAgent,
                 },
             );
 
@@ -711,19 +745,15 @@ export class AxiosService {
 
     public async blockIps(
         data: BlockIpsCommand.Request,
-        address: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<BlockIpsCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(address, BlockIpsCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(BlockIpsCommand.url, opts);
 
         try {
-            const response = await this.axiosInstance.post<BlockIpsCommand.Response>(
-                nodeUrl,
-                data,
-                {
-                    timeout: 10_000,
-                },
-            );
+            const response = await this.axiosInstance.post<BlockIpsCommand.Response>(url, data, {
+                timeout: 10_000,
+                httpsAgent,
+            });
 
             return ok(response.data);
         } catch (error) {
@@ -745,19 +775,15 @@ export class AxiosService {
 
     public async unblockIps(
         data: UnblockIpsCommand.Request,
-        address: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<UnblockIpsCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(address, UnblockIpsCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(UnblockIpsCommand.url, opts);
 
         try {
-            const response = await this.axiosInstance.post<UnblockIpsCommand.Response>(
-                nodeUrl,
-                data,
-                {
-                    timeout: 10_000,
-                },
-            );
+            const response = await this.axiosInstance.post<UnblockIpsCommand.Response>(url, data, {
+                timeout: 10_000,
+                httpsAgent,
+            });
 
             return ok(response.data);
         } catch (error) {
@@ -778,17 +804,17 @@ export class AxiosService {
     }
 
     public async recreateTables(
-        address: string,
-        port: null | number,
+        opts: INodeConnectionOpts,
     ): Promise<TResult<RecreateTablesCommand.Response>> {
-        const nodeUrl = this.getNodeUrl(address, RecreateTablesCommand.url, port);
+        const { url, httpsAgent } = this.resolveAgentAndUrl(RecreateTablesCommand.url, opts);
 
         try {
             const response = await this.axiosInstance.post<RecreateTablesCommand.Response>(
-                nodeUrl,
+                url,
                 {},
                 {
                     timeout: 10_000,
+                    httpsAgent,
                 },
             );
 

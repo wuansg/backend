@@ -18,12 +18,13 @@ function buildBaseHost(
         clientOverrides: {
             shuffleHost: false,
             mihomoX25519: false,
+            mihomoIpVersion: null,
             serverDescription: null,
             xrayJsonTemplate: null,
         },
         metadata: {
             uuid: 'host-uuid',
-            tag: 'host-tag',
+            tags: ['host-tag'],
             excludeFromSubscriptionTypes: [],
             inboundTag: 'inbound-tag',
             configProfileUuid: 'profile-uuid',
@@ -41,11 +42,12 @@ function buildBaseHost(
         },
         security: 'tls',
         securityOptions: {
-            allowInsecure: false,
             alpn: null,
             enableSessionResumption: false,
             fingerprint: null,
             serverName: null,
+            pinnedPeerCertSha256: null,
+            verifyPeerCertByName: null,
             echConfigList: null,
             echForceQuery: null,
         },
@@ -73,11 +75,12 @@ function main() {
         },
         security: 'tls',
         securityOptions: {
-            allowInsecure: true,
             alpn: 'h2,http/1.1',
             enableSessionResumption: false,
             fingerprint: 'firefox',
             serverName: 'edge.example.com',
+            pinnedPeerCertSha256: null,
+            verifyPeerCertByName: null,
             echConfigList: null,
             echForceQuery: null,
         },
@@ -92,11 +95,12 @@ function main() {
         },
         security: 'tls',
         securityOptions: {
-            allowInsecure: false,
             alpn: null,
             enableSessionResumption: false,
             fingerprint: null,
             serverName: '',
+            pinnedPeerCertSha256: null,
+            verifyPeerCertByName: null,
             echConfigList: null,
             echForceQuery: null,
         },
@@ -112,11 +116,12 @@ function main() {
         },
         security: 'tls',
         securityOptions: {
-            allowInsecure: false,
             alpn: null,
             enableSessionResumption: false,
             fingerprint: 'chrome',
             serverName: 'vless.example.com',
+            pinnedPeerCertSha256: null,
+            verifyPeerCertByName: null,
             echConfigList: null,
             echForceQuery: null,
         },
@@ -135,8 +140,6 @@ function main() {
     assert.equal(anyTlsUrl.searchParams.get('sni'), 'edge.example.com');
     assert.equal(anyTlsUrl.searchParams.get('fp'), 'firefox');
     assert.equal(anyTlsUrl.searchParams.get('alpn'), 'h2,http/1.1');
-    assert.equal(anyTlsUrl.searchParams.get('insecure'), '1');
-    assert.equal(anyTlsUrl.searchParams.get('allowInsecure'), '1');
 
     const blankSniUrl = parseLink(links[1]);
     assert.equal(blankSniUrl.protocol, 'anytls:');

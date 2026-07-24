@@ -7,13 +7,18 @@ on:
 
   workflow_dispatch:
 
+env:
+  REGISTRY_IMAGE: remnawave/backend
+  GHCR_IMAGE: ghcr.io/remnawave/backend
+  IMAGE_TAG: dev
+
 jobs:
   send-tg-msg:
     name: Send TG message
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
 
       - name: Send Telegram message
         uses: proDreams/actions-telegram-notifier@main
@@ -23,25 +28,26 @@ jobs:
           thread_id: ${{ secrets.TELEGRAM_TOPIC_ID }}
           status: pending
           notify_fields: 'repo_with_tag,commit,workflow'
-          title: 'Building docker image.'
+          title: 'Building docker images.'
 
   build-docker-image:
+    name: Build linux/amd64
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v4
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -55,15 +61,15 @@ jobs:
           echo "frontend_commit=$(curl -s https://api.github.com/repos/remnawave/frontend/commits/${{ github.ref_name }} | jq -r '.sha')" >> $GITHUB_OUTPUT
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile
           platforms: linux/amd64
           push: true
           tags: |
-            remnawave/backend:dev
-            ghcr.io/remnawave/backend:dev
+            ${{ env.REGISTRY_IMAGE }}:${{ env.IMAGE_TAG }}
+            ${{ env.GHCR_IMAGE }}:${{ env.IMAGE_TAG }}
           build-args: |
             FRONTEND_URL=https://github.com/remnawave/frontend/releases/download/dev-build/remnawave-frontend.zip
             BRANCH=dev
@@ -73,13 +79,14 @@ jobs:
             __RW_METADATA_BUILD_NUMBER=${{ github.run_number }}
             __RW_METADATA_GIT_BACKEND_COMMIT=${{ github.sha }}
             __RW_METADATA_GIT_FRONTEND_COMMIT=${{ steps.meta.outputs.frontend_commit }}
+
   send-finish-tg-msg:
     name: Send TG message
     needs: [build-docker-image]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
 
       - name: Send Telegram message
         uses: proDreams/actions-telegram-notifier@main
@@ -97,7 +104,7 @@ jobs:
     if: failure()
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v7
 
       - name: Send error notification
         uses: proDreams/actions-telegram-notifier@main

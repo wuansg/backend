@@ -116,10 +116,6 @@ export class SurgeGeneratorService {
                     fields.push(`sni=${this.escapeFieldValue(host.securityOptions.serverName)}`);
                 }
 
-                if (host.securityOptions.allowInsecure) {
-                    fields.push('skip-cert-verify=true');
-                }
-
                 if (host.securityOptions.alpn) {
                     fields.push(`alpn=${this.escapeFieldValue(host.securityOptions.alpn)}`);
                 }

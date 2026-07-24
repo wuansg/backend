@@ -1,7 +1,7 @@
-import { getBorderCharacters, table } from 'table';
-import { readPackageJSON } from 'pkg-types';
-import gradient from 'gradient-string';
 import chalk from 'chalk';
+import gradient from 'gradient-string';
+import { readPackageJSON } from 'pkg-types';
+import { getBorderCharacters, table } from 'table';
 
 export async function getStartMessage() {
     const pkg = await readPackageJSON();
@@ -27,7 +27,7 @@ export async function getStartMessage() {
             [
                 chalk.yellow('🛠️  Rescue CLI') +
                     chalk.gray(' ······ ') +
-                    chalk.dim('docker exec -it remnawave remnawave'),
+                    chalk.dim('docker exec -it remnawave cli'),
             ],
             [gradientRange('▰▱'.repeat(30))],
         ],
