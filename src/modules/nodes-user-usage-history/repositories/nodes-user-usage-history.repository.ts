@@ -19,6 +19,7 @@ import {
     IGetUniversalSeries,
     IGetLegacyStatsUserUsage,
     IGetUniversalTopUser,
+    IGetUniversalUserSeries,
 } from '../interfaces';
 import { NodesUserUsageHistoryConverter } from '../nodes-user-usage-history.converter';
 
@@ -327,5 +328,102 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
             .orderBy((eb) => eb.fn.sum<bigint>('nuh.totalBytes'), 'desc')
             .limit(limit)
             .execute();
+    }
+
+    public async getUsersDailyTrafficSum(start: Date, end: Date, dates: string[]): Promise<number[]> {
+        const query = Prisma.sql`
+            WITH daily_traffic AS (
+                SELECT
+                    created_at::date AS date,
+                    SUM(total_bytes) AS bytes
+                FROM nodes_user_usage_history
+                WHERE
+                    created_at >= ${start}::date
+                    AND created_at <= ${end}::date
+                GROUP BY created_at::date
+            )
+            SELECT
+                COALESCE(dt.bytes, 0) AS value
+            FROM unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
+            LEFT JOIN daily_traffic dt ON dt.date = d.date::date
+            ORDER BY d.ord;
+        `;
+
+        const result = await this.prisma.tx.$queryRaw<Array<{ value: bigint }>>(query);
+        return result.map((item) => Number(item.value));
+    }
+
+    public async getTopUsersByTraffic(
+        start: Date,
+        end: Date,
+        limit: number = 100,
+    ): Promise<IGetUniversalTopUser[]> {
+        return await this.qb.kysely
+            .selectFrom('users as u')
+            .innerJoin('nodesUserUsageHistory as nuh', 'nuh.userId', 'u.tId')
+            .select(['u.uuid', 'u.username', (eb) => eb.fn.sum<bigint>('nuh.totalBytes').as('total')])
+            .where('nuh.createdAt', '>=', start)
+            .where('nuh.createdAt', '<=', end)
+            .groupBy(['u.uuid', 'u.username'])
+            .orderBy((eb) => eb.fn.sum<bigint>('nuh.totalBytes'), 'desc')
+            .limit(limit)
+            .execute();
+    }
+
+    public async getUsersUsageByRange(
+        start: Date,
+        end: Date,
+        dates: string[],
+        limit: number = 100,
+    ): Promise<IGetUniversalUserSeries[]> {
+        const query = Prisma.sql`
+            WITH daily_usage AS (
+                SELECT
+                    u.uuid,
+                    u.username,
+                    nuh.created_at::date AS date,
+                    SUM(nuh.total_bytes) AS bytes
+                FROM users u
+                INNER JOIN nodes_user_usage_history nuh ON nuh.user_id = u.t_id
+                WHERE
+                    nuh.created_at >= ${start}::date
+                    AND nuh.created_at <= ${end}::date
+                GROUP BY u.uuid, u.username, nuh.created_at::date
+            ),
+            users_with_totals AS (
+                SELECT
+                    uuid,
+                    username,
+                    SUM(bytes) AS total_bytes
+                FROM daily_usage
+                GROUP BY uuid, username
+            ),
+            limited_users AS (
+                SELECT
+                    uuid,
+                    username,
+                    total_bytes
+                FROM users_with_totals
+                ORDER BY total_bytes DESC
+                LIMIT ${limit}
+            )
+            SELECT
+                lu.uuid as "uuid",
+                lu.username as "username",
+                lu.total_bytes as "total",
+                ARRAY_AGG(
+                    COALESCE(du.bytes, 0)
+                    ORDER BY d.ord
+                ) AS "data"
+            FROM limited_users lu
+            CROSS JOIN unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
+            LEFT JOIN daily_usage du
+                ON du.uuid = lu.uuid
+                AND du.date = d.date::date
+            GROUP BY lu.uuid, lu.username, lu.total_bytes
+            ORDER BY lu.total_bytes DESC;
+        `;
+
+        return await this.prisma.tx.$queryRaw<IGetUniversalUserSeries[]>(query);
     }
 }

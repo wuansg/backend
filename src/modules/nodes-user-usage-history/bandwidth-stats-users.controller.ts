@@ -20,6 +20,7 @@ import { BANDWIDTH_STATS_USERS_CONTROLLER, CONTROLLERS_INFO } from '@libs/contra
 import {
     GetLegacyStatsUserUsageCommand,
     GetStatsUserHostsUsageCommand,
+    GetStatsUsersUsageCommand,
     GetStatsUserUsageCommand,
 } from '@libs/contracts/commands';
 import { ROLE } from '@libs/contracts/constants';
@@ -28,6 +29,8 @@ import {
     GetStatsUserHostsUsageRequestDto,
     GetStatsUserHostsUsageRequestQueryDto,
     GetStatsUserHostsUsageResponseDto,
+    GetStatsUsersUsageRequestQueryDto,
+    GetStatsUsersUsageResponseDto,
     GetStatsUserUsageRequestDto,
     GetStatsUserUsageRequestQueryDto,
     GetStatsUserUsageResponseDto,
@@ -53,6 +56,51 @@ export class BandwidthStatsUsersController {
         private readonly nodesUserUsageHistoryService: NodesUserUsageHistoryService,
         private readonly hostsUsageHistoryService: HostsUsageHistoryService,
     ) {}
+
+    @ApiOkResponse({
+        type: GetStatsUsersUsageResponseDto,
+        description: 'Stats users usage fetched successfully',
+    })
+    @ApiQuery({
+        name: 'end',
+        type: String,
+        description: 'End date (YYYY-MM-DD)',
+        required: true,
+        example: '2026-01-31',
+        format: 'date',
+    })
+    @ApiQuery({
+        name: 'start',
+        type: String,
+        description: 'Start date (YYYY-MM-DD)',
+        required: true,
+        example: '2026-01-01',
+        format: 'date',
+    })
+    @ApiQuery({
+        name: 'topUsersLimit',
+        type: Number,
+        description: 'Limit of top users to return',
+        required: true,
+    })
+    @Endpoint({
+        command: GetStatsUsersUsageCommand,
+        httpCode: HttpStatus.OK,
+    })
+    async getStatsUsersUsage(
+        @Query() query: GetStatsUsersUsageRequestQueryDto,
+    ): Promise<GetStatsUsersUsageResponseDto> {
+        const result = await this.nodesUserUsageHistoryService.getStatsUsersUsage(
+            query.start,
+            query.end,
+            query.topUsersLimit,
+        );
+
+        const data = errorHandler(result);
+        return {
+            response: data,
+        };
+    }
 
     @ApiNotFoundResponse({
         description: 'User not found',

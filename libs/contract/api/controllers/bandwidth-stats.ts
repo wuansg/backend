@@ -34,6 +34,8 @@ export const BANDWIDTH_STATS_ROUTES = {
         GET_USERS: (uuid: string) => `${uuid}/users`,
     },
     USERS: {
+        // GET /bandwidth-stats/users –– Users -> Metrics
+        GET: '',
         // GET /bandwidth-stats/users/:userUuid –– Users -> User -> Show Usage
         GET_BY_UUID: (uuid: string) => `${uuid}`,
         // GET /bandwidth-stats/users/:userUuid/hosts –– Users -> User -> Show Usage -> Hosts

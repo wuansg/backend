@@ -12,7 +12,11 @@ import { GetNodeByUuidQuery } from '@modules/nodes/queries/get-node-by-uuid';
 import { GetUserByUniqueFieldQuery } from '@modules/users/queries/get-user-by-unique-field';
 
 import { IGetLegacyStatsNodesUsersUsage, IGetLegacyStatsUserUsage } from './interfaces';
-import { GetStatsNodesUsersUsageResponseModel, GetStatsUserUsageResponseModel } from './models';
+import {
+    GetStatsNodesUsersUsageResponseModel,
+    GetStatsUsersUsageResponseModel,
+    GetStatsUserUsageResponseModel,
+} from './models';
 import { NodesUserUsageHistoryRepository } from './repositories/nodes-user-usage-history.repository';
 
 @Injectable()
@@ -213,6 +217,50 @@ export class NodesUserUsageHistoryService {
                     categories: dates,
                     sparklineData: dailyTraffic,
                     topUsers: topUsers,
+                }),
+            );
+        } catch (error) {
+            this.logger.error(error);
+            return fail(ERRORS.GET_USER_USAGE_BY_RANGE_ERROR);
+        }
+    }
+
+    public async getStatsUsersUsage(
+        start: string,
+        end: string,
+        topUsersLimit: number,
+    ): Promise<TResult<GetStatsUsersUsageResponseModel>> {
+        try {
+            const { startDate, endDate, dates } = getDateRangeArrayUtil(
+                dayjs.utc(start).startOf('day').toDate(),
+                dayjs.utc(end).endOf('day').toDate(),
+            );
+
+            const dailyTraffic = await this.nodeUserUsageHistoryRepository.getUsersDailyTrafficSum(
+                startDate,
+                endDate,
+                dates,
+            );
+
+            const topUsers = await this.nodeUserUsageHistoryRepository.getTopUsersByTraffic(
+                startDate,
+                endDate,
+                topUsersLimit,
+            );
+
+            const usersUsage = await this.nodeUserUsageHistoryRepository.getUsersUsageByRange(
+                startDate,
+                endDate,
+                dates,
+                topUsersLimit,
+            );
+
+            return ok(
+                new GetStatsUsersUsageResponseModel({
+                    categories: dates,
+                    series: usersUsage,
+                    sparklineData: dailyTraffic,
+                    topUsers,
                 }),
             );
         } catch (error) {
