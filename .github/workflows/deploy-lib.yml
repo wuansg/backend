@@ -51,9 +51,9 @@ jobs:
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
 
           if [[ "$PACKAGE_VERSION" == *-* ]]; then
-            npm publish --tag surge
+            npm publish --access public --tag surge
           else
-            npm publish
+            npm publish --access public
           fi
 
       # - name: Install HashedSet dependencies and build
