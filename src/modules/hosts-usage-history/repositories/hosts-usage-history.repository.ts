@@ -328,7 +328,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     h.address,
                     h.port,
                     h.view_position,
-                    h.tag,
+                    (h.tags)[1] AS tag,
                     BOOL_OR(uhuh.is_shared) AS is_shared
                 FROM user_hosts_usage_history uhuh
                 INNER JOIN selected_groups sg
@@ -347,7 +347,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     h.address,
                     h.port,
                     h.view_position,
-                    h.tag
+                    h.tags
             ),
             group_hosts AS (
                 SELECT
@@ -481,7 +481,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     h.address,
                     h.port,
                     h.view_position,
-                    h.tag,
+                    (h.tags)[1] AS tag,
                     BOOL_OR(huh.is_shared) AS is_shared
                 FROM hosts_usage_history huh
                 INNER JOIN selected_groups sg
@@ -499,7 +499,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     h.address,
                     h.port,
                     h.view_position,
-                    h.tag
+                    h.tags
             ),
             group_hosts AS (
                 SELECT
@@ -649,7 +649,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     h.address,
                     h.port,
                     h.view_position,
-                    h.tag,
+                    (h.tags)[1] AS tag,
                     BOOL_OR(huh.is_shared) AS is_shared
                 FROM hosts_usage_history huh
                 INNER JOIN selected_groups sg
@@ -667,7 +667,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     h.address,
                     h.port,
                     h.view_position,
-                    h.tag
+                    h.tags
             ),
             group_hosts AS (
                 SELECT
@@ -766,7 +766,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     h.address,
                     h.port,
                     h.view_position,
-                    h.tag,
+                    (h.tags)[1] AS tag,
                     BOOL_OR(uhuh.is_shared) AS is_shared
                 FROM user_hosts_usage_history uhuh
                 INNER JOIN selected_groups sg
@@ -785,7 +785,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     h.address,
                     h.port,
                     h.view_position,
-                    h.tag
+                    h.tags
             ),
             group_hosts AS (
                 SELECT
