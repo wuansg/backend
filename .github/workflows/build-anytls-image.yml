@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feature/anytls-singbox-mvp
+      - upgrade/upstream-2.8.1
 
 permissions:
   contents: read
@@ -35,7 +36,7 @@ jobs:
         run: |
           echo "version=$(jq -r .version package.json)-anytls" >> "$GITHUB_OUTPUT"
           echo "build_time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
-          echo "frontend_commit=$(curl -s https://api.github.com/repos/${{ github.repository_owner }}/frontend/commits/feature/anytls-singbox-mvp | jq -r '.sha')" >> "$GITHUB_OUTPUT"
+          echo "frontend_commit=$(git ls-remote https://github.com/${{ github.repository_owner }}/frontend.git refs/heads/${{ github.ref_name }} | cut -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -47,9 +48,9 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend-anytls-arm64
           build-args: |
             FRONTEND_REPO=https://github.com/${{ github.repository_owner }}/frontend.git
-            FRONTEND_REF=feature/anytls-singbox-mvp
+            FRONTEND_REF=${{ github.ref_name }}
             FRONTEND_CACHE_BUST=${{ steps.meta.outputs.frontend_commit }}
-            __RW_METADATA_GIT_BRANCH=feature/anytls-singbox-mvp
+            __RW_METADATA_GIT_BRANCH=${{ github.ref_name }}
             __RW_METADATA_BUILD_TIME=${{ steps.meta.outputs.build_time }}
             __RW_METADATA_BUILD_NUMBER=${{ github.run_number }}
             __RW_METADATA_VERSION=${{ steps.meta.outputs.version }}
