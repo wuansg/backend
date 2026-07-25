@@ -9,8 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      id-token: write
+      contents: write
 
     steps:
       - name: Checkout
@@ -29,32 +28,33 @@ jobs:
         working-directory: 'libs/contract'
         run: npm i && npm run prepublish
 
-      - name: Check if package version already exists
-        id: package-version
-        working-directory: 'libs/contract'
-        run: |
-          PACKAGE_NAME=$(node -p "require('./package.json').name")
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-
-          if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is already published, skipping npm publish."
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is not published yet."
-          fi
-
-      - name: Publish package on NPM
-        if: steps.package-version.outputs.exists != 'true'
+      - name: Pack contract
+        id: contract
         working-directory: 'libs/contract'
         run: |
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          PACKAGE_FILE=$(npm pack --pack-destination "$RUNNER_TEMP")
+          RELEASE_TAG="backend-contract-v${PACKAGE_VERSION}"
 
-          if [[ "$PACKAGE_VERSION" == *-* ]]; then
-            npm publish --access public --tag surge
-          else
-            npm publish --access public
+          echo "file=${PACKAGE_FILE}" >> "$GITHUB_OUTPUT"
+          echo "path=${RUNNER_TEMP}/${PACKAGE_FILE}" >> "$GITHUB_OUTPUT"
+          echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish contract release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASE_TAG="${{ steps.contract.outputs.tag }}"
+          RELEASE_TITLE="Backend contract ${{ steps.contract.outputs.version }}"
+
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TITLE" \
+              --notes "Contract package for ${{ github.sha }}."
           fi
+
+          gh release upload "$RELEASE_TAG" "${{ steps.contract.outputs.path }}" --clobber
 
       # - name: Install HashedSet dependencies and build
       #   working-directory: 'libs/hashed-set'

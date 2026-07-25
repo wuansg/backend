@@ -8,6 +8,7 @@ on:
 
 jobs:
   create-release:
+    if: ${{ github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'backend-contract-v') }}
     runs-on: ubuntu-latest
     steps:
       - id: frontend-tag
