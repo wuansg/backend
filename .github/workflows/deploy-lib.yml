@@ -47,7 +47,14 @@ jobs:
       - name: Publish package on NPM
         if: steps.package-version.outputs.exists != 'true'
         working-directory: 'libs/contract'
-        run: npm publish
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+
+          if [[ "$PACKAGE_VERSION" == *-* ]]; then
+            npm publish --tag surge
+          else
+            npm publish
+          fi
 
       # - name: Install HashedSet dependencies and build
       #   working-directory: 'libs/hashed-set'
