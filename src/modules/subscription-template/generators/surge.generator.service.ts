@@ -7,7 +7,7 @@ import { ResolvedProxyConfig } from '../resolve-proxy/interfaces';
 const PROXIES_PLACEHOLDER = '#!remnawave-proxies';
 const PROXY_NAMES_PLACEHOLDER = '#!remnawave-proxy-names';
 const UNSUPPORTED_TRANSPORTS = new Set(['hysteria', 'kcp', 'xhttp']);
-const UNSUPPORTED_PROTOCOLS = new Set(['anytls', 'hysteria', 'hysteria2', 'shadowtls', 'tuic']);
+const UNSUPPORTED_PROTOCOLS = new Set(['hysteria', 'hysteria2', 'shadowtls', 'tuic']);
 
 @Injectable()
 export class SurgeGeneratorService {
@@ -33,6 +33,7 @@ export class SurgeGeneratorService {
                 if (UNSUPPORTED_TRANSPORTS.has(host.transport)) continue;
                 if (UNSUPPORTED_PROTOCOLS.has(host.protocol)) continue;
                 if (host.security === 'reality') continue;
+                if (host.protocol === 'anytls' && host.transport !== 'tcp') continue;
 
                 const proxyLine = this.buildProxyLine(host);
                 if (!proxyLine) continue;
@@ -54,7 +55,10 @@ export class SurgeGeneratorService {
             return null;
         }
 
-        fields.push(`udp-relay=${host.protocol === 'shadowsocks' ? 'true' : 'false'}`);
+        // Surge does not support udp-relay for AnyTLS.
+        if (host.protocol !== 'anytls') {
+            fields.push(`udp-relay=${host.protocol === 'shadowsocks' ? 'true' : 'false'}`);
+        }
         this.applySecurityFields(fields, host);
         this.applyTransportFields(fields, host);
 
@@ -102,6 +106,14 @@ export class SurgeGeneratorService {
                     `username=${host.protocolOptions.id}`,
                 ];
 
+            case 'anytls':
+                return [
+                    'anytls',
+                    host.address,
+                    host.port.toString(),
+                    `password=${this.escapeFieldValue(host.protocolOptions.password)}`,
+                ];
+
             default:
                 return null;
         }
@@ -110,7 +122,10 @@ export class SurgeGeneratorService {
     private applySecurityFields(fields: string[], host: ResolvedProxyConfig): void {
         switch (host.security) {
             case 'tls':
-                fields.push('tls=true');
+                // AnyTLS implies TLS in Surge; tls=true is not a valid parameter for it.
+                if (host.protocol !== 'anytls') {
+                    fields.push('tls=true');
+                }
 
                 if (host.securityOptions.serverName) {
                     fields.push(`sni=${this.escapeFieldValue(host.securityOptions.serverName)}`);
