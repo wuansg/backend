@@ -4,6 +4,7 @@ export interface INodeVersions {
     xray: string;
     singBox: string | null;
     node: string;
+    core: 'SING_BOX' | 'XRAY';
 }
 
 export interface INodeHotCache {
