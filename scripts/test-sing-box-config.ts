@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 import { SingBoxConfig } from '@common/helpers/sing-box-config';
+
 import { UserForConfigEntity } from '@modules/users/entities/users-for-config';
 
 type SingBoxInbound = {
@@ -23,7 +24,12 @@ type SingBoxInbound = {
     };
 };
 
-function buildDefaultSingBoxConfig(): { inbounds: SingBoxInbound[]; outbounds: unknown[]; log: { level: string }; route: { final: string; rules: unknown[] } } {
+function buildDefaultSingBoxConfig(): {
+    inbounds: SingBoxInbound[];
+    outbounds: unknown[];
+    log: { level: string };
+    route: { final: string; rules: unknown[] };
+} {
     const suffix = 'test';
 
     return {
@@ -196,6 +202,28 @@ function buildUsers(): UserForConfigEntity[] {
 }
 
 function main() {
+    const normalizedAliases = new SingBoxConfig({
+        inbounds: [
+            {
+                type: 'anytls',
+                tag: 'alias-test',
+                listenPort: 8443,
+                listen_port: 443,
+                users: [],
+                tls: {
+                    minVersion: '1.1',
+                    min_version: '1.2',
+                },
+            },
+        ],
+    }).getConfig() as Record<string, unknown>;
+    const aliasInbound = (normalizedAliases.inbounds as Array<Record<string, unknown>>)[0];
+    const aliasTls = aliasInbound.tls as Record<string, unknown>;
+    assert.equal(aliasInbound.listen_port, 443);
+    assert.ok(!Object.hasOwn(aliasInbound, 'listenPort'));
+    assert.equal(aliasTls.min_version, '1.2');
+    assert.ok(!Object.hasOwn(aliasTls, 'minVersion'));
+
     const config = buildDefaultSingBoxConfig();
     const helper = new SingBoxConfig(config);
 
@@ -222,17 +250,47 @@ function main() {
     assert.ok(Array.isArray(managedInbounds));
 
     const inboundByTag = new Map(
-        managedInbounds!.map((inbound) => [inbound.tag as string, inbound as Record<string, unknown>]),
+        managedInbounds!.map((inbound) => [
+            inbound.tag as string,
+            inbound as Record<string, unknown>,
+        ]),
     );
 
-    assert.equal((inboundByTag.get('AnyTLS_test')?.users as Array<Record<string, unknown>>)?.[0]?.password, 'anytls-1');
-    assert.equal((inboundByTag.get('VLESS_test')?.users as Array<Record<string, unknown>>)?.[0]?.uuid, '00000000-0000-0000-0000-000000000002');
-    assert.equal((inboundByTag.get('VMess_test')?.users as Array<Record<string, unknown>>)?.[0]?.uuid, '00000000-0000-0000-0000-000000000003');
-    assert.equal((inboundByTag.get('Trojan_test')?.users as Array<Record<string, unknown>>)?.[0]?.password, 'trojan-4');
-    assert.equal((inboundByTag.get('Shadowsocks_test')?.users as Array<Record<string, unknown>>)?.[0]?.password, 'ss-5');
-    assert.equal((inboundByTag.get('Hysteria2_test')?.users as Array<Record<string, unknown>>)?.[0]?.password, '00000000-0000-0000-0000-000000000006');
-    assert.equal((inboundByTag.get('TUIC_test')?.users as Array<Record<string, unknown>>)?.[0]?.uuid, '00000000-0000-0000-0000-000000000007');
-    assert.equal((inboundByTag.get('ShadowTLS_test')?.users as Array<Record<string, unknown>>)?.[0]?.password, 'trojan-8');
+    assert.equal(
+        (inboundByTag.get('AnyTLS_test')?.users as Array<Record<string, unknown>>)?.[0]?.password,
+        'anytls-1',
+    );
+    assert.equal(
+        (inboundByTag.get('VLESS_test')?.users as Array<Record<string, unknown>>)?.[0]?.uuid,
+        '00000000-0000-0000-0000-000000000002',
+    );
+    assert.equal(
+        (inboundByTag.get('VMess_test')?.users as Array<Record<string, unknown>>)?.[0]?.uuid,
+        '00000000-0000-0000-0000-000000000003',
+    );
+    assert.equal(
+        (inboundByTag.get('Trojan_test')?.users as Array<Record<string, unknown>>)?.[0]?.password,
+        'trojan-4',
+    );
+    assert.equal(
+        (inboundByTag.get('Shadowsocks_test')?.users as Array<Record<string, unknown>>)?.[0]
+            ?.password,
+        'ss-5',
+    );
+    assert.equal(
+        (inboundByTag.get('Hysteria2_test')?.users as Array<Record<string, unknown>>)?.[0]
+            ?.password,
+        '00000000-0000-0000-0000-000000000006',
+    );
+    assert.equal(
+        (inboundByTag.get('TUIC_test')?.users as Array<Record<string, unknown>>)?.[0]?.uuid,
+        '00000000-0000-0000-0000-000000000007',
+    );
+    assert.equal(
+        (inboundByTag.get('ShadowTLS_test')?.users as Array<Record<string, unknown>>)?.[0]
+            ?.password,
+        'trojan-8',
+    );
 
     if (process.argv.includes('--print-config')) {
         process.stdout.write(`${JSON.stringify(helper.getConfig())}\n`);

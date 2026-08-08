@@ -31,6 +31,7 @@
     "prod:deploy": "prisma migrate deploy && NODE_ENV=production NODE_NO_WARNINGS=1 node dist/src/main",
     "prepare": "husky",
     "test:sing-box": "ts-node -r tsconfig-paths/register scripts/test-sing-box-config.ts",
+    "test:opaque-json": "ts-node -r tsconfig-paths/register scripts/test-opaque-json-camel-case.ts",
     "test:xray-generator": "node -r ts-node/register/transpile-only -r tsconfig-paths/register scripts/test-xray-generator.ts",
     "migrate:dev": "prisma migrate dev",
     "migrate:generate": "prisma generate",

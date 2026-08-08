@@ -8,11 +8,17 @@ type TCtrSingBoxConfig = object | Record<string, unknown> | string;
 
 const SING_BOX_KEY_ALIASES: Record<string, string> = {
     autoDetectInterface: 'auto_detect_interface',
+    cacheFile: 'cache_file',
     certificatePath: 'certificate_path',
+    congestionControl: 'congestion_control',
     domainSuffix: 'domain_suffix',
+    downloadDetour: 'download_detour',
     ipIsPrivate: 'ip_is_private',
     keyPath: 'key_path',
     listenPort: 'listen_port',
+    minVersion: 'min_version',
+    ruleSet: 'rule_set',
+    serverPort: 'server_port',
 };
 
 interface SingBoxInbound {
@@ -293,12 +299,17 @@ export class SingBoxConfig {
             return value;
         }
 
-        return Object.fromEntries(
-            Object.entries(value as Record<string, unknown>).map(([key, item]) => [
-                SING_BOX_KEY_ALIASES[key] ?? key,
-                this.normalizeSingBoxKeys(item),
-            ]),
-        );
+        const source = value as Record<string, unknown>;
+        const normalized: Record<string, unknown> = {};
+
+        for (const [key, item] of Object.entries(source)) {
+            const mappedKey = SING_BOX_KEY_ALIASES[key] ?? key;
+            if (mappedKey !== key && Object.hasOwn(source, mappedKey)) continue;
+
+            normalized[mappedKey] = this.normalizeSingBoxKeys(item);
+        }
+
+        return normalized;
     }
 
     private validate(): void {
