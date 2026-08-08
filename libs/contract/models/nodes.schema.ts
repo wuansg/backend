@@ -52,7 +52,9 @@ export const NodesSchema = z.object({
     versions: z.nullable(
         z.object({
             xray: z.string(),
+            singBox: z.string().nullable().optional().default(null),
             node: z.string(),
+            core: z.enum(['XRAY', 'SING_BOX']).optional().default('XRAY'),
         }),
     ),
     xrayUptime: z.number(),
