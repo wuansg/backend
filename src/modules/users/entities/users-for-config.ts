@@ -4,7 +4,7 @@ export class UserForConfigEntity {
     public ssPassword: string;
     public anytlsPassword: string;
     public tags: string[];
-    public tId: bigint;
+    public id: bigint;
 
     constructor(data: UserForConfigEntity) {
         this.trojanPassword = data.trojanPassword;
@@ -12,6 +12,6 @@ export class UserForConfigEntity {
         this.ssPassword = data.ssPassword;
         this.anytlsPassword = data.anytlsPassword;
         this.tags = data.tags;
-        this.tId = data.tId;
+        this.id = data.id;
     }
 }

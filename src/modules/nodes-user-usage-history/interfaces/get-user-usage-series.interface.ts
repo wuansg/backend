@@ -1,32 +1,33 @@
 export interface IGetUniversalTopUser {
-    uuid: string;
+    userId: bigint;
     username: string;
     total: bigint;
 }
 
 export interface IGetUniversalTopUserConverted {
     color: string;
+    userId: number;
     username: string;
     total: number;
 }
 
 export interface IGetUniversalUserSeries {
-    uuid: string;
+    id: bigint;
     username: string;
     total: bigint;
     data: bigint[];
 }
 
 export interface IGetUniversalUserSeriesConverted {
-    uuid: string;
+    id: number;
     color: string;
     username: string;
     total: number;
     data: number[];
 }
 
-export interface IGetUniversalTopUserWithUuidConverted {
-    uuid: string;
+export interface IGetUniversalTopUserWithIdConverted {
+    id: number;
     color: string;
     username: string;
     total: number;

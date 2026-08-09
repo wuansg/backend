@@ -108,6 +108,7 @@ export interface ITlsSecurityOptions {
     serverName: string | null;
     echConfigList: string | null;
     echForceQuery: string | null;
+    echSockopt: Record<string, unknown> | null;
 }
 
 export interface IRealitySecurityOptions {

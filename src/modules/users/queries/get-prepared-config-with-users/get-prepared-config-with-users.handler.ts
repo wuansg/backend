@@ -3,8 +3,8 @@ import { IQueryHandler, QueryBus, QueryHandler } from '@nestjs/cqrs';
 
 import { HashedSet } from '@remnawave/hashed-set';
 
-import { XRayConfig } from '@common/helpers/xray-config/xray-config.validator';
 import { SingBoxConfig } from '@common/helpers/sing-box-config';
+import { XRayConfig } from '@common/helpers/xray-config/xray-config.validator';
 import { fail, ok, TResult } from '@common/types';
 import { ERRORS } from '@libs/contracts/constants';
 

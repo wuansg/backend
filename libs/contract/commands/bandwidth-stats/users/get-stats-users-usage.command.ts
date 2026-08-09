@@ -28,7 +28,7 @@ export namespace GetStatsUsersUsageCommand {
             sparklineData: z.array(z.number()),
             topUsers: z.array(
                 z.object({
-                    uuid: z.string().uuid(),
+                    id: z.number().int().positive(),
                     color: z.string(),
                     username: z.string(),
                     total: z.number(),
@@ -36,7 +36,7 @@ export namespace GetStatsUsersUsageCommand {
             ),
             series: z.array(
                 z.object({
-                    uuid: z.string().uuid(),
+                    id: z.number().int().positive(),
                     color: z.string(),
                     username: z.string(),
                     total: z.number(),

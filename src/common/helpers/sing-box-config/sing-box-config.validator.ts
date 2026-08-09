@@ -216,7 +216,7 @@ export class SingBoxConfig {
                 if (!inboundsUserSets.has(tag)) {
                     inboundsUserSets.set(tag, new HashedSet());
                 }
-                inboundsUserSets.get(tag)!.add(user.tId.toString());
+                inboundsUserSets.get(tag)!.add(user.id.toString());
             }
         }
 
@@ -231,7 +231,7 @@ export class SingBoxConfig {
         inbound: SingBoxInbound,
         user: UserForConfigEntity,
     ): Record<string, unknown> | null {
-        const name = user.tId.toString();
+        const name = user.id.toString();
 
         switch (inbound.type) {
             case 'anytls':

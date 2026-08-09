@@ -13,8 +13,8 @@ export const InternalSquadInboundSchema = ConfigProfileInboundsSchema.extend({
 });
 
 export const InternalSquadSchema = z.object({
-    uuid: z.string().uuid(),
-    viewPosition: z.number().int(),
+    uuid: z.uuid(),
+    viewPosition: z.int(),
     name: z.string(),
 
     info: z.object({
@@ -24,12 +24,6 @@ export const InternalSquadSchema = z.object({
 
     inbounds: z.array(InternalSquadInboundSchema),
 
-    createdAt: z
-        .string()
-        .datetime()
-        .transform((str) => new Date(str)),
-    updatedAt: z
-        .string()
-        .datetime()
-        .transform((str) => new Date(str)),
+    createdAt: z.iso.datetime().transform((str) => new Date(str)),
+    updatedAt: z.iso.datetime().transform((str) => new Date(str)),
 });

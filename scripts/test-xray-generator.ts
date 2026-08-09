@@ -3,9 +3,7 @@ import assert from 'node:assert/strict';
 import { XrayGeneratorService } from '@modules/subscription-template/generators/xray.generator.service';
 import { ResolvedProxyConfig } from '@modules/subscription-template/resolve-proxy/interfaces';
 
-function buildBaseHost(
-    overrides: Partial<ResolvedProxyConfig>,
-): ResolvedProxyConfig {
+function buildBaseHost(overrides: Partial<ResolvedProxyConfig>): ResolvedProxyConfig {
     return {
         finalRemark: 'node',
         address: '203.0.113.10',

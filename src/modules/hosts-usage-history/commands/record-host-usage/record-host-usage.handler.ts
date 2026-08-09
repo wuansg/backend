@@ -1,5 +1,5 @@
-import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Logger } from '@nestjs/common';
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 
 import { HostsUsageHistoryRepository } from '../../repositories/hosts-usage-history.repository';
 import { RecordHostUsageCommand } from './record-host-usage.command';

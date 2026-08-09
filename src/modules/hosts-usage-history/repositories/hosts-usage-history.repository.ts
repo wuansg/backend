@@ -1,14 +1,14 @@
+import { TransactionHost } from '@nestjs-cls/transactional';
+import { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma';
 import { Prisma } from '@prisma/client';
 
-import { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma';
-import { TransactionHost } from '@nestjs-cls/transactional';
 import { Injectable } from '@nestjs/common';
 
 import { ICrudHistoricalRecords } from '@common/types/crud-port';
 
+import { HostsUsageHistoryEntity } from '../entities';
 import { HostsUsageHistoryConverter } from '../hosts-usage-history.converter';
 import { IGetHostsUsageByRange, ITopHost, ITopHostUser } from '../interfaces';
-import { HostsUsageHistoryEntity } from '../entities';
 
 export interface IInboundUsageStat {
     inbound: string;

@@ -3,12 +3,12 @@ import dayjs from 'dayjs';
 import { Injectable, Logger } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 
-import { getDateRangeArrayUtil } from '@common/utils';
 import { fail, ok, TResult } from '@common/types';
+import { getDateRangeArrayUtil } from '@common/utils';
 import { ERRORS } from '@libs/contracts/constants';
 
-import { GetUserByUniqueFieldQuery } from '@modules/users/queries/get-user-by-unique-field';
 import { HostsRepository } from '@modules/hosts/repositories/hosts.repository';
+import { GetUserByUniqueFieldQuery } from '@modules/users/queries/get-user-by-unique-field';
 
 import { GetStatsHostsUsageResponseModel, GetStatsHostUsersUsageResponseModel } from './models';
 import { HostsUsageHistoryRepository } from './repositories/hosts-usage-history.repository';
@@ -66,13 +66,15 @@ export class HostsUsageHistoryService {
     }
 
     async getStatsUserHostsUsage(
-        uuid: string,
+        userId: number,
         start: string,
         end: string,
         topHostsLimit: number,
     ): Promise<TResult<GetStatsHostsUsageResponseModel>> {
         try {
-            const user = await this.queryBus.execute(new GetUserByUniqueFieldQuery({ uuid }));
+            const user = await this.queryBus.execute(
+                new GetUserByUniqueFieldQuery({ id: BigInt(userId) }),
+            );
             if (!user.isOk) {
                 return fail(ERRORS.USER_NOT_FOUND);
             }
@@ -83,21 +85,21 @@ export class HostsUsageHistoryService {
             );
 
             const dailyTraffic = await this.hostsUsageHistoryRepository.getDailyUserHostsTrafficSum(
-                user.response.tId,
+                user.response.id,
                 startDate,
                 endDate,
                 dates,
             );
 
             const topHosts = await this.hostsUsageHistoryRepository.getTopUserHostsByTraffic(
-                user.response.tId,
+                user.response.id,
                 startDate,
                 endDate,
                 topHostsLimit,
             );
 
             const hostsUsage = await this.hostsUsageHistoryRepository.getUserHostsUsageByRange(
-                user.response.tId,
+                user.response.id,
                 startDate,
                 endDate,
                 dates,

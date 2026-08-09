@@ -66,8 +66,6 @@ function main(): void {
             },
         },
     ]);
-
-    console.log('Opaque JSON camel-case regression checks passed.');
 }
 
 main();

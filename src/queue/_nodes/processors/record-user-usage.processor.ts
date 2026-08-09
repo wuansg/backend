@@ -1,6 +1,5 @@
 import { Job } from 'bullmq';
 import ems from 'enhanced-ms';
-import { t } from 'try';
 
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
@@ -74,13 +73,13 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
                 return await this.handleOk(
                     nodeUuid,
                     BigInt(nodeId),
-                    this.aggregateUsersStats(usersInboundStats.response!.response.users),
+                    this.aggregateUsersStats(usersInboundStats.response.users),
                     consumptionMultiplier,
-                    usersInboundStats.response!.response.users,
+                    usersInboundStats.response.users,
                 );
             }
 
-            const response = await this.axios.getUsersStats(
+            const queryResult = await this.axios.getUsersStats(
                 {
                     reset: true,
                 },
@@ -91,12 +90,12 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
                 },
             );
 
-            switch (response.isOk) {
+            switch (queryResult.isOk) {
                 case true:
                     return await this.handleOk(
                         nodeUuid,
                         BigInt(nodeId),
-                        response.response!,
+                        queryResult.response,
                         consumptionMultiplier,
                         [],
                     );
@@ -109,7 +108,7 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
 
                     this.logger.error(
                         `Failed to get users stats, node: ${nodeUuid} – ${connectionOpts.address}:${connectionOpts.port}, error: ${JSON.stringify(
-                            response,
+                            queryResult,
                         )}`,
                     );
 
@@ -126,14 +125,14 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
     private async handleOk(
         nodeUuid: string,
         nodeId: bigint,
-        response: GetUsersStatsCommand.Response,
+        response: GetUsersStatsCommand.Response['response'],
         consumptionMultiplier: string,
         userInbounds: UserInboundUsageStat[],
     ) {
         const start = performance.now();
 
         try {
-            if (response.response.users.length === 0) {
+            if (response.users.length === 0) {
                 await this.rawCacheService.set(
                     CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
                     0,
@@ -144,7 +143,7 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
             }
 
             const userUsageList: { u: string; b: string; n: string }[] = Array.from({
-                length: response.response.users.length,
+                length: response.users.length,
             });
 
             let userUsageIndex = 0;
@@ -153,10 +152,10 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
 
             const pipeline = this.rawCacheService.createPipeline();
 
-            response.response.users.forEach((user) => {
-                const { ok } = t(() => BigInt(user.username));
-
-                if (!ok) {
+            response.users.forEach((user) => {
+                try {
+                    BigInt(user.username);
+                } catch {
                     return;
                 }
 
@@ -222,7 +221,7 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
 
     private aggregateUsersStats(
         userInbounds: UserInboundUsageStat[],
-    ): GetUsersStatsCommand.Response {
+    ): GetUsersStatsCommand.Response['response'] {
         const users = new Map<
             string,
             {
@@ -244,10 +243,6 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
             users.set(userInbound.username, user);
         });
 
-        return {
-            response: {
-                users: Array.from(users.values()),
-            },
-        };
+        return { users: Array.from(users.values()) };
     }
 }

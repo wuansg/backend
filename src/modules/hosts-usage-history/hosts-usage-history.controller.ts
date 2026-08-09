@@ -1,3 +1,4 @@
+import { Controller, HttpStatus, Param, Query, UseFilters, UseGuards } from '@nestjs/common';
 import {
     ApiBearerAuth,
     ApiNotFoundResponse,
@@ -6,16 +7,15 @@ import {
     ApiQuery,
     ApiTags,
 } from '@nestjs/swagger';
-import { Controller, HttpStatus, Param, Query, UseFilters, UseGuards } from '@nestjs/common';
 
-import { HttpExceptionFilter } from '@common/exception/http-exception.filter';
-import { JwtDefaultGuard } from '@common/guards/jwt-guards/def-jwt-guard';
-import { errorHandler } from '@common/helpers/error-handler.helper';
 import { Endpoint } from '@common/decorators/base-endpoint';
 import { Roles } from '@common/decorators/roles/roles';
+import { HttpExceptionFilter } from '@common/exception/http-exception.filter';
+import { JwtDefaultGuard } from '@common/guards/jwt-guards/def-jwt-guard';
 import { RolesGuard } from '@common/guards/roles';
-import { GetStatsHostsUsageCommand, GetStatsHostUsersUsageCommand } from '@libs/contracts/commands';
+import { errorHandler } from '@common/helpers/error-handler.helper';
 import { BANDWIDTH_STATS_HOSTS_CONTROLLER, CONTROLLERS_INFO } from '@libs/contracts/api';
+import { GetStatsHostsUsageCommand, GetStatsHostUsersUsageCommand } from '@libs/contracts/commands';
 import { ROLE } from '@libs/contracts/constants';
 
 import {
@@ -65,6 +65,7 @@ export class HostsUsageHistoryController {
     @Endpoint({
         command: GetStatsHostsUsageCommand,
         httpCode: HttpStatus.OK,
+        type: GetStatsHostsUsageResponseDto,
     })
     async getStatsHostsUsage(
         @Query() query: GetStatsHostsUsageRequestQueryDto,
@@ -116,6 +117,7 @@ export class HostsUsageHistoryController {
     @Endpoint({
         command: GetStatsHostUsersUsageCommand,
         httpCode: HttpStatus.OK,
+        type: GetStatsHostUsersUsageResponseDto,
     })
     async getStatsHostUsersUsage(
         @Query() query: GetStatsHostUsersUsageRequestQueryDto,

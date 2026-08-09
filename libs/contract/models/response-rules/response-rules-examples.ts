@@ -1,3 +1,5 @@
+import type { ResponseRuleSchemaBase } from './response-rule.schema';
+
 import z from 'zod';
 
 import {
@@ -5,9 +7,8 @@ import {
     RESPONSE_RULES_OPERATORS,
     RESPONSE_RULES_RESPONSE_TYPES,
 } from '../../constants';
-import { ResponseRuleSchema, ResponseRuleSchemaBase } from './response-rule.schema';
 
-export const EXAMPLES_SRR_BLANK_RULE: z.infer<typeof ResponseRuleSchema> = {
+export const EXAMPLES_SRR_BLANK_RULE: z.infer<typeof ResponseRuleSchemaBase> = {
     name: 'Blank rule',
     description: 'Blank rule',
     operator: 'AND',
@@ -19,7 +20,7 @@ export const EXAMPLES_SRR_BLANK_RULE: z.infer<typeof ResponseRuleSchema> = {
     },
 };
 
-export const EXAMPLES_SRR_BLOCK_LEGACY_CLIENTS_RULE: z.infer<typeof ResponseRuleSchema> = {
+export const EXAMPLES_SRR_BLOCK_LEGACY_CLIENTS_RULE: z.infer<typeof ResponseRuleSchemaBase> = {
     name: 'Block Legacy Clients',
     description: 'Block requests from legacy clients',
     enabled: true,
@@ -43,10 +44,10 @@ export const EXAMPLES_SRR_BLOCK_LEGACY_CLIENTS_RULE: z.infer<typeof ResponseRule
 
 export function generateResponseRuleDescription(schema: typeof ResponseRuleSchemaBase) {
     const fields = Object.entries(schema.shape).map(([key, value]) => {
-        const desc = value.description ? JSON.parse(value.description) : {};
+        const meta = value.meta() ?? {};
         return {
             name: key,
-            description: desc.markdownDescription || desc.title || 'No description',
+            description: meta.markdownDescription || meta.title || 'No description',
         };
     });
 

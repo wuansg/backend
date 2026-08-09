@@ -4,18 +4,18 @@ import { BANDWIDTH_STATS_ROUTES, REST_API } from '../../../api';
 import { getEndpointDetails } from '../../../constants';
 
 export namespace GetStatsUserHostsUsageCommand {
-    export const url = REST_API.BANDWIDTH_STATS.USERS.GET_HOSTS_BY_UUID;
-    export const TSQ_url = url(':uuid');
+    export const url = REST_API.BANDWIDTH_STATS.USERS.GET_HOSTS_BY_ID;
+    export const TSQ_url = url(':userId');
 
     export const endpointDetails = getEndpointDetails(
-        BANDWIDTH_STATS_ROUTES.USERS.GET_HOSTS_BY_UUID(':uuid'),
+        BANDWIDTH_STATS_ROUTES.USERS.GET_HOSTS_BY_ID(':userId'),
         'get',
         'Get User Hosts Usage by Range',
         { scope: 'user-hosts-usage', kind: 'read' },
     );
 
     export const RequestSchema = z.object({
-        uuid: z.string().uuid(),
+        userId: z.coerce.number().int().positive(),
     });
 
     export type Request = z.infer<typeof RequestSchema>;

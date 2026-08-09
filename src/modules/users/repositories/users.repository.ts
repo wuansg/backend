@@ -1,3 +1,11 @@
+import type {
+    IGetUserAccessibleNodes,
+    IGetUserAccessibleNodesResponse,
+    IUpdateUserDto,
+    IUserOnlineStats,
+    IUserStats,
+} from '../interfaces';
+
 import { TResetPeriods, TUsersStatus, USERS_STATUS } from '@contract/constants';
 import { Transactional, TransactionHost } from '@nestjs-cls/transactional';
 import { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma';
@@ -11,12 +19,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { TxKyselyService } from '@common/database/tx-kysely.service';
 import { getKyselyUuid, paginateQuery } from '@common/helpers/kysely';
 import { formatExecutionTime, getTime } from '@common/utils/get-elapsed-time';
-import { GetAllUsersCommand, GetUsersStreamCommand } from '@libs/contracts/commands';
 
 import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
 
 import { BulkDeleteByStatusBuilder, BulkUpdateUserUsedTrafficBuilder } from '../builders';
 import { TriggerThresholdNotificationsBuilder } from '../builders/trigger-threshold-notifications-builder';
+import { GetUsersQueryDto, GetUsersStreamQueryDto } from '../dtos';
 import {
     BaseUserEntity,
     UserForConfigEntity,
@@ -24,23 +32,15 @@ import {
     UserWithResolvedInboundEntity,
 } from '../entities';
 import { UserTrafficEntity } from '../entities/user-traffic.entity';
-import {
-    IGetUserAccessibleNodes,
-    IGetUserAccessibleNodesResponse,
-    IUpdateUserDto,
-    IUserOnlineStats,
-    IUserStats,
-} from '../interfaces';
 import { UserConverter } from '../users.converter';
 
 const USERS_FILTER_COLUMN_MAP = {
-    id: sql.ref('users.t_id'),
+    id: sql.ref('users.id'),
     createdAt: sql.ref('users.created_at'),
     expireAt: sql.ref('users.expire_at'),
     lastTrafficResetAt: sql.ref('users.last_traffic_reset_at'),
     subRevokedAt: sql.ref('users.sub_revoked_at'),
     telegramId: sql.ref('users.telegram_id'),
-    uuid: sql.ref('users.uuid'),
     vlessUuid: sql.ref('users.vless_uuid'),
     trojanPassword: sql.ref('users.trojan_password'),
     anytlsPassword: sql.ref('users.anytls_password'),
@@ -62,7 +62,7 @@ const USERS_FILTER_COLUMN_MAP = {
     nodeName: null,
 } as const;
 
-const NUMERIC_FILTER_IDS = new Set(['hwidDeviceLimit', 'tId', 'trafficLimitBytes']);
+const NUMERIC_FILTER_IDS = new Set(['hwidDeviceLimit', 'id', 'trafficLimitBytes']);
 
 type AllowedUsersFilterId = keyof typeof USERS_FILTER_COLUMN_MAP;
 
@@ -80,12 +80,12 @@ export class UsersRepository {
         entity: BaseUserEntity,
         internalSquadUuids: string[] = [],
     ): Promise<{
-        tId: bigint;
+        id: bigint;
     }> {
         const model = this.userConverter.fromEntityToPrismaModel(entity);
         const result = await this.prisma.tx.users.create({
             select: {
-                tId: true,
+                id: true,
             },
             data: {
                 ...model,
@@ -104,31 +104,31 @@ export class UsersRepository {
         });
 
         return {
-            tId: result.tId,
+            id: result.id,
         };
     }
 
     public async bulkIncrementUsedTraffic(
         userUsageList: { u: string; b: string; n: string }[],
-    ): Promise<{ tId: bigint }[]> {
+    ): Promise<{ id: bigint }[]> {
         const { query } = new BulkUpdateUserUsedTrafficBuilder(userUsageList);
-        const result = await this.prisma.tx.$queryRaw<{ tId: bigint }[]>(query);
+        const result = await this.prisma.tx.$queryRaw<{ id: bigint }[]>(query);
 
         return result;
     }
 
-    public async triggerThresholdNotifications(percentages: number[]): Promise<{ tId: bigint }[]> {
+    public async triggerThresholdNotifications(percentages: number[]): Promise<{ id: bigint }[]> {
         const { query } = new TriggerThresholdNotificationsBuilder(percentages);
-        return await this.prisma.tx.$queryRaw<{ tId: bigint }[]>(query);
+        return await this.prisma.tx.$queryRaw<{ id: bigint }[]>(query);
     }
 
     public async updateStatusAndTrafficAndResetAt(
-        userUuid: string,
+        id: bigint,
         lastResetAt: Date,
         status?: TUsersStatus,
     ): Promise<void> {
         await this.prisma.tx.users.update({
-            where: { uuid: userUuid },
+            where: { id },
             data: {
                 status,
                 lastTrafficResetAt: lastResetAt,
@@ -142,36 +142,36 @@ export class UsersRepository {
         });
     }
 
-    public async updateExceededTrafficUsers(): Promise<{ tId: bigint }[]> {
+    public async updateExceededTrafficUsers(): Promise<{ id: bigint }[]> {
         const result = await this.qb.kysely
             .updateTable('users')
             .set({ status: USERS_STATUS.LIMITED })
             .from('userTraffic')
-            .whereRef('userTraffic.tId', '=', 'users.tId')
+            .whereRef('userTraffic.id', '=', 'users.id')
             .where('users.status', '=', USERS_STATUS.ACTIVE)
             .where('users.trafficLimitBytes', '!=', 0n)
             .whereRef('userTraffic.usedTrafficBytes', '>=', 'users.trafficLimitBytes')
-            .returning(['users.tId'])
+            .returning(['users.id'])
             .execute();
 
         return result;
     }
 
-    public async findUsersByExpireAt(start: Date, end: Date): Promise<{ tId: bigint }[]> {
+    public async findUsersByExpireAt(start: Date, end: Date): Promise<{ id: bigint }[]> {
         const result = await this.qb.kysely
             .selectFrom('users')
-            .select('tId')
+            .select('id')
             .where('expireAt', '>=', start)
             .where('expireAt', '<=', end)
             .execute();
-        return result.map((value) => ({ tId: value.tId }));
+        return result.map((value) => ({ id: value.id }));
     }
 
-    public async updateExpiredUsers(): Promise<{ tId: bigint }[]> {
+    public async updateExpiredUsers(): Promise<{ id: bigint }[]> {
         // UPDATE "public"."users" SET "status" = $1, "updated_at" = $2 WHERE ("public"."users"."status" IN ($3,$4) AND "public"."users"."expire_at" < $5) RETURNING "public"."users"."uuid"
         const result = await this.prisma.tx.users.updateManyAndReturn({
             select: {
-                tId: true,
+                id: true,
             },
             where: {
                 AND: [
@@ -198,7 +198,7 @@ export class UsersRepository {
     private get baseUsersQb() {
         return this.qb.kysely
             .selectFrom('users')
-            .innerJoin('userTraffic', 'userTraffic.tId', 'users.tId');
+            .innerJoin('userTraffic', 'userTraffic.id', 'users.id');
     }
 
     public async getAllUsers({
@@ -207,7 +207,7 @@ export class UsersRepository {
         filters,
         filterModes,
         sorting,
-    }: GetAllUsersCommand.RequestQuery): Promise<[UserEntity[], number]> {
+    }: GetUsersQueryDto): Promise<[UserEntity[], number]> {
         let qb = this.baseUsersQb.selectAll().select((eb) => this.includeActiveInternalSquads(eb));
 
         if (filters?.length) {
@@ -229,13 +229,13 @@ export class UsersRepository {
                     continue;
                 }
 
-                const sortId = sort.id === 'id' ? 'users.tId' : sort.id;
+                const sortId = sort.id === 'id' ? 'users.id' : sort.id;
                 qb = qb.orderBy(sql.ref(sortId), (ob) =>
                     (sort.desc ? ob.desc() : ob.asc()).nullsLast(),
                 );
             }
         } else {
-            qb = qb.orderBy('users.tId', 'desc');
+            qb = qb.orderBy('users.id', 'desc');
         }
 
         const { rows, count } = await paginateQuery(qb, { offset: start, limit: size });
@@ -243,19 +243,49 @@ export class UsersRepository {
         return [rows.map((u) => new UserEntity(u)), count];
     }
 
-    public async getUsersStream({ cursor, size }: GetUsersStreamCommand.RequestQuery): Promise<{
+    public async getUsersStream(dto: GetUsersStreamQueryDto): Promise<{
         users: UserEntity[];
         nextCursor: string | null;
         hasMore: boolean;
     }> {
+        const {
+            cursor,
+            size,
+            status,
+            trafficLimitStrategy,
+            telegramId,
+            email,
+            tag,
+            externalSquadUuid,
+        } = dto;
+
         let qb = this.baseUsersQb.selectAll().select((eb) => this.includeActiveInternalSquads(eb));
 
         if (cursor) {
-            qb = qb.where('users.tId', '>', BigInt(cursor));
+            qb = qb.where('users.id', '>', BigInt(cursor));
+        }
+
+        if (status) {
+            qb = qb.where('users.status', '=', status);
+        }
+        if (trafficLimitStrategy) {
+            qb = qb.where('users.trafficLimitStrategy', '=', trafficLimitStrategy);
+        }
+        if (telegramId !== undefined) {
+            qb = qb.where('users.telegramId', '=', BigInt(telegramId));
+        }
+        if (email) {
+            qb = qb.where('users.email', '=', email);
+        }
+        if (tag) {
+            qb = qb.where('users.tag', '=', tag);
+        }
+        if (externalSquadUuid) {
+            qb = qb.where('users.externalSquadUuid', '=', getKyselyUuid(externalSquadUuid));
         }
 
         const rows = await qb
-            .orderBy('users.tId', 'asc')
+            .orderBy('users.id', 'asc')
             .limit(size + 1)
             .execute();
 
@@ -266,15 +296,15 @@ export class UsersRepository {
 
         return {
             users: rows.map((u) => new UserEntity(u)),
-            nextCursor: hasMore ? rows[rows.length - 1].tId.toString() : null,
+            nextCursor: hasMore ? rows[rows.length - 1].id.toString() : null,
             hasMore,
         };
     }
 
     private applyUsersFilters(
         qb: any,
-        filters: GetAllUsersCommand.RequestQuery['filters'],
-        filterModes?: GetAllUsersCommand.RequestQuery['filterModes'],
+        filters: GetUsersQueryDto['filters'],
+        filterModes?: GetUsersQueryDto['filterModes'],
     ) {
         for (const filter of filters ?? []) {
             if (!(filter.id in USERS_FILTER_COLUMN_MAP)) continue;
@@ -300,7 +330,7 @@ export class UsersRepository {
             if (filter.id === 'id') {
                 try {
                     BigInt(filter.value as string);
-                    qb = qb.where(sql`CAST(users.t_id AS TEXT)`, 'like', `%${filter.value}%`);
+                    qb = qb.where(sql`CAST(users.id AS TEXT)`, 'like', `%${filter.value}%`);
                 } catch {}
                 continue;
             }
@@ -315,11 +345,6 @@ export class UsersRepository {
                 continue;
             }
 
-            if (filter.id === 'uuid') {
-                qb = qb.where(sql`"uuid"::text`, 'ilike', `%${filter.value}%`);
-                continue;
-            }
-
             if (filter.id === 'vlessUuid') {
                 qb = qb.where(sql`"vless_uuid"::text`, 'ilike', `%${filter.value}%`);
                 continue;
@@ -331,7 +356,7 @@ export class UsersRepository {
             }
 
             if (filter.id === 'activeInternalSquads') {
-                qb = qb.where('users.tId', 'in', (eb: any) =>
+                qb = qb.where('users.id', 'in', (eb: any) =>
                     eb
                         .selectFrom('internalSquadMembers')
                         .select('internalSquadMembers.userId')
@@ -404,16 +429,19 @@ export class UsersRepository {
     public async getUsersWithPagination({
         start,
         size,
-    }: GetAllUsersCommand.RequestQuery): Promise<[UserEntity[], number]> {
+    }: {
+        start: number;
+        size: number;
+    }): Promise<[UserEntity[], number]> {
         const [users, total] = await Promise.all([
             this.qb.kysely
                 .selectFrom('users')
-                .innerJoin('userTraffic', 'userTraffic.tId', 'users.tId')
+                .innerJoin('userTraffic', 'userTraffic.id', 'users.id')
                 .selectAll()
                 .select((eb) => this.includeActiveInternalSquads(eb))
                 .offset(start)
                 .limit(size)
-                .orderBy('users.tId', 'desc')
+                .orderBy('users.id', 'desc')
                 .execute(),
             this.qb.kysely
                 .selectFrom('users')
@@ -428,29 +456,29 @@ export class UsersRepository {
 
     @Transactional()
     public async update(dto: IUpdateUserDto): Promise<UserEntity | null> {
-        const { tId, activeInternalSquads, ...data } = dto;
+        const { id, activeInternalSquads, ...data } = dto;
 
         await this.prisma.tx.users.update({
             select: {
-                tId: true,
+                id: true,
             },
-            where: { tId },
+            where: { id },
             data,
         });
 
         if (activeInternalSquads) {
-            await this.removeUserFromInternalSquads(tId);
-            await this.addUserToInternalSquads(tId, activeInternalSquads);
+            await this.removeUserFromInternalSquads(id);
+            await this.addUserToInternalSquads(id, activeInternalSquads);
         }
 
-        return await this.findUniqueByCriteria({ tId }, { activeInternalSquads: true });
+        return await this.findUniqueByCriteria({ id }, { activeInternalSquads: true });
     }
 
-    public async updateUserStatus(uuid: string, status: TUsersStatus): Promise<boolean> {
+    public async updateUserStatus(id: bigint, status: TUsersStatus): Promise<boolean> {
         const result = await this.qb.kysely
             .updateTable('users')
             .set({ status })
-            .where('uuid', '=', getKyselyUuid(uuid))
+            .where('id', '=', id)
             .clearReturning()
             .executeTakeFirstOrThrow();
 
@@ -458,7 +486,7 @@ export class UsersRepository {
     }
 
     public async findUniqueByCriteria(
-        dto: Partial<Pick<BaseUserEntity, 'uuid' | 'shortUuid' | 'username' | 'tId'>>,
+        dto: Partial<Pick<BaseUserEntity, 'shortUuid' | 'username' | 'id'>>,
         includeOptions: {
             activeInternalSquads: boolean;
         } = {
@@ -467,20 +495,17 @@ export class UsersRepository {
     ): Promise<UserEntity | null> {
         const result = await this.qb.kysely
             .selectFrom('users')
-            .innerJoin('userTraffic', 'userTraffic.tId', 'users.tId')
+            .innerJoin('userTraffic', 'userTraffic.id', 'users.id')
             .selectAll()
             .$if(includeOptions.activeInternalSquads, (qb) =>
                 qb.select((eb) => this.includeActiveInternalSquads(eb)),
             )
             .where((eb) => {
-                const conditions = [];
+                if (dto.id !== undefined) return eb('users.id', '=', dto.id);
+                if (dto.username !== undefined) return eb('username', '=', dto.username);
+                if (dto.shortUuid !== undefined) return eb('shortUuid', '=', dto.shortUuid);
 
-                if (dto.uuid) conditions.push(eb('uuid', '=', getKyselyUuid(dto.uuid)));
-                if (dto.shortUuid) conditions.push(eb('shortUuid', '=', dto.shortUuid));
-                if (dto.username) conditions.push(eb('username', '=', dto.username));
-                if (dto.tId) conditions.push(eb('users.tId', '=', dto.tId));
-
-                return eb.or(conditions);
+                throw new Error('findUniqueByCriteria: no criteria provided');
             })
             .executeTakeFirst();
 
@@ -489,36 +514,6 @@ export class UsersRepository {
         }
 
         return new UserEntity(result);
-    }
-
-    public async findByNonUniqueCriteria(
-        dto: Partial<Pick<BaseUserEntity, 'telegramId' | 'email' | 'tag'>>,
-        includeOptions: {
-            activeInternalSquads: boolean;
-        } = {
-            activeInternalSquads: true,
-        },
-    ): Promise<UserEntity[]> {
-        const user = await this.qb.kysely
-            .selectFrom('users')
-            .innerJoin('userTraffic', 'userTraffic.tId', 'users.tId')
-            .selectAll()
-            .$if(includeOptions.activeInternalSquads, (qb) =>
-                qb.select((eb) => this.includeActiveInternalSquads(eb)),
-            )
-            .where((eb) => {
-                const conditions = [];
-
-                if (dto.telegramId) conditions.push(eb('telegramId', '=', dto.telegramId));
-                if (dto.email) conditions.push(eb('email', '=', dto.email));
-                if (dto.tag) conditions.push(eb('tag', '=', dto.tag));
-
-                return eb.or(conditions);
-            })
-            .orderBy('users.tId', 'desc')
-            .execute();
-
-        return user.map((user) => new UserEntity(user));
     }
 
     public async findFirstByCriteria(dto: Partial<BaseUserEntity>): Promise<null | BaseUserEntity> {
@@ -533,8 +528,8 @@ export class UsersRepository {
         return this.userConverter.fromPrismaModelToEntity(result);
     }
 
-    public async deleteByUUID(uuid: string): Promise<boolean> {
-        const result = await this.prisma.tx.users.delete({ where: { uuid } });
+    public async deleteById(userId: bigint): Promise<boolean> {
+        const result = await this.prisma.tx.users.delete({ where: { id: userId } });
         return !!result;
     }
 
@@ -577,19 +572,19 @@ export class UsersRepository {
             .selectFrom('userTraffic')
             .select((eb) => [
                 eb.fn
-                    .count('userTraffic.tId')
+                    .count('userTraffic.id')
                     .filterWhere('userTraffic.onlineAt', '>=', now.subtract(30, 'second').toDate())
                     .as('onlineNow'),
                 eb.fn
-                    .count('userTraffic.tId')
+                    .count('userTraffic.id')
                     .filterWhere('userTraffic.onlineAt', '>=', now.subtract(1, 'day').toDate())
                     .as('lastDay'),
                 eb.fn
-                    .count('userTraffic.tId')
+                    .count('userTraffic.id')
                     .filterWhere('userTraffic.onlineAt', '>=', now.subtract(1, 'week').toDate())
                     .as('lastWeek'),
                 eb.fn
-                    .count('userTraffic.tId')
+                    .count('userTraffic.id')
                     .filterWhere('userTraffic.onlineAt', 'is', null)
                     .as('neverOnline'),
             ])
@@ -609,10 +604,10 @@ export class UsersRepository {
     ): Promise<void> {
         let targetIdsQuery = this.qb.kysely
             .selectFrom('users')
-            .select('tId')
+            .select('id')
             .where('trafficLimitStrategy', '=', strategy)
             .where('status', '!=', USERS_STATUS.LIMITED)
-            .orderBy('tId');
+            .orderBy('id');
 
         if (strategy === 'MONTH_ROLLING') {
             targetIdsQuery = targetIdsQuery
@@ -648,9 +643,9 @@ export class UsersRepository {
                 .with('lockedUsers', (db) =>
                     db
                         .selectFrom('users')
-                        .select('tId')
+                        .select('id')
                         .where(
-                            sql<boolean>`"users"."t_id" = ANY(string_to_array(${batchIds.map((r) => r.tId).join(',')}, ',')::bigint[])`,
+                            sql<boolean>`"users"."id" = ANY(string_to_array(${batchIds.map((r) => r.id).join(',')}, ',')::bigint[])`,
                         )
                         .forUpdate(),
                 )
@@ -658,16 +653,16 @@ export class UsersRepository {
                     db
                         .updateTable('users')
                         .from('lockedUsers')
-                        .whereRef('users.tId', '=', 'lockedUsers.tId')
+                        .whereRef('users.id', '=', 'lockedUsers.id')
                         .set({
                             lastTrafficResetAt: now,
                             lastTriggeredThreshold: 0,
                         })
-                        .returning('users.tId'),
+                        .returning('users.id'),
                 )
                 .updateTable('userTraffic')
                 .from('updateUsers')
-                .whereRef('userTraffic.tId', '=', 'updateUsers.tId')
+                .whereRef('userTraffic.id', '=', 'updateUsers.id')
                 .set({ usedTrafficBytes: 0n })
                 .execute();
 
@@ -681,13 +676,13 @@ export class UsersRepository {
         );
     }
 
-    public async resetLimitedUserTraffic(strategy: TResetPeriods): Promise<{ tId: bigint }[]> {
+    public async resetLimitedUserTraffic(strategy: TResetPeriods): Promise<{ id: bigint }[]> {
         let targetIdsQuery = this.qb.kysely
             .selectFrom('users')
-            .select('tId')
+            .select('id')
             .where('trafficLimitStrategy', '=', strategy)
             .where('status', '=', USERS_STATUS.LIMITED)
-            .orderBy('tId')
+            .orderBy('id')
             .forUpdate();
 
         if (strategy === 'MONTH_ROLLING') {
@@ -709,19 +704,19 @@ export class UsersRepository {
                 db
                     .updateTable('users')
                     .from('targetUsers')
-                    .whereRef('users.tId', '=', 'targetUsers.tId')
+                    .whereRef('users.id', '=', 'targetUsers.id')
                     .set({
                         lastTrafficResetAt: new Date(),
                         lastTriggeredThreshold: 0,
                         status: USERS_STATUS.ACTIVE,
                     })
-                    .returning('users.tId'),
+                    .returning('users.id'),
             )
             .updateTable('userTraffic')
             .from('updateUsers')
-            .whereRef('userTraffic.tId', '=', 'updateUsers.tId')
+            .whereRef('userTraffic.id', '=', 'updateUsers.id')
             .set({ usedTrafficBytes: 0n })
-            .returning('userTraffic.tId')
+            .returning('userTraffic.id')
             .execute();
 
         return result;
@@ -746,7 +741,7 @@ export class UsersRepository {
             const builder = this.qb.kysely
                 .selectFrom('users')
                 .where('users.status', '=', USERS_STATUS.ACTIVE)
-                .innerJoin('internalSquadMembers', 'internalSquadMembers.userId', 'users.tId')
+                .innerJoin('internalSquadMembers', 'internalSquadMembers.userId', 'users.id')
                 .innerJoin(
                     'internalSquadInbounds',
                     'internalSquadInbounds.internalSquadUuid',
@@ -757,14 +752,14 @@ export class UsersRepository {
                     'configProfileInbounds.uuid',
                     'internalSquadInbounds.inboundUuid',
                 )
-                .$if(lastTId !== null, (qb) => qb.where('users.tId', '>', lastTId!))
+                .$if(lastTId !== null, (qb) => qb.where('users.id', '>', lastTId!))
                 .where(
                     'internalSquadInbounds.inboundUuid',
                     'in',
                     activeInbounds.map((inbound) => getKyselyUuid(inbound.uuid)),
                 )
                 .select((eb) => [
-                    'users.tId',
+                    'users.id',
                     'users.trojanPassword',
                     'users.vlessUuid',
                     'users.ssPassword',
@@ -775,14 +770,8 @@ export class UsersRepository {
                         'tags',
                     ),
                 ])
-                .groupBy([
-                    'users.tId',
-                    'users.trojanPassword',
-                    'users.vlessUuid',
-                    'users.ssPassword',
-                    'users.anytlsPassword',
-                ])
-                .orderBy(sql<string>`users.t_id asc`)
+                .groupBy(['users.id'])
+                .orderBy('users.id', 'asc')
                 .limit(BATCH_SIZE);
 
             const startTime = getTime();
@@ -796,7 +785,7 @@ export class UsersRepository {
             }
 
             if (result.length > 0) {
-                lastTId = result[result.length - 1].tId;
+                lastTId = result[result.length - 1].id;
                 yield result;
             } else {
                 break;
@@ -804,8 +793,10 @@ export class UsersRepository {
         }
     }
 
-    public async deleteManyByUuid(uuids: string[]): Promise<number> {
-        const result = await this.prisma.tx.users.deleteMany({ where: { uuid: { in: uuids } } });
+    public async deleteManyByUserIds(userIds: bigint[]): Promise<number> {
+        const result = await this.prisma.tx.users.deleteMany({
+            where: { id: { in: userIds } },
+        });
 
         return result.count;
     }
@@ -815,7 +806,7 @@ export class UsersRepository {
     }> {
         const result = await this.qb.kysely
             .selectFrom('users')
-            .select((eb) => [eb.fn.min('users.tId').as('min'), eb.fn.max('users.tId').as('max')])
+            .select((eb) => [eb.fn.min('users.id').as('min'), eb.fn.max('users.id').as('max')])
             .executeTakeFirstOrThrow();
 
         if (result.min === null || result.max === null) {
@@ -844,8 +835,8 @@ export class UsersRepository {
                 .set({
                     expireAt: sql`expire_at + (${extendDays}::int || ' days')::interval`,
                 })
-                .where('tId', '>=', batch.min)
-                .where('tId', '<=', batch.max)
+                .where('id', '>=', batch.min)
+                .where('id', '<=', batch.max)
                 .executeTakeFirst();
             if (result) {
                 totalUpdated += Number(result.numUpdatedRows ?? 0n);
@@ -854,8 +845,8 @@ export class UsersRepository {
         return totalUpdated;
     }
 
-    public async bulkExtendExpirationDateByUuids(
-        uuids: string[],
+    public async bulkExtendExpirationDateByUserIds(
+        userIds: number[],
         extendDays: number,
     ): Promise<number> {
         const result = await this.qb.kysely
@@ -864,23 +855,23 @@ export class UsersRepository {
                 expireAt: sql`expire_at + (${extendDays}::int || ' days')::interval`,
             })
             .where(
-                'uuid',
+                'id',
                 'in',
-                uuids.map((uuid) => getKyselyUuid(uuid)),
+                userIds.map((userId) => BigInt(userId)),
             )
             .executeTakeFirst();
 
         return Number(result?.numUpdatedRows ?? 0n);
     }
 
-    public async bulkSyncExpiredUsersByUuids(uuids: string[]): Promise<string[]> {
+    public async bulkSyncExpiredUsersByUserIds(userIds: number[]): Promise<bigint[]> {
         const result = await this.prisma.tx.users.updateManyAndReturn({
             select: {
-                uuid: true,
+                id: true,
             },
             where: {
-                uuid: {
-                    in: uuids,
+                id: {
+                    in: userIds.map((userId) => BigInt(userId)),
                 },
                 status: 'EXPIRED',
                 OR: [
@@ -896,7 +887,7 @@ export class UsersRepository {
             },
         });
 
-        return result.map((user) => user.uuid);
+        return result.map((user) => user.id);
     }
 
     public async bulkUpdateAllUsersByRange({
@@ -913,7 +904,7 @@ export class UsersRepository {
         let totalUpdated = 0;
         for (const range of ranges) {
             const result = await this.prisma.tx.users.updateMany({
-                where: { tId: { gte: range.min, lte: range.max } },
+                where: { id: { gte: range.min, lte: range.max } },
                 data: { ...fields, lastTriggeredThreshold: 0 },
             });
             totalUpdated += result.count ?? 0;
@@ -934,7 +925,7 @@ export class UsersRepository {
             .updateTable('users')
             .set({ status: USERS_STATUS.ACTIVE })
             .from('userTraffic')
-            .whereRef('userTraffic.tId', '=', 'users.tId')
+            .whereRef('userTraffic.id', '=', 'users.id')
             .where('users.status', '=', USERS_STATUS.LIMITED)
             .where((eb) =>
                 eb.or([
@@ -970,18 +961,6 @@ export class UsersRepository {
             data: {
                 status: 'ACTIVE',
             },
-        });
-
-        return result.count;
-    }
-
-    public async bulkUpdateUsers(
-        uuids: string[],
-        fields: Partial<BaseUserEntity>,
-    ): Promise<number> {
-        const result = await this.prisma.tx.users.updateMany({
-            where: { uuid: { in: uuids } },
-            data: fields,
         });
 
         return result.count;
@@ -1034,40 +1013,34 @@ export class UsersRepository {
             .execute();
     }
 
-    public async getUserIdsByUuids(uuids: string[]): Promise<bigint[]> {
+    public async validateUserIds(userIds: number[] | bigint[]): Promise<bigint[]> {
         const result = await this.qb.kysely
             .selectFrom('users')
-            .select('tId')
-            .where('uuid', 'in', uuids.map(getKyselyUuid))
+            .select('id')
+            .where(
+                'id',
+                'in',
+                userIds.map((userId) => BigInt(userId)),
+            )
             .execute();
-        return result.map((user) => user.tId);
+        return result.map((user) => user.id);
     }
 
-    public async getUserIdByUuid(uuid: string): Promise<bigint | null> {
+    public async getUsersByUserIds(userIds: number[]): Promise<UserEntity[]> {
         const result = await this.qb.kysely
             .selectFrom('users')
-            .select('tId')
-            .where('uuid', '=', getKyselyUuid(uuid))
-            .executeTakeFirst();
-
-        if (!result) {
-            return null;
-        }
-
-        return result.tId;
-    }
-
-    public async getIdsAndHashesByUserUuids(userUuids: string[]): Promise<
-        {
-            tId: bigint;
-            vlessUuid: string;
-        }[]
-    > {
-        return await this.qb.kysely
-            .selectFrom('users')
-            .select(['tId', 'vlessUuid'])
-            .where('uuid', 'in', userUuids.map(getKyselyUuid))
+            .innerJoin('userTraffic', 'userTraffic.id', 'users.id')
+            .selectAll()
+            .where(
+                'users.id',
+                'in',
+                userIds.map((userId) => BigInt(userId)),
+            )
+            .select((eb) => this.includeActiveInternalSquads(eb))
+            .orderBy('users.id', 'asc')
             .execute();
+
+        return result.map((user) => new UserEntity(user));
     }
 
     public async addUserToInternalSquads(
@@ -1103,32 +1076,29 @@ export class UsersRepository {
     }
 
     public async getPartialUserByUniqueFields<T extends SelectExpression<DB, 'users'>>(
-        dto: Partial<Pick<BaseUserEntity, 'uuid' | 'shortUuid' | 'username' | 'tId'>>,
+        dto: Partial<Pick<BaseUserEntity, 'shortUuid' | 'username' | 'id'>>,
         select: T[],
     ) {
         const user = await this.qb.kysely
             .selectFrom('users')
             .select(select)
             .where((eb) => {
-                const conditions = [];
+                if (dto.id !== undefined) return eb('users.id', '=', dto.id);
+                if (dto.username !== undefined) return eb('username', '=', dto.username);
+                if (dto.shortUuid !== undefined) return eb('shortUuid', '=', dto.shortUuid);
 
-                if (dto.uuid) conditions.push(eb('uuid', '=', getKyselyUuid(dto.uuid)));
-                if (dto.shortUuid) conditions.push(eb('shortUuid', '=', dto.shortUuid));
-                if (dto.username) conditions.push(eb('username', '=', dto.username));
-                if (dto.tId) conditions.push(eb('tId', '=', dto.tId));
-
-                return eb.or(conditions);
+                throw new Error('findUniqueByCriteria: no criteria provided');
             })
             .executeTakeFirst();
 
         return user;
     }
 
-    public async getUserTrafficByTId(tId: bigint): Promise<UserTrafficEntity> {
+    public async getUserTrafficById(id: bigint): Promise<UserTrafficEntity> {
         const result = await this.qb.kysely
             .selectFrom('userTraffic')
             .selectAll()
-            .where('tId', '=', tId)
+            .where('id', '=', id)
             .executeTakeFirstOrThrow();
 
         return new UserTrafficEntity(result);
@@ -1137,7 +1107,7 @@ export class UsersRepository {
     public async revokeUserSubscription(
         dto: Pick<
             BaseUserEntity,
-            | 'uuid'
+            | 'id'
             | 'trojanPassword'
             | 'vlessUuid'
             | 'ssPassword'
@@ -1158,19 +1128,19 @@ export class UsersRepository {
                 shortUuid: dto.shortUuid,
                 updatedAt: dto.updatedAt,
             })
-            .where('uuid', '=', getKyselyUuid(dto.uuid))
+            .where('id', '=', dto.id)
             .executeTakeFirst();
 
         return !!result;
     }
 
     public async getUserWithResolvedInbounds(
-        userUuid: string,
+        id: bigint,
     ): Promise<UserWithResolvedInboundEntity | null> {
         const result = await this.qb.kysely
             .selectFrom('users')
             .select((eb) => [
-                'users.tId',
+                'users.id',
                 'users.trojanPassword',
                 'users.vlessUuid',
                 'users.ssPassword',
@@ -1203,12 +1173,12 @@ export class UsersRepository {
                             'configProfileInbounds.port',
                             'configProfileInbounds.rawInbound',
                         ])
-                        .whereRef('internalSquadMembers.userId', '=', 'users.tId'),
+                        .whereRef('internalSquadMembers.userId', '=', 'users.id'),
                 )
                     .$notNull()
                     .as('inbounds'),
             ])
-            .where('users.uuid', '=', getKyselyUuid(userUuid))
+            .where('users.id', '=', id)
             .executeTakeFirst();
 
         if (!result) {
@@ -1219,12 +1189,12 @@ export class UsersRepository {
     }
 
     public async getUsersWithResolvedInbounds(
-        tIds: bigint[],
+        ids: bigint[],
     ): Promise<UserWithResolvedInboundEntity[]> {
         const result = await this.qb.kysely
             .selectFrom('users')
             .select((eb) => [
-                'users.tId',
+                'users.id',
                 'users.trojanPassword',
                 'users.vlessUuid',
                 'users.ssPassword',
@@ -1257,15 +1227,15 @@ export class UsersRepository {
                             'configProfileInbounds.port',
                             'configProfileInbounds.rawInbound',
                         ])
-                        .whereRef('internalSquadMembers.userId', '=', 'users.tId'),
+                        .whereRef('internalSquadMembers.userId', '=', 'users.id'),
                 )
                     .$notNull()
                     .as('inbounds'),
             ])
             .where(
-                'users.tId',
+                'users.id',
                 'in',
-                tIds.map((tId) => tId),
+                ids.map((id) => id),
             )
             .where('users.status', '=', USERS_STATUS.ACTIVE)
             .execute();
@@ -1353,31 +1323,14 @@ export class UsersRepository {
                     'internalSquadMembers.internalSquadUuid',
                 )
                 .select(['internalSquads.uuid', 'internalSquads.name'])
-                .whereRef('internalSquadMembers.userId', '=', 'users.tId'),
+                .whereRef('internalSquadMembers.userId', '=', 'users.id'),
         ).as('activeInternalSquads');
-    }
-
-    public async getUserUuidByUsername(
-        username: string,
-    ): Promise<{ uuid: string; tId: bigint } | null> {
-        const result = await this.qb.kysely
-            .selectFrom('users')
-            .select(['uuid'])
-            .select(sql.ref<bigint>('t_id').as('tId'))
-            .where('username', '=', username)
-            .executeTakeFirst();
-
-        if (!result) {
-            return null;
-        }
-
-        return { uuid: result.uuid, tId: result.tId };
     }
 
     public async findNotConnectedUsers(startDate: Date, endDate: Date): Promise<UserEntity[]> {
         const result = await this.qb.kysely
             .selectFrom('users')
-            .innerJoin('userTraffic', 'userTraffic.tId', 'users.tId')
+            .innerJoin('userTraffic', 'userTraffic.id', 'users.id')
             .selectAll()
             .where('status', '=', 'ACTIVE')
             .where('userTraffic.firstConnectedAt', 'is', null)
@@ -1403,6 +1356,28 @@ export class UsersRepository {
         }
 
         return result.subpageConfigUuid;
+    }
+
+    public async getUsersDigestByRange(
+        start: Date,
+        endExclusive: Date,
+    ): Promise<{ createdCount: number; expiredCount: number }> {
+        const result = await this.qb.kysely
+            .selectFrom('users')
+            .select([
+                sql<number>`count(*) filter (where created_at >= ${start} and created_at < ${endExclusive})::int`.as(
+                    'createdCount',
+                ),
+                sql<number>`count(*) filter (where expire_at >= ${start} and expire_at < ${endExclusive})::int`.as(
+                    'expiredCount',
+                ),
+            ])
+            .executeTakeFirstOrThrow();
+
+        return {
+            createdCount: Number(result.createdCount),
+            expiredCount: Number(result.expiredCount),
+        };
     }
 
     public async getUsersRecap(): Promise<{ total: number; newUsersThisMonth: number }> {
