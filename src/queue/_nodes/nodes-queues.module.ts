@@ -5,6 +5,7 @@ import { useQueueProcessor } from '@common/utils/startup-app';
 import { QUEUES_NAMES } from '@queue/queue.enum';
 import { createDomainQueueModule } from '@queue/queue.factory';
 
+import { NodeMetricsPublisher } from './node-metrics.publisher';
 import { NodesQueuesService } from './nodes-queues.service';
 import {
     NodeHealthCheckQueueProcessor,
@@ -42,5 +43,5 @@ export const NodesQueuesModule = createDomainQueueModule({
     queues,
     service: NodesQueuesService,
     imports: [CqrsModule],
-    extraProviders: useQueueProcessor() ? [UsageSnapshotIngestService] : [],
+    extraProviders: useQueueProcessor() ? [UsageSnapshotIngestService, NodeMetricsPublisher] : [],
 });

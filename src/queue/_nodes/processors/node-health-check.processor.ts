@@ -60,18 +60,23 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
                         message = statResult.message ?? 'Unknown error';
                         attempts++;
 
-                        this.logger.warn(
-                            `Node ${nodeUuid}, ${connectionOpts.address}:${connectionOpts.port} – health check attempt ${attempts} of ${attemptsLimit}, message: ${message}`,
-                        );
+                        if (attempts < attemptsLimit) {
+                            this.logger.debug(
+                                `Node ${nodeUuid}, ${connectionOpts.address}:${connectionOpts.port} – health check attempt ${attempts} of ${attemptsLimit}, message: ${message}`,
+                            );
+                            await new Promise((resolve) => setTimeout(resolve, 500));
+                        }
 
                         continue;
                     default:
                         message = 'Unknown error';
-                        this.logger.error(
-                            `Node ${nodeUuid}, ${connectionOpts.address}:${connectionOpts.port} – health check attempt ${attempts} of ${attemptsLimit}, message: ${message}`,
-                        );
-
                         attempts++;
+                        if (attempts < attemptsLimit) {
+                            this.logger.debug(
+                                `Node ${nodeUuid}, ${connectionOpts.address}:${connectionOpts.port} – health check attempt ${attempts} of ${attemptsLimit}, message: ${message}`,
+                            );
+                            await new Promise((resolve) => setTimeout(resolve, 500));
+                        }
                         continue;
                 }
             }
@@ -185,9 +190,9 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             );
         }
 
-        this.logger.warn(
-            `Lost connection to Node ${nodeUuid}, ${newNodeEntity.response.address}:${newNodeEntity.response.port}, message: ${message}`,
-        );
+        const logMessage = `Lost connection to Node ${nodeUuid}, ${newNodeEntity.response.address}:${newNodeEntity.response.port}, message: ${message}`;
+        if (isConnected) this.logger.warn(logMessage);
+        else this.logger.debug(logMessage);
 
         return;
     }

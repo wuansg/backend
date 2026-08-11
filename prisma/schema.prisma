@@ -249,6 +249,7 @@ model NodeUsageSnapshotInbox {
 
   @@id([nodeUuid, generation, sequence])
   @@index([nodeUuid, appliedAt, sequence])
+  @@index([appliedAt])
   @@map("node_usage_snapshot_inbox")
 }
 model NodesUserUsageHistory {

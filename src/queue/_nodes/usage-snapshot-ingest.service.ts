@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
 import {
     AxiosService,
@@ -9,6 +9,8 @@ import {
     UsageSnapshotCounter,
 } from '@common/axios';
 import { PrismaService } from '@common/database/prisma.service';
+
+import { buildNodeMetricsFromSnapshots, NodeMetricsPublisher } from './node-metrics.publisher';
 
 type SnapshotStateRow = {
     generation: string;
@@ -24,11 +26,10 @@ type InboxRow = {
 
 @Injectable()
 export class UsageSnapshotIngestService {
-    private readonly logger = new Logger(UsageSnapshotIngestService.name);
-
     constructor(
         private readonly axios: AxiosService,
         private readonly prisma: PrismaService,
+        private readonly nodeMetricsPublisher: NodeMetricsPublisher,
     ) {}
 
     public async isActive(nodeUuid: string): Promise<boolean> {
@@ -42,7 +43,6 @@ export class UsageSnapshotIngestService {
 
     public async recordError(nodeUuid: string, error: unknown): Promise<void> {
         const message = error instanceof Error ? error.message : String(error);
-        this.logger.error(`Usage snapshot ingestion failed for ${nodeUuid}: ${message}`);
         await this.prisma
             .$executeRaw(Prisma.sql`
             UPDATE node_usage_snapshot_state
@@ -196,7 +196,7 @@ export class UsageSnapshotIngestService {
         userMultiplier: string,
         nodeMultiplier: string,
     ): Promise<void> {
-        await this.prisma.$transaction(async (tx) => {
+        const appliedSnapshots = await this.prisma.$transaction(async (tx) => {
             const rows = await tx.$queryRaw<InboxRow[]>(Prisma.sql`
                 SELECT generation, sequence, payload
                 FROM node_usage_snapshot_inbox
@@ -205,6 +205,7 @@ export class UsageSnapshotIngestService {
                 LIMIT 500
                 FOR UPDATE
             `);
+            const snapshots: UsageSnapshot[] = [];
             for (const row of rows) {
                 const snapshot = row.payload as UsageSnapshot;
                 await this.applySnapshot(
@@ -229,8 +230,13 @@ export class UsageSnapshotIngestService {
                         updated_at = now()
                     WHERE node_uuid = ${nodeUuid}::uuid
                 `);
+                snapshots.push(snapshot);
             }
+            return snapshots;
         });
+
+        const metrics = buildNodeMetricsFromSnapshots(nodeUuid, appliedSnapshots);
+        if (metrics) this.nodeMetricsPublisher.publish(metrics);
     }
 
     private async applySnapshot(

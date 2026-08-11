@@ -43,6 +43,7 @@ import { GetNodeJwtCommand } from '@modules/keygen/commands/get-node-jwt';
 import { fail, ok, TResult } from '../types';
 import { INodeConnectionOpts, INodeRequestOpts, IMtlsOptions } from './axios.interfaces';
 import { MtlsSocksProxyAgent } from './mtls-agent';
+import { retryTransient } from './transient-retry';
 
 type CoreStartRequest = (
     | {
@@ -410,16 +411,20 @@ export class AxiosService {
             '/node/stats/usage-snapshots/status',
             opts,
         );
-        try {
-            const { data } = await this.axiosInstance.get<{ response: UsageSnapshotStatus }>(url, {
-                timeout: 15_000,
-                httpsAgent,
-            });
-            return data.response;
-        } catch (error) {
-            if (error instanceof AxiosError && error.response?.status === 404) return null;
-            throw error;
-        }
+        return this.retryUsageSnapshotRequest('status', async () => {
+            try {
+                const { data } = await this.axiosInstance.get<{
+                    response: UsageSnapshotStatus;
+                }>(url, {
+                    timeout: 15_000,
+                    httpsAgent,
+                });
+                return data.response;
+            } catch (error) {
+                if (error instanceof AxiosError && error.response?.status === 404) return null;
+                throw error;
+            }
+        });
     }
 
     public async activateUsageSnapshots(opts: INodeConnectionOpts): Promise<UsageSnapshotStatus> {
@@ -427,12 +432,14 @@ export class AxiosService {
             '/node/stats/usage-snapshots/activate',
             opts,
         );
-        const { data } = await this.axiosInstance.post<{ response: UsageSnapshotStatus }>(
-            url,
-            {},
-            { timeout: 15_000, httpsAgent },
-        );
-        return data.response;
+        return this.retryUsageSnapshotRequest('activate', async () => {
+            const { data } = await this.axiosInstance.post<{ response: UsageSnapshotStatus }>(
+                url,
+                {},
+                { timeout: 15_000, httpsAgent },
+            );
+            return data.response;
+        });
     }
 
     public async pullUsageSnapshots(
@@ -443,10 +450,12 @@ export class AxiosService {
             '/node/stats/usage-snapshots/pull',
             opts,
         );
-        const { data } = await this.axiosInstance.post<{
-            response: { generation: string; snapshots: UsageSnapshot[]; hasMore: boolean };
-        }>(url, request, { timeout: 30_000, httpsAgent });
-        return data.response;
+        return this.retryUsageSnapshotRequest('pull', async () => {
+            const { data } = await this.axiosInstance.post<{
+                response: { generation: string; snapshots: UsageSnapshot[]; hasMore: boolean };
+            }>(url, request, { timeout: 30_000, httpsAgent });
+            return data.response;
+        });
     }
 
     public async ackUsageSnapshots(
@@ -457,12 +466,23 @@ export class AxiosService {
             '/node/stats/usage-snapshots/ack',
             opts,
         );
-        const { data } = await this.axiosInstance.post<{ response: UsageSnapshotStatus }>(
-            url,
-            request,
-            { timeout: 15_000, httpsAgent },
-        );
-        return data.response;
+        return this.retryUsageSnapshotRequest('ack', async () => {
+            const { data } = await this.axiosInstance.post<{ response: UsageSnapshotStatus }>(
+                url,
+                request,
+                { timeout: 15_000, httpsAgent },
+            );
+            return data.response;
+        });
+    }
+
+    private retryUsageSnapshotRequest<T>(label: string, operation: () => Promise<T>): Promise<T> {
+        return retryTransient(operation, {
+            onRetry: (error) => {
+                const message = error instanceof Error ? error.message : String(error);
+                this.logger.warn(`Usage snapshot ${label} request failed, retrying: ${message}`);
+            },
+        });
     }
 
     /*

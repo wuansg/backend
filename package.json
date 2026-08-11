@@ -22,6 +22,7 @@
     "build:seed": "NODE_ENV=production BUILD_SEED=1 rspack build",
     "test:sing-box": "node -r ts-node/register/transpile-only -r tsconfig-paths/register scripts/test-sing-box-config.ts",
     "test:opaque-json": "node -r ts-node/register/transpile-only -r tsconfig-paths/register scripts/test-opaque-json-camel-case.ts",
+    "test:usage-snapshots": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-usage-snapshot-reliability.ts",
     "test:xray-generator": "node -r ts-node/register/transpile-only -r tsconfig-paths/register scripts/test-xray-generator.ts",
     "migrate:dev": "prisma migrate dev",
     "migrate:generate": "prisma generate",

@@ -7,7 +7,6 @@ import { CommandBus } from '@nestjs/cqrs';
 import { GetCombinedStatsCommand } from '@remnawave/node-contract';
 
 import { AxiosService } from '@common/axios';
-import { RawCacheService } from '@common/raw-cache';
 import { multiplyConsumption } from '@common/utils/nano';
 
 import { RecordHostUsageCommand } from '@modules/hosts-usage-history/commands/record-host-usage';
@@ -15,15 +14,11 @@ import { NodesUsageHistoryEntity } from '@modules/nodes-usage-history';
 import { UpsertHistoryEntryCommand } from '@modules/nodes-usage-history/commands/upsert-history-entry';
 import { IncrementUsedTrafficCommand } from '@modules/nodes/commands/increment-used-traffic';
 
-import {
-    INodeMetrics,
-    NODE_METRICS_MESSAGE_CHANNEL,
-} from '@scheduler/tasks/export-metrics/node-metrics.message.interface';
-
 import { QUEUES_NAMES } from '@queue/queue.enum';
 
 import { NODES_JOB_NAMES } from '../constants/nodes-job-name.constant';
 import { IRecordNodeUsagePayload } from '../interfaces';
+import { NodeMetricsPublisher } from '../node-metrics.publisher';
 import { UsageSnapshotIngestService } from '../usage-snapshot-ingest.service';
 
 @Processor(QUEUES_NAMES.NODES.RECORD_NODE_USAGE, {
@@ -35,7 +30,7 @@ export class RecordNodeUsageQueueProcessor extends WorkerHost {
     constructor(
         private readonly commandBus: CommandBus,
         private readonly axios: AxiosService,
-        private readonly rawCacheService: RawCacheService,
+        private readonly nodeMetricsPublisher: NodeMetricsPublisher,
         private readonly usageSnapshots: UsageSnapshotIngestService,
     ) {
         super();
@@ -156,32 +151,20 @@ export class RecordNodeUsageQueueProcessor extends WorkerHost {
             });
         });
 
-        this.sendNodeMetrics({
+        this.nodeMetricsPublisher.publish({
             nodeUuid,
-            nodeOutboundsMetrics,
-            nodeInboundsMetrics,
+            inbounds: Array.from(nodeInboundsMetrics.entries()).map(([tag, metrics]) => ({
+                tag,
+                downlink: metrics.downlink,
+                uplink: metrics.uplink,
+            })),
+            outbounds: Array.from(nodeOutboundsMetrics.entries()).map(([tag, metrics]) => ({
+                tag,
+                downlink: metrics.downlink,
+                uplink: metrics.uplink,
+            })),
         });
 
         return;
-    }
-
-    private sendNodeMetrics(dto: {
-        nodeUuid: string;
-        nodeOutboundsMetrics: Map<string, { downlink: string; uplink: string }>;
-        nodeInboundsMetrics: Map<string, { downlink: string; uplink: string }>;
-    }): void {
-        this.rawCacheService.publishSafe(NODE_METRICS_MESSAGE_CHANNEL, {
-            nodeUuid: dto.nodeUuid,
-            inbounds: Array.from(dto.nodeInboundsMetrics.entries()).map(([tag, metrics]) => ({
-                tag,
-                downlink: metrics.downlink,
-                uplink: metrics.uplink,
-            })),
-            outbounds: Array.from(dto.nodeOutboundsMetrics.entries()).map(([tag, metrics]) => ({
-                tag,
-                downlink: metrics.downlink,
-                uplink: metrics.uplink,
-            })),
-        } satisfies INodeMetrics);
     }
 }
