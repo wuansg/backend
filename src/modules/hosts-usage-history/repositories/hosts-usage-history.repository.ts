@@ -867,16 +867,16 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
     ): Promise<ITopHostUser[]> {
         const query = Prisma.sql`
             SELECT
-                u.uuid as "uuid",
+                u.id as "userId",
                 u.username as "username",
                 SUM(uhuh.total_bytes) as "total"
             FROM users u
-            INNER JOIN user_hosts_usage_history uhuh ON uhuh.user_id = u.t_id
+            INNER JOIN user_hosts_usage_history uhuh ON uhuh.user_id = u.id
             WHERE
                 uhuh.host_uuid = ${hostUuid}::uuid
                 AND uhuh.created_at >= ${start}
                 AND uhuh.created_at <= ${end}
-            GROUP BY u.uuid, u.username
+            GROUP BY u.id, u.username
             ORDER BY SUM(uhuh.total_bytes) DESC
             LIMIT ${limit};
         `;

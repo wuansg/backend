@@ -35,7 +35,7 @@ export interface IHostUsageMember {
 }
 
 export interface ITopHostUser {
-    uuid: string;
+    userId: bigint;
     username: string;
     total: bigint;
 }

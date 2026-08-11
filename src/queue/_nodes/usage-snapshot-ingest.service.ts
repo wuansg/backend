@@ -245,7 +245,7 @@ export class UsageSnapshotIngestService {
         const hour = new Date(capturedAt);
         hour.setMinutes(0, 0, 0);
         const day = new Date(capturedAt);
-        day.setHours(0, 0, 0, 0);
+        day.setUTCHours(0, 0, 0, 0);
         const outbounds = aggregate(
             snapshot.counters.filter((counter) => counter.kind === 'outbound'),
         );

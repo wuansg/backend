@@ -1,4 +1,4 @@
-import { colorFromUuid } from '@kastov/uuid-color';
+import { colorFromId } from '@kastov/uuid-color';
 
 import { ITopHostUser } from '../interfaces';
 
@@ -15,7 +15,7 @@ export class GetStatsHostUsersUsageResponseModel {
         this.categories = data.categories;
         this.sparklineData = data.sparklineData;
         this.topUsers = data.topUsers.map((item) => ({
-            color: colorFromUuid(item.uuid),
+            color: colorFromId(item.userId),
             username: item.username,
             total: Number(item.total),
         }));
