@@ -26,6 +26,7 @@ import { QUEUES_NAMES } from '@queue/queue.enum';
 
 import { NODES_JOB_NAMES } from '../constants/nodes-job-name.constant';
 import { IRecordUserUsagePayload } from '../interfaces';
+import { UsageSnapshotIngestService } from '../usage-snapshot-ingest.service';
 
 type UserInboundUsageStat = {
     username: string;
@@ -48,6 +49,7 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
         private readonly usersQueuesService: UsersQueuesService,
         private readonly pushFromRedisQueueService: PushFromRedisQueueService,
         private readonly rawCacheService: RawCacheService,
+        private readonly usageSnapshots: UsageSnapshotIngestService,
     ) {
         super();
 
@@ -57,6 +59,8 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
     async process(job: Job<IRecordUserUsagePayload>) {
         try {
             const { nodeUuid, connectionOpts, consumptionMultiplier, nodeId } = job.data;
+
+            if (await this.usageSnapshots.isActive(nodeUuid)) return;
 
             const usersInboundStats = await this.axios.getUsersInboundStats(
                 {

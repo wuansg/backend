@@ -50,4 +50,20 @@ export const NodesSchema = z.object({
     xrayUptime: z.number(),
     usersOnline: z.number(),
     note: z.nullable(z.string()),
+    usageSnapshot: z
+        .object({
+            receivedThrough: z.number().int().nonnegative(),
+            appliedThrough: z.number().int().nonnegative(),
+            pending: z.number().int().nonnegative(),
+            queueBytes: z.number().int().nonnegative(),
+            lastCapturedAt: z.nullable(
+                z
+                    .string()
+                    .datetime()
+                    .transform((str) => new Date(str)),
+            ),
+            lastError: z.nullable(z.string()),
+        })
+        .nullable()
+        .optional(),
 });

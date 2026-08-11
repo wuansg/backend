@@ -44,6 +44,14 @@ export class NodeResponseModel {
     public usersOnline: number;
     public system: INodeSystem | null;
     public versions: INodeVersions | null;
+    public usageSnapshot: {
+        receivedThrough: number;
+        appliedThrough: number;
+        pending: number;
+        queueBytes: number;
+        lastCapturedAt: Date | null;
+        lastError: string | null;
+    } | null;
 
     constructor(data: NodesEntity, hotCache: INodeHotCache) {
         this.uuid = data.uuid;
@@ -85,5 +93,15 @@ export class NodeResponseModel {
         this.usersOnline = hotCache.onlineUsers;
         this.versions = hotCache.versions;
         this.xrayUptime = hotCache.xrayUptime;
+        this.usageSnapshot = data.usageSnapshotState
+            ? {
+                  receivedThrough: Number(data.usageSnapshotState.receivedThrough),
+                  appliedThrough: Number(data.usageSnapshotState.appliedThrough),
+                  pending: data.usageSnapshotState.pending,
+                  queueBytes: Number(data.usageSnapshotState.nodeQueueBytes),
+                  lastCapturedAt: data.usageSnapshotState.lastCapturedAt,
+                  lastError: data.usageSnapshotState.lastError,
+              }
+            : null;
     }
 }

@@ -25,6 +25,7 @@ export type INodesWithResolvedInbounds = Prisma.NodesGetPayload<{
             };
         };
         provider: true;
+        usageSnapshotState: true;
     };
 }>;
 
@@ -35,6 +36,7 @@ const INCLUDE_RESOLVED_INBOUNDS = {
         },
     },
     provider: true,
+    usageSnapshotState: true,
 } as const;
 
 @Injectable()
@@ -181,7 +183,7 @@ export class NodesRepository implements ICrud<NodesEntity> {
 
     public async update({ uuid, ...data }: Partial<NodesEntity>): Promise<NodesEntity> {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { provider, activeInbounds, ...prismaData } = data;
+        const { provider, activeInbounds, usageSnapshotState, ...prismaData } = data;
 
         const result = await this.prisma.tx.nodes.update({
             where: { uuid },

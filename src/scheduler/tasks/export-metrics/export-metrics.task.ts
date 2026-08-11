@@ -5,6 +5,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 import { Cron } from '@nestjs/schedule';
 
+import { PrismaService } from '@common/database/prisma.service';
 import { RawCacheService } from '@common/raw-cache';
 import { RuntimeMetric } from '@common/runtime-metrics/interfaces';
 import { TResult } from '@common/types';
@@ -89,7 +90,19 @@ export class ExportMetricsTask {
         @InjectMetric(METRIC_NAMES.NODE_CPU_LOAD_AVG_15M)
         public nodeCpuLoadAvg15m: Gauge<string>,
 
+        @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_PENDING)
+        public nodeUsageSnapshotPending: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_QUEUE_BYTES)
+        public nodeUsageSnapshotQueueBytes: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_LAG_SECONDS)
+        public nodeUsageSnapshotLagSeconds: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_SEQUENCE_GAP)
+        public nodeUsageSnapshotSequenceGap: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_ERROR)
+        public nodeUsageSnapshotError: Gauge<string>,
+
         private readonly queryBus: QueryBus,
+        private readonly prisma: PrismaService,
     ) {
         this.lastUserStatsUpdateTime = 0;
         this.CACHE_TTL_MS = 60000;
@@ -105,6 +118,7 @@ export class ExportMetricsTask {
             await this.reportShortUserStats();
             await this.reportNodesStats();
             await this.reportRuntimeMetrics();
+            await this.reportUsageSnapshotStats();
         } catch (error) {
             this.logger.error(`Error in ExportMetricsTask: ${error}`);
         }
@@ -308,6 +322,44 @@ export class ExportMetricsTask {
             }
         } catch (error) {
             this.logger.error(`Error in reportRuntimeMetrics: ${error}`);
+        }
+    }
+
+    private async reportUsageSnapshotStats() {
+        const rows = await this.prisma.$queryRaw<
+            Array<{
+                nodeUuid: string;
+                pending: number;
+                nodeQueueBytes: bigint;
+                receivedThrough: bigint;
+                appliedThrough: bigint;
+                lagSeconds: number | null;
+                hasError: boolean;
+            }>
+        >`
+            SELECT node_uuid AS "nodeUuid", pending,
+                   node_queue_bytes AS "nodeQueueBytes",
+                   received_through AS "receivedThrough",
+                   applied_through AS "appliedThrough",
+                   EXTRACT(EPOCH FROM (now() - last_captured_at))::double precision AS "lagSeconds",
+                   last_error IS NOT NULL AS "hasError"
+            FROM node_usage_snapshot_state
+        `;
+        this.nodeUsageSnapshotPending.reset();
+        this.nodeUsageSnapshotQueueBytes.reset();
+        this.nodeUsageSnapshotLagSeconds.reset();
+        this.nodeUsageSnapshotSequenceGap.reset();
+        this.nodeUsageSnapshotError.reset();
+        for (const row of rows) {
+            const labels = { node_uuid: row.nodeUuid };
+            this.nodeUsageSnapshotPending.set(labels, row.pending);
+            this.nodeUsageSnapshotQueueBytes.set(labels, Number(row.nodeQueueBytes));
+            this.nodeUsageSnapshotLagSeconds.set(labels, Math.max(0, row.lagSeconds ?? 0));
+            this.nodeUsageSnapshotSequenceGap.set(
+                labels,
+                Number(row.receivedThrough - row.appliedThrough),
+            );
+            this.nodeUsageSnapshotError.set(labels, row.hasError ? 1 : 0);
         }
     }
 

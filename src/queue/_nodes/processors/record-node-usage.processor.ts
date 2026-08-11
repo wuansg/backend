@@ -24,6 +24,7 @@ import { QUEUES_NAMES } from '@queue/queue.enum';
 
 import { NODES_JOB_NAMES } from '../constants/nodes-job-name.constant';
 import { IRecordNodeUsagePayload } from '../interfaces';
+import { UsageSnapshotIngestService } from '../usage-snapshot-ingest.service';
 
 @Processor(QUEUES_NAMES.NODES.RECORD_NODE_USAGE, {
     concurrency: 40,
@@ -35,13 +36,29 @@ export class RecordNodeUsageQueueProcessor extends WorkerHost {
         private readonly commandBus: CommandBus,
         private readonly axios: AxiosService,
         private readonly rawCacheService: RawCacheService,
+        private readonly usageSnapshots: UsageSnapshotIngestService,
     ) {
         super();
     }
 
     async process(job: Job<IRecordNodeUsagePayload>) {
         try {
-            const { nodeUuid, connectionOpts, nodeConsumptionMultiplier } = job.data;
+            const {
+                nodeId,
+                nodeUuid,
+                connectionOpts,
+                consumptionMultiplier,
+                nodeConsumptionMultiplier,
+            } = job.data;
+
+            const snapshotSupported = await this.usageSnapshots.ingest(
+                nodeUuid,
+                BigInt(nodeId),
+                connectionOpts,
+                consumptionMultiplier,
+                nodeConsumptionMultiplier,
+            );
+            if (snapshotSupported) return;
 
             const combinedStats = await this.axios.getCombinedStats(
                 {
@@ -59,6 +76,7 @@ export class RecordNodeUsageQueueProcessor extends WorkerHost {
 
             return this.handleOk(nodeUuid, nodeConsumptionMultiplier, combinedStats.response);
         } catch (error) {
+            await this.usageSnapshots.recordError(job.data.nodeUuid, error);
             this.logger.error(
                 `Error handling "${NODES_JOB_NAMES.RECORD_NODE_USAGE}" job: ${error}`,
             );

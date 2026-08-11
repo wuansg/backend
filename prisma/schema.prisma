@@ -208,6 +208,8 @@ model Nodes {
   connectedUsers               UserTraffic[]
   nodeMetas                    NodeMeta[]
   torrentBlockerReports        TorrentBlockerReports[]
+  usageSnapshotState           NodeUsageSnapshotState?
+  usageSnapshotInbox           NodeUsageSnapshotInbox[]
 
   activeConfigProfile ConfigProfiles? @relation(fields: [activeConfigProfileUuid], references: [uuid], onDelete: SetNull)
   provider            InfraProviders? @relation(fields: [providerUuid], references: [uuid], onDelete: SetNull)
@@ -217,6 +219,38 @@ model Nodes {
   @@map("nodes")
 }
 
+model NodeUsageSnapshotState {
+  nodeUuid        String   @id @map("node_uuid") @db.Uuid
+  generation      String   @map("generation")
+  receivedThrough BigInt   @default(0) @map("received_through")
+  appliedThrough  BigInt   @default(0) @map("applied_through")
+  pending         Int      @default(0) @map("pending")
+  nodeQueueBytes  BigInt   @default(0) @map("node_queue_bytes")
+  lastCapturedAt  DateTime? @map("last_captured_at")
+  lastError       String?  @map("last_error")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  node Nodes @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+
+  @@map("node_usage_snapshot_state")
+}
+
+model NodeUsageSnapshotInbox {
+  nodeUuid    String   @map("node_uuid") @db.Uuid
+  generation  String   @map("generation")
+  sequence    BigInt   @map("sequence")
+  capturedAt  DateTime @map("captured_at")
+  core        String   @map("core")
+  payload     Json     @map("payload")
+  appliedAt   DateTime? @map("applied_at")
+  receivedAt  DateTime @default(now()) @map("received_at")
+
+  node Nodes @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+
+  @@id([nodeUuid, generation, sequence])
+  @@index([nodeUuid, appliedAt, sequence])
+  @@map("node_usage_snapshot_inbox")
+}
 model NodesUserUsageHistory {
   nodeId BigInt @map("node_id")
   userId BigInt @map("user_id")

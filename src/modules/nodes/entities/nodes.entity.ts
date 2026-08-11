@@ -1,4 +1,4 @@
-import { Nodes } from '@prisma/client';
+import { NodeUsageSnapshotState, Nodes } from '@prisma/client';
 
 import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
 import { InfraProviderEntity } from '@modules/infra-billing/entities';
@@ -39,6 +39,7 @@ export class NodesEntity implements Nodes {
     public provider: InfraProviderEntity | null;
     public activePluginUuid: string | null;
     public note: string | null;
+    public usageSnapshotState: NodeUsageSnapshotState | null;
 
     constructor(node: Partial<INodesWithResolvedInbounds & Nodes>) {
         Object.assign(this, node);

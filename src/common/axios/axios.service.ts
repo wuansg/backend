@@ -91,6 +91,33 @@ const ZSTD_OPTIONS: ZstdOptions = {
     chunkSize: 1024 * 1024,
 };
 
+export interface UsageSnapshotCounter {
+    kind: 'user' | 'inbound' | 'outbound';
+    name: string;
+    inbound?: string;
+    direction: 'uplink' | 'downlink';
+    value: number;
+}
+
+export interface UsageSnapshot {
+    generation: string;
+    sequence: number;
+    capturedAt: string;
+    core: string;
+    counters: UsageSnapshotCounter[];
+}
+
+export interface UsageSnapshotStatus {
+    active: boolean;
+    generation: string;
+    oldestSequence: number;
+    latestSequence: number;
+    ackedThrough: number;
+    pending: number;
+    bytes: number;
+    lastCapturedAt?: string;
+}
+
 @Injectable()
 export class AxiosService {
     private readonly logger = new Logger(AxiosService.name);
@@ -162,6 +189,16 @@ export class AxiosService {
 
     private getNodeUrl(url: string, path: string, port: null | number): string {
         return port ? `https://${url}:${port}${path}` : `https://${url}${path}`;
+    }
+
+    private resolveAgentAndUrl(
+        path: string,
+        opts: INodeConnectionOpts,
+    ): { url: string; httpsAgent: https.Agent } {
+        return {
+            url: this.getNodeUrl(opts.address, path, opts.port),
+            httpsAgent: this.resolveAgent(opts.proxyUrl),
+        };
     }
 
     private async request<TResponse extends { response: unknown }>(
@@ -364,6 +401,68 @@ export class AxiosService {
             handle500: true,
             logAxiosError: false,
         });
+    }
+
+    public async getUsageSnapshotStatus(
+        opts: INodeConnectionOpts,
+    ): Promise<UsageSnapshotStatus | null> {
+        const { url, httpsAgent } = this.resolveAgentAndUrl(
+            '/node/stats/usage-snapshots/status',
+            opts,
+        );
+        try {
+            const { data } = await this.axiosInstance.get<{ response: UsageSnapshotStatus }>(url, {
+                timeout: 15_000,
+                httpsAgent,
+            });
+            return data.response;
+        } catch (error) {
+            if (error instanceof AxiosError && error.response?.status === 404) return null;
+            throw error;
+        }
+    }
+
+    public async activateUsageSnapshots(opts: INodeConnectionOpts): Promise<UsageSnapshotStatus> {
+        const { url, httpsAgent } = this.resolveAgentAndUrl(
+            '/node/stats/usage-snapshots/activate',
+            opts,
+        );
+        const { data } = await this.axiosInstance.post<{ response: UsageSnapshotStatus }>(
+            url,
+            {},
+            { timeout: 15_000, httpsAgent },
+        );
+        return data.response;
+    }
+
+    public async pullUsageSnapshots(
+        request: { afterSequence: number; limit?: number; maxBytes?: number },
+        opts: INodeConnectionOpts,
+    ): Promise<{ generation: string; snapshots: UsageSnapshot[]; hasMore: boolean }> {
+        const { url, httpsAgent } = this.resolveAgentAndUrl(
+            '/node/stats/usage-snapshots/pull',
+            opts,
+        );
+        const { data } = await this.axiosInstance.post<{
+            response: { generation: string; snapshots: UsageSnapshot[]; hasMore: boolean };
+        }>(url, request, { timeout: 30_000, httpsAgent });
+        return data.response;
+    }
+
+    public async ackUsageSnapshots(
+        request: { generation: string; throughSequence: number },
+        opts: INodeConnectionOpts,
+    ): Promise<UsageSnapshotStatus> {
+        const { url, httpsAgent } = this.resolveAgentAndUrl(
+            '/node/stats/usage-snapshots/ack',
+            opts,
+        );
+        const { data } = await this.axiosInstance.post<{ response: UsageSnapshotStatus }>(
+            url,
+            request,
+            { timeout: 15_000, httpsAgent },
+        );
+        return data.response;
     }
 
     /*

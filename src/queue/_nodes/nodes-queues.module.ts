@@ -17,6 +17,7 @@ import {
     QueryNodesQueueProcessor,
     NodePluginsProcessor,
 } from './processors';
+import { UsageSnapshotIngestService } from './usage-snapshot-ingest.service';
 
 const queues = [
     { name: QUEUES_NAMES.NODES.START, processor: StartNodeProcessor },
@@ -39,4 +40,5 @@ export const NodesQueuesModule = createDomainQueueModule({
     queues,
     service: NodesQueuesService,
     imports: [CqrsModule],
+    extraProviders: [UsageSnapshotIngestService],
 });

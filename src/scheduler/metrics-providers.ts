@@ -175,6 +175,31 @@ export const METRIC_PROVIDERS = [
         help: 'Node basic info',
         labelNames: ['node_uuid', 'node_name', 'node_country_emoji', 'provider_name', 'tags'],
     }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_USAGE_SNAPSHOT_PENDING,
+        help: 'Number of snapshots still queued on the node',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_USAGE_SNAPSHOT_QUEUE_BYTES,
+        help: 'Durable usage snapshot queue size on the node in bytes',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_USAGE_SNAPSHOT_LAG_SECONDS,
+        help: 'Seconds since the newest captured usage snapshot',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_USAGE_SNAPSHOT_SEQUENCE_GAP,
+        help: 'Received but not yet applied snapshot sequence count',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_USAGE_SNAPSHOT_ERROR,
+        help: 'Whether the most recent snapshot ingestion attempt failed',
+        labelNames: ['node_uuid'],
+    }),
 ];
 
 export interface INodeBaseMetricLabels {
