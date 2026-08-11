@@ -1,5 +1,7 @@
 import { CqrsModule } from '@nestjs/cqrs';
 
+import { useQueueProcessor } from '@common/utils/startup-app';
+
 import { QUEUES_NAMES } from '@queue/queue.enum';
 import { createDomainQueueModule } from '@queue/queue.factory';
 
@@ -40,5 +42,5 @@ export const NodesQueuesModule = createDomainQueueModule({
     queues,
     service: NodesQueuesService,
     imports: [CqrsModule],
-    extraProviders: [UsageSnapshotIngestService],
+    extraProviders: useQueueProcessor() ? [UsageSnapshotIngestService] : [],
 });
