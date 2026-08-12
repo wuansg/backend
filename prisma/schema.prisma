@@ -169,6 +169,7 @@ model Nodes {
   address  String  @unique @map("address")
   port     Int?    @map("port")
   proxyUrl String? @map("proxy_url")
+  forwardingConfig Json @default("{\"enabled\":false,\"listenInterface\":\"auto\",\"rules\":[]}") @map("forwarding_config")
 
   activeConfigProfileUuid String? @map("active_config_profile_uuid") @db.Uuid
   activePluginUuid        String? @map("active_plugin_uuid") @db.Uuid

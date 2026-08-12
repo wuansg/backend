@@ -1184,4 +1184,16 @@ export const ERRORS = {
         message: 'Get stats digest error',
         httpCode: 500,
     },
+    FORWARDING_PORT_CONFLICT: {
+        code: 'A237',
+        message: 'Forwarding port conflicts with an existing listener',
+        httpCode: 409,
+        withMessage: (message: string) => ({ code: 'A237', message, httpCode: 409 }),
+    },
+    FORWARDING_APPLY_ERROR: {
+        code: 'A238',
+        message: 'Failed to apply node forwarding configuration',
+        httpCode: 422,
+        withMessage: (message: string) => ({ code: 'A238', message, httpCode: 422 }),
+    },
 } as const;

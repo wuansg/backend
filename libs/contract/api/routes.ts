@@ -53,6 +53,14 @@ export const REST_API = {
         UPDATE: `${ROOT}/${CONTROLLERS.NODES_CONTROLLER}/${CONTROLLERS.NODES_ROUTES.UPDATE}`,
         DELETE: (uuid: string) =>
             `${ROOT}/${CONTROLLERS.NODES_CONTROLLER}/${CONTROLLERS.NODES_ROUTES.DELETE(uuid)}`,
+        FORWARDING: {
+            GET: (uuid: string) =>
+                `${ROOT}/${CONTROLLERS.NODES_CONTROLLER}/${CONTROLLERS.NODES_ROUTES.FORWARDING.GET(uuid)}`,
+            UPDATE: (uuid: string) =>
+                `${ROOT}/${CONTROLLERS.NODES_CONTROLLER}/${CONTROLLERS.NODES_ROUTES.FORWARDING.UPDATE(uuid)}`,
+            SYNC: (uuid: string) =>
+                `${ROOT}/${CONTROLLERS.NODES_CONTROLLER}/${CONTROLLERS.NODES_ROUTES.FORWARDING.SYNC(uuid)}`,
+        },
         TAGS: {
             GET: `${ROOT}/${CONTROLLERS.NODES_CONTROLLER}/${CONTROLLERS.NODES_ROUTES.TAGS.GET}`,
         },

@@ -1,4 +1,4 @@
-import { NodeUsageSnapshotState, Nodes } from '@prisma/client';
+import { NodeUsageSnapshotState, Nodes, Prisma } from '@prisma/client';
 
 import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
 import { InfraProviderEntity } from '@modules/infra-billing/entities';
@@ -12,6 +12,7 @@ export class NodesEntity implements Nodes {
     public address: string;
     public port: null | number;
     public proxyUrl: string | null;
+    public forwardingConfig: Prisma.JsonValue;
     public isConnected: boolean;
     public isConnecting: boolean;
     public isDisabled: boolean;
@@ -43,6 +44,11 @@ export class NodesEntity implements Nodes {
 
     constructor(node: Partial<INodesWithResolvedInbounds & Nodes>) {
         Object.assign(this, node);
+        this.forwardingConfig ??= {
+            enabled: false,
+            listenInterface: 'auto',
+            rules: [],
+        };
 
         if (node.configProfileInboundsToNodes) {
             this.activeInbounds = node.configProfileInboundsToNodes.map(

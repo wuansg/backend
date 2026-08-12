@@ -24,6 +24,7 @@ import {
     UpdateNodeBodyDto,
 } from './dtos';
 import { NodesEntity } from './entities';
+import { NodeForwardingService } from './forwarding';
 import { NodeResponseModel } from './models';
 import { NodesSystemCacheService } from './nodes-system-cache.service';
 import { NodesRepository } from './repositories/nodes.repository';
@@ -39,6 +40,7 @@ export class NodesService {
         private readonly queryBus: QueryBus,
         private readonly commandBus: CommandBus,
         private readonly nodesSystemCacheService: NodesSystemCacheService,
+        private readonly nodeForwardingService: NodeForwardingService,
     ) {}
 
     public async createNode(body: CreateNodeBodyDto): Promise<TResult<NodeResponseModel>> {
@@ -269,6 +271,19 @@ export class NodesService {
                     );
 
                     if (areAllInboundsFromConfigProfile) {
+                        const selectedInbounds = inbounds.filter((inbound) =>
+                            configProfile.activeInbounds.includes(inbound.uuid),
+                        );
+                        const forwardingConflict = this.nodeForwardingService.validateNodeInbounds(
+                            node,
+                            selectedInbounds,
+                            nodeData.address?.trim() ?? node.address,
+                        );
+                        if (forwardingConflict) {
+                            return fail(
+                                ERRORS.FORWARDING_PORT_CONFLICT.withMessage(forwardingConflict),
+                            );
+                        }
                         await this.nodesRepository.removeInboundsFromNode(node.uuid);
 
                         await this.nodesRepository.addInboundsToNode(
@@ -278,6 +293,15 @@ export class NodesService {
                     } else {
                         return fail(ERRORS.CONFIG_PROFILE_INBOUND_NOT_FOUND_IN_SPECIFIED_PROFILE);
                     }
+                }
+            } else if (nodeData.address) {
+                const forwardingConflict = this.nodeForwardingService.validateNodeInbounds(
+                    node,
+                    node.activeInbounds,
+                    nodeData.address.trim(),
+                );
+                if (forwardingConflict) {
+                    return fail(ERRORS.FORWARDING_PORT_CONFLICT.withMessage(forwardingConflict));
                 }
             }
 

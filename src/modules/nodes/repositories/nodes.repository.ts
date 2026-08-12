@@ -183,7 +183,8 @@ export class NodesRepository implements ICrud<NodesEntity> {
 
     public async update({ uuid, ...data }: Partial<NodesEntity>): Promise<NodesEntity> {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { provider, activeInbounds, usageSnapshotState, ...prismaData } = data;
+        const { provider, activeInbounds, usageSnapshotState, forwardingConfig, ...prismaData } =
+            data;
 
         const result = await this.prisma.tx.nodes.update({
             where: { uuid },
@@ -192,6 +193,20 @@ export class NodesRepository implements ICrud<NodesEntity> {
         });
 
         return new NodesEntity(result);
+    }
+
+    public async updateForwardingConfig(
+        uuid: string,
+        forwardingConfig: Prisma.InputJsonValue,
+    ): Promise<NodesEntity> {
+        const result = await this.prisma.tx.nodes.update({
+            where: { uuid },
+            data: { forwardingConfig } as unknown as Prisma.NodesUpdateInput,
+            include: INCLUDE_RESOLVED_INBOUNDS,
+        });
+        const entity = new NodesEntity(result);
+        entity.forwardingConfig = forwardingConfig as unknown as Prisma.JsonValue;
+        return entity;
     }
 
     public async findByCriteria(dto: Partial<NodesEntity>): Promise<NodesEntity[]> {

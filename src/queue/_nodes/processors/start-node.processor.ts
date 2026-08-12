@@ -21,6 +21,7 @@ import { GetPreparedConfigWithUsersQuery } from '@modules/users/queries/get-prep
 import { QUEUES_NAMES } from '@queue/queue.enum';
 
 import { NODES_JOB_NAMES } from '../constants/nodes-job-name.constant';
+import { syncForwardingIfSupported } from '../forwarding-sync.util';
 import { NodesQueuesService } from '../nodes-queues.service';
 
 @Processor(QUEUES_NAMES.NODES.START, {
@@ -262,6 +263,17 @@ export class StartNodeProcessor extends WorkerHost {
             }
 
             const nodeResponse = startNodeResult.response;
+
+            const forwardingError = await syncForwardingIfSupported(
+                this.axios,
+                node,
+                xrayStatusResponse.response,
+            );
+            if (forwardingError) {
+                this.logger.warn(
+                    `Forwarding sync failed for node ${node.uuid}; keeping the last applied rules: ${forwardingError}`,
+                );
+            }
 
             await this.rawCacheService.setMany([
                 {

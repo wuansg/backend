@@ -22,6 +22,7 @@ import { NodesQueuesService } from '@queue/_nodes';
 
 import { QUEUES_NAMES } from '../../queue.enum';
 import { NODES_JOB_NAMES } from '../constants';
+import { syncForwardingIfSupported } from '../forwarding-sync.util';
 
 @Processor(
     {
@@ -338,6 +339,17 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                         return;
                     case true:
                         const nodeResponse = startXrayResponse.response;
+
+                        const forwardingError = await syncForwardingIfSupported(
+                            this.axios,
+                            node,
+                            xrayStatusResponse.response,
+                        );
+                        if (forwardingError) {
+                            this.logger.warn(
+                                `Forwarding sync failed for node ${node.uuid}; keeping the last applied rules: ${forwardingError}`,
+                            );
+                        }
 
                         await this.rawCacheService.setMany([
                             {

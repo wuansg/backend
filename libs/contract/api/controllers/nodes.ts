@@ -10,6 +10,12 @@ export const NODES_ROUTES = {
     UPDATE: '', // update, patch
     DELETE: (uuid: string) => `${uuid}`, // delete by UUID
 
+    FORWARDING: {
+        GET: (uuid: string) => `${uuid}/forwarding`,
+        UPDATE: (uuid: string) => `${uuid}/forwarding`,
+        SYNC: (uuid: string) => `${uuid}/forwarding/${NODE_ACTIONS_ROUTE}/sync`,
+    },
+
     ACTIONS: {
         ENABLE: (uuid: string) => `${uuid}/${NODE_ACTIONS_ROUTE}/enable`,
         DISABLE: (uuid: string) => `${uuid}/${NODE_ACTIONS_ROUTE}/disable`,

@@ -28,6 +28,9 @@ import {
     UpdateNodeCommand,
     BulkNodesActionsCommand,
     BulkNodesUpdateCommand,
+    GetNodeForwardingCommand,
+    SyncNodeForwardingCommand,
+    UpdateNodeForwardingCommand,
 } from '@libs/contracts/commands';
 
 import {
@@ -49,7 +52,13 @@ import {
     RestartAllNodesBodyDto,
     ReorderNodesResponseDto,
     NodeResponseDto,
+    GetNodeForwardingParamDto,
+    GetNodeForwardingResponseDto,
+    UpdateNodeForwardingParamDto,
+    UpdateNodeForwardingBodyDto,
+    SyncNodeForwardingParamDto,
 } from './dtos';
+import { NodeForwardingService } from './forwarding';
 import { GetAllNodesTagsResponseModel } from './models';
 import { NodesService } from './nodes.service';
 
@@ -61,7 +70,46 @@ import { NodesService } from './nodes.service';
 @UseFilters(HttpExceptionFilter)
 @Controller(NODES_CONTROLLER)
 export class NodesController {
-    constructor(private readonly nodesService: NodesService) {}
+    constructor(
+        private readonly nodesService: NodesService,
+        private readonly nodeForwardingService: NodeForwardingService,
+    ) {}
+
+    @Endpoint({
+        type: GetNodeForwardingResponseDto,
+        command: GetNodeForwardingCommand,
+        httpCode: HttpStatus.OK,
+    })
+    async getNodeForwarding(
+        @Param() param: GetNodeForwardingParamDto,
+    ): Promise<GetNodeForwardingResponseDto> {
+        return { response: errorHandler(await this.nodeForwardingService.get(param.uuid)) };
+    }
+
+    @Endpoint({
+        type: GetNodeForwardingResponseDto,
+        command: UpdateNodeForwardingCommand,
+        httpCode: HttpStatus.OK,
+    })
+    async updateNodeForwarding(
+        @Param() param: UpdateNodeForwardingParamDto,
+        @Body() body: UpdateNodeForwardingBodyDto,
+    ): Promise<GetNodeForwardingResponseDto> {
+        return {
+            response: errorHandler(await this.nodeForwardingService.update(param.uuid, body)),
+        };
+    }
+
+    @Endpoint({
+        type: GetNodeForwardingResponseDto,
+        command: SyncNodeForwardingCommand,
+        httpCode: HttpStatus.OK,
+    })
+    async syncNodeForwarding(
+        @Param() param: SyncNodeForwardingParamDto,
+    ): Promise<GetNodeForwardingResponseDto> {
+        return { response: errorHandler(await this.nodeForwardingService.sync(param.uuid)) };
+    }
 
     @Endpoint({
         type: GetNodesTagsResponseDto,

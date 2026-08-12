@@ -12,6 +12,9 @@ import { fail, ok, TResult } from '@common/types';
 import { CACHE_KEYS } from '@libs/contracts/constants';
 import { ERRORS } from '@libs/contracts/constants/errors';
 
+import { NodeForwardingService } from '@modules/nodes/forwarding';
+import { NodesRepository } from '@modules/nodes/repositories/nodes.repository';
+
 import { NodesQueuesService } from '@queue/_nodes';
 
 import { ReorderConfigProfilesBodyDto } from './dtos';
@@ -24,6 +27,8 @@ import { GetConfigProfilesResponseModel } from './models/get-config-profiles.res
 import { GetSnippetsQuery } from './queries/get-snippets';
 import { ConfigProfileRepository } from './repositories/config-profile.repository';
 
+class ForwardingPortConflictError extends Error {}
+
 @Injectable()
 export class ConfigProfileService {
     private readonly logger = new Logger(ConfigProfileService.name);
@@ -33,6 +38,8 @@ export class ConfigProfileService {
         private readonly nodesQueuesService: NodesQueuesService,
         private readonly queryBus: QueryBus,
         private readonly rawCache: RawCacheService,
+        private readonly nodesRepository: NodesRepository,
+        private readonly nodeForwardingService: NodeForwardingService,
     ) {}
 
     public async getConfigProfiles(): Promise<TResult<GetConfigProfilesResponseModel>> {
@@ -263,6 +270,10 @@ export class ConfigProfileService {
                 }
             }
 
+            if (error instanceof ForwardingPortConflictError) {
+                return fail(ERRORS.FORWARDING_PORT_CONFLICT.withMessage(error.message));
+            }
+
             if (error instanceof Error) {
                 return fail(ERRORS.CONFIG_VALIDATION_ERROR.withMessage(error.message));
             }
@@ -318,6 +329,22 @@ export class ConfigProfileService {
                             rawInbound: inbound.rawInbound as unknown as object,
                         }),
                 );
+
+                for (const nodeReference of existingConfigProfile.nodes) {
+                    const node = await this.nodesRepository.findByUUID(nodeReference.uuid);
+                    if (!node) continue;
+                    const activeTags = new Set(node.activeInbounds.map((inbound) => inbound.tag));
+                    const selectedInbounds = inboundsEntities.filter((inbound) =>
+                        activeTags.has(inbound.tag),
+                    );
+                    const conflict = this.nodeForwardingService.validateNodeInbounds(
+                        node,
+                        selectedInbounds,
+                    );
+                    if (conflict) {
+                        throw new ForwardingPortConflictError(`Node ${node.name}: ${conflict}`);
+                    }
+                }
 
                 await this.syncInbounds(existingInbounds, inboundsEntities);
 

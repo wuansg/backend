@@ -1,3 +1,5 @@
+import type { NodeForwardingConfig, NodeForwardingRuntimeStatus } from '@contract/models';
+
 import { ERRORS } from '@contract/constants';
 import axios, {
     AxiosError,
@@ -118,6 +120,21 @@ export interface UsageSnapshotStatus {
     bytes: number;
     lastCapturedAt?: string;
 }
+
+export type ForwardingAgentResult<T> =
+    | { isOk: true; response: T }
+    | {
+          isOk: false;
+          status?: number;
+          code?: string;
+          message: string;
+          conflict?: {
+              protocol: 'TCP' | 'UDP' | 'TCP_UDP';
+              port: number;
+              conflictsWith: string;
+              detail?: string;
+          };
+      };
 
 @Injectable()
 export class AxiosService {
@@ -317,6 +334,71 @@ export class AxiosService {
             logAxiosError: false,
             timeout: 15_000,
         });
+    }
+
+    public async validateNodeForwarding(
+        config: NodeForwardingConfig,
+        opts: INodeConnectionOpts,
+    ): Promise<ForwardingAgentResult<{ accepted: boolean }>> {
+        return this.forwardingRequest('/node/forwarding/validate', opts, { config });
+    }
+
+    public async syncNodeForwarding(
+        config: NodeForwardingConfig,
+        opts: INodeConnectionOpts,
+    ): Promise<ForwardingAgentResult<NodeForwardingRuntimeStatus>> {
+        return this.forwardingRequest('/node/forwarding/sync', opts, { config });
+    }
+
+    public async getNodeForwardingStatus(
+        opts: INodeConnectionOpts,
+    ): Promise<ForwardingAgentResult<NodeForwardingRuntimeStatus>> {
+        return this.forwardingRequest('/node/forwarding/status', opts, undefined, 'get');
+    }
+
+    private async forwardingRequest<T>(
+        path: string,
+        opts: INodeConnectionOpts,
+        data?: unknown,
+        method: 'get' | 'post' = 'post',
+    ): Promise<ForwardingAgentResult<T>> {
+        const { url, httpsAgent } = this.resolveAgentAndUrl(path, opts);
+        try {
+            const response =
+                method === 'get'
+                    ? await this.axiosInstance.get<{ response: T }>(url, {
+                          httpsAgent,
+                          timeout: 15_000,
+                      })
+                    : await this.axiosInstance.post<{ response: T }>(url, data ?? EMPTY_BODY, {
+                          httpsAgent,
+                          timeout: 15_000,
+                      });
+            return { isOk: true, response: response.data.response };
+        } catch (error) {
+            if (error instanceof AxiosError) {
+                const body = error.response?.data as
+                    | {
+                          message?: string;
+                          code?: string;
+                          conflict?: {
+                              protocol: 'TCP' | 'UDP' | 'TCP_UDP';
+                              port: number;
+                              conflictsWith: string;
+                              detail?: string;
+                          };
+                      }
+                    | undefined;
+                return {
+                    isOk: false,
+                    status: error.response?.status,
+                    code: body?.code,
+                    message: body?.message ?? error.message,
+                    conflict: body?.conflict,
+                };
+            }
+            return { isOk: false, message: String(error) };
+        }
     }
 
     /*

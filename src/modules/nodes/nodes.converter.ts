@@ -18,6 +18,7 @@ const entityToModel = (entity: NodesEntity): Nodes => {
         address: entity.address,
         port: entity.port,
         proxyUrl: entity.proxyUrl,
+        forwardingConfig: entity.forwardingConfig,
         isConnected: entity.isConnected,
         isConnecting: entity.isConnecting,
         isDisabled: entity.isDisabled,
@@ -40,7 +41,7 @@ const entityToModel = (entity: NodesEntity): Nodes => {
         providerUuid: entity.providerUuid,
         activePluginUuid: entity.activePluginUuid,
         note: entity.note,
-    };
+    } as Nodes;
 };
 
 @Injectable()

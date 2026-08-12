@@ -58,4 +58,5 @@ jobs:
             __RW_METADATA_GIT_FRONTEND_COMMIT=${{ steps.meta.outputs.frontend_commit }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/backend:anytls-singbox-mvp
+            ghcr.io/${{ github.repository_owner }}/backend:${{ steps.meta.outputs.version }}
             ghcr.io/${{ github.repository_owner }}/backend:anytls-${{ github.sha }}
