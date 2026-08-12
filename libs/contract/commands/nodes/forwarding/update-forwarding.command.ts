@@ -11,7 +11,7 @@ export namespace UpdateNodeForwardingCommand {
         NODES_ROUTES.FORWARDING.UPDATE(':uuid'),
         'put',
         'Update and apply node forwarding configuration',
-        { scope: 'update', kind: 'write' },
+        { scope: 'update-forwarding', kind: 'write' },
     );
     export const RequestParamSchema = z.object({ uuid: z.uuid() });
     export const RequestBodySchema = NodeForwardingConfigSchema;

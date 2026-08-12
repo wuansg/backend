@@ -11,7 +11,7 @@ export namespace SyncNodeForwardingCommand {
         NODES_ROUTES.FORWARDING.SYNC(':uuid'),
         'post',
         'Synchronize node forwarding configuration',
-        { scope: 'update', kind: 'write' },
+        { scope: 'sync-forwarding', kind: 'write' },
     );
     export const RequestParamSchema = z.object({ uuid: z.uuid() });
     export const ResponseSchema = z.object({

@@ -11,7 +11,7 @@ export namespace GetNodeForwardingCommand {
         NODES_ROUTES.FORWARDING.GET(':uuid'),
         'get',
         'Get node forwarding configuration and status',
-        { scope: 'get', kind: 'read' },
+        { scope: 'get-forwarding', kind: 'read' },
     );
     export const RequestParamSchema = z.object({ uuid: z.uuid() });
     export const ResponseSchema = z.object({
