@@ -82,6 +82,7 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
 
             const activeInboundsOnNodes = new Map<string, ConfigProfileInboundEntity>();
             const activeNodeTags = new Map<string, string[]>();
+            const nodesWithInbounds: NodesEntity[] = [];
 
             for (const node of nodes) {
                 await this.rawCacheService.delMany([
@@ -91,29 +92,19 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                 ]);
 
                 if (node.activeInbounds.length === 0) {
-                    this.logger.warn(
-                        `No active inbounds found for node ${node.uuid} with profile ${payload.profileUuid}, disabling and clearing profile from node...`,
+                    this.logger.log(
+                        `Node ${node.uuid} has no active inbounds; scheduling core stop and forwarding-only synchronization.`,
                     );
 
-                    await this.commandBus.execute(
-                        new UpdateNodeCommand({
-                            uuid: node.uuid,
-                            isDisabled: true,
-                            activeConfigProfileUuid: null,
-                            isConnecting: false,
-                            isConnected: false,
-                            lastStatusMessage: null,
-                            lastStatusChange: new Date(),
-                        }),
-                    );
-
-                    await this.nodesQueuesService.stopNode({
+                    await this.nodesQueuesService.startNode({
                         nodeUuid: node.uuid,
-                        isNeedToBeDeleted: false,
+                        force: payload.force,
                     });
 
                     continue;
                 }
+
+                nodesWithInbounds.push(node);
 
                 this.logger.log(
                     `Node ${node.uuid} has ${node.activeInbounds.length} active inbounds.`,
@@ -393,7 +384,7 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                 }
             };
 
-            await pMap(nodes, mapper, { concurrency: this.CONCURRENCY });
+            await pMap(nodesWithInbounds, mapper, { concurrency: this.CONCURRENCY });
 
             this.logger.log(
                 `Started all nodes with profile ${payload.profileUuid} in ${Date.now() - startTime}ms`,

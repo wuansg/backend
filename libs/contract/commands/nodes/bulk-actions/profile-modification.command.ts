@@ -18,7 +18,7 @@ export namespace BulkNodesProfileModificationCommand {
         uuids: z.array(z.uuid()).min(1),
         configProfile: z.object({
             activeConfigProfileUuid: z.uuid(),
-            activeInbounds: z.array(z.uuid()).min(1),
+            activeInbounds: z.array(z.uuid()),
         }),
     });
 

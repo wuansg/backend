@@ -38,7 +38,11 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
     }
     async process(job: Job<INodeHealthCheckPayload>) {
         try {
-            const { nodeUuid, isConnected, connectionOpts } = job.data;
+            const { nodeUuid, isConnected, expectsCore, connectionOpts } = job.data;
+
+            if (!expectsCore) {
+                return await this.handleCorelessNode(connectionOpts, nodeUuid, isConnected);
+            }
 
             const attemptsLimit = 2;
             let attempts = 0;
@@ -88,6 +92,64 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             );
             return;
         }
+    }
+
+    private async handleCorelessNode(
+        connectionOpts: INodeConnectionOpts,
+        nodeUuid: string,
+        isConnected: boolean,
+    ) {
+        const healthResult = await this.axios.getNodeHealth(connectionOpts);
+        if (!healthResult.isOk) {
+            return await this.handleDisconnectedNode(
+                nodeUuid,
+                isConnected,
+                healthResult.message ?? 'Node agent is unavailable',
+            );
+        }
+        if (!healthResult.response.isAlive) {
+            return await this.handleDisconnectedNode(
+                nodeUuid,
+                isConnected,
+                'Node agent reported that it is not alive',
+            );
+        }
+
+        await this.rawCacheService.delMany([
+            CACHE_KEYS.NODE_SYSTEM_STATS(nodeUuid),
+            CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
+            CACHE_KEYS.NODE_XRAY_UPTIME(nodeUuid),
+        ]);
+
+        if (healthResult.response.xrayInternalStatusCached) {
+            this.logger.warn(
+                `Node ${nodeUuid} has no active inbounds but a core is running; scheduling core stop.`,
+            );
+            await this.nodesQueuesService.startNode({ nodeUuid });
+        }
+
+        if (!isConnected) {
+            const nodeUpdatedResponse = await this.commandBus.execute(
+                new UpdateNodeCommand({
+                    uuid: nodeUuid,
+                    isConnected: true,
+                    isConnecting: false,
+                    lastStatusMessage: null,
+                    lastStatusChange: new Date(),
+                }),
+            );
+
+            if (!nodeUpdatedResponse.isOk) {
+                return;
+            }
+
+            this.eventEmitter.emit(
+                EVENTS.NODE.CONNECTION_RESTORED,
+                new NodeEvent(nodeUpdatedResponse.response, EVENTS.NODE.CONNECTION_RESTORED),
+            );
+        }
+
+        return;
     }
 
     private async handleConnectedNode(

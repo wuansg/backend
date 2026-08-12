@@ -64,31 +64,6 @@ export class StartNodeProcessor extends WorkerHost {
                 CACHE_KEYS.NODE_XRAY_UPTIME(nodeUuid),
             ]);
 
-            if (node.activeInbounds.length === 0 || !node.activeConfigProfileUuid) {
-                this.logger.warn(
-                    `Node ${nodeUuid} has no active config profile or inbounds, disabling and clearing profile from node...`,
-                );
-
-                await this.commandBus.execute(
-                    new UpdateNodeCommand({
-                        uuid: node.uuid,
-                        isDisabled: true,
-                        activeConfigProfileUuid: null,
-                        isConnecting: false,
-                        isConnected: false,
-                        lastStatusMessage: null,
-                        lastStatusChange: new Date(),
-                    }),
-                );
-
-                await this.nodesQueuesService.stopNode({
-                    nodeUuid: node.uuid,
-                    isNeedToBeDeleted: false,
-                });
-
-                return;
-            }
-
             await this.commandBus.execute(
                 new UpdateNodeCommand({
                     uuid: node.uuid,
@@ -186,6 +161,79 @@ export class StartNodeProcessor extends WorkerHost {
                 this.logger.error(
                     `Failed to sync node plugins: ${syncNodePluginsResponse.message}`,
                 );
+                return;
+            }
+
+            if (node.activeInbounds.length === 0 || !node.activeConfigProfileUuid) {
+                const stopCoreResponse = await this.axios.stopXray({
+                    address: node.address,
+                    port: node.port,
+                    proxyUrl: node.proxyUrl,
+                });
+
+                if (!stopCoreResponse.isOk || !stopCoreResponse.response.isStopped) {
+                    const stopError = stopCoreResponse.isOk
+                        ? 'Node agent reported that the core could not be stopped'
+                        : (stopCoreResponse.message ?? 'Unknown error');
+                    await this.commandBus.execute(
+                        new UpdateNodeCommand({
+                            uuid: node.uuid,
+                            isConnecting: false,
+                            isConnected: false,
+                            lastStatusMessage: `Failed to stop node core: ${stopError}`,
+                            lastStatusChange: new Date(),
+                        }),
+                    );
+                    return;
+                }
+
+                const forwardingError = await syncForwardingIfSupported(
+                    this.axios,
+                    node,
+                    xrayStatusResponse.response,
+                );
+                if (forwardingError) {
+                    this.logger.warn(
+                        `Forwarding sync failed for coreless node ${node.uuid}; keeping the last applied rules: ${forwardingError}`,
+                    );
+                }
+
+                const health = xrayStatusResponse.response as typeof xrayStatusResponse.response & {
+                    coreVersions?: { xray?: string | null; singBox?: string | null };
+                };
+                await this.rawCacheService.set(CACHE_KEYS.NODE_VERSIONS(node.uuid), {
+                    xray: health.coreVersions?.xray ?? health.xrayVersion,
+                    singBox: health.coreVersions?.singBox ?? null,
+                    node: health.nodeVersion,
+                    core: null,
+                });
+
+                const updateNodeResult = await this.commandBus.execute(
+                    new UpdateNodeCommand({
+                        uuid: node.uuid,
+                        isConnected: true,
+                        isConnecting: false,
+                        lastStatusMessage: null,
+                        lastStatusChange: new Date(),
+                    }),
+                );
+
+                if (!updateNodeResult.isOk) {
+                    this.logger.error(`Failed to update coreless node ${node.uuid}`);
+                    return;
+                }
+
+                this.logger.log(
+                    `Node ${node.uuid} has no active inbounds; core stopped and forwarding synchronized.`,
+                );
+
+                if (!node.isConnected) {
+                    this.eventEmitter.emit(
+                        EVENTS.NODE.CONNECTION_RESTORED,
+                        new NodeEvent(updateNodeResult.response, EVENTS.NODE.CONNECTION_RESTORED),
+                    );
+                }
+
                 return;
             }
 

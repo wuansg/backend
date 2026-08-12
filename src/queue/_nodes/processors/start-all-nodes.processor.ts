@@ -63,7 +63,13 @@ export class StartAllNodesQueueProcessor extends WorkerHost {
 
             for (const node of result.response) {
                 if (!node.activeConfigProfileUuid) {
-                    this.logger.warn(`Node "${node.uuid}" has no active config profile`);
+                    this.logger.log(
+                        `Node "${node.uuid}" has no active config profile; scheduling forwarding-only synchronization.`,
+                    );
+                    await this.nodesQueuesService.startNode({
+                        nodeUuid: node.uuid,
+                        force: forceRestart,
+                    });
                     continue;
                 }
                 const nodes = groupedByProfile.get(node.activeConfigProfileUuid) || [];

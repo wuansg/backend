@@ -6,6 +6,7 @@ import { TResult } from '@common/types';
 export interface IGetEnabledNodesPartialResponse {
     uuid: string;
     isConnected: boolean;
+    expectsCore: boolean;
     connectionOpts: INodeConnectionOpts;
 }
 

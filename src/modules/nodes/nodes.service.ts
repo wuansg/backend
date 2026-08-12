@@ -364,29 +364,6 @@ export class NodesService {
 
             await this.nodesSystemCacheService.delete(node.uuid);
 
-            if (!node.activeConfigProfileUuid || node.activeInbounds.length === 0) {
-                const result = await this.nodesRepository.update({
-                    uuid: node.uuid,
-                    isDisabled: true,
-                    activeConfigProfileUuid: null,
-                    isConnecting: false,
-                    isConnected: false,
-                    lastStatusMessage: null,
-                    lastStatusChange: new Date(),
-                });
-
-                if (!result) {
-                    return fail(ERRORS.ENABLE_NODE_ERROR);
-                }
-
-                return ok(
-                    new NodeResponseModel(
-                        result,
-                        await this.nodesSystemCacheService.getOne(result.uuid),
-                    ),
-                );
-            }
-
             const result = await this.nodesRepository.update({
                 uuid: node.uuid,
                 isDisabled: false,
@@ -421,7 +398,7 @@ export class NodesService {
                 return fail(ERRORS.NODE_NOT_FOUND);
             }
 
-            if (!node.activeConfigProfileUuid || node.activeInbounds.length === 0) {
+            if (!node.activeConfigProfileUuid) {
                 await this.nodesRepository.update({
                     uuid: node.uuid,
                     activeConfigProfileUuid: null,

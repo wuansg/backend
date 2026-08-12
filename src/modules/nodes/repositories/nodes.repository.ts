@@ -66,6 +66,9 @@ export class NodesRepository implements ICrud<NodesEntity> {
                 activeConfigProfileUuid: {
                     not: null,
                 },
+                configProfileInboundsToNodes: {
+                    some: {},
+                },
             },
             include: INCLUDE_RESOLVED_INBOUNDS,
         });
@@ -74,22 +77,28 @@ export class NodesRepository implements ICrud<NodesEntity> {
     }
 
     public async findConnectedNodesPartial(): Promise<IGetOnlineNodesPartialResponse[]> {
-        const nodesList = await this.qb.kysely
-            .selectFrom('nodes')
-            .select([
-                'uuid',
-                'consumptionMultiplier',
-                'nodeConsumptionMultiplier',
-                'id',
-                'address',
-                'port',
-                'proxyUrl',
-            ])
-            .where('isConnected', '=', true)
-            .where('isDisabled', '=', false)
-            .where('isConnecting', '=', false)
-            .where('activeConfigProfileUuid', 'is not', null)
-            .execute();
+        const nodesList = await this.prisma.tx.nodes.findMany({
+            where: {
+                isConnected: true,
+                isDisabled: false,
+                isConnecting: false,
+                activeConfigProfileUuid: {
+                    not: null,
+                },
+                configProfileInboundsToNodes: {
+                    some: {},
+                },
+            },
+            select: {
+                uuid: true,
+                consumptionMultiplier: true,
+                nodeConsumptionMultiplier: true,
+                id: true,
+                address: true,
+                port: true,
+                proxyUrl: true,
+            },
+        });
 
         return nodesList.map((value) => ({
             uuid: value.uuid,
@@ -105,16 +114,32 @@ export class NodesRepository implements ICrud<NodesEntity> {
     }
 
     public async findEnabledNodesPartial(): Promise<IGetEnabledNodesPartialResponse[]> {
-        const nodesList = await this.qb.kysely
-            .selectFrom('nodes')
-            .select(['uuid', 'isConnected', 'address', 'port', 'proxyUrl'])
-            .where('isDisabled', '=', false)
-            .where('isConnecting', '=', false)
-            .execute();
+        const nodesList = await this.prisma.tx.nodes.findMany({
+            where: {
+                isDisabled: false,
+                isConnecting: false,
+            },
+            select: {
+                uuid: true,
+                isConnected: true,
+                address: true,
+                port: true,
+                proxyUrl: true,
+                activeConfigProfileUuid: true,
+                _count: {
+                    select: {
+                        configProfileInboundsToNodes: true,
+                    },
+                },
+            },
+        });
 
         return nodesList.map((value) => ({
             uuid: value.uuid,
             isConnected: value.isConnected,
+            expectsCore:
+                value.activeConfigProfileUuid !== null &&
+                value._count.configProfileInboundsToNodes > 0,
             connectionOpts: {
                 address: value.address,
                 port: value.port,
@@ -141,6 +166,9 @@ export class NodesRepository implements ICrud<NodesEntity> {
                 isDisabled: false,
                 activeConfigProfileUuid: {
                     not: null,
+                },
+                configProfileInboundsToNodes: {
+                    some: {},
                 },
             },
         });
