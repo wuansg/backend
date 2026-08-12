@@ -2,13 +2,41 @@ import { z } from 'zod';
 
 export const NodeForwardingProtocolSchema = z.enum(['TCP', 'UDP', 'TCP_UDP']);
 
+export const NodeForwardingIPv4Schema = z.ipv4();
+
+export const NodeForwardingHostnameSchema = z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(1)
+    .max(253)
+    .refine(
+        (value) => {
+            if (!/[a-z]/.test(value)) return false;
+            return value.split('.').every((label) => {
+                if (label.length < 1 || label.length > 63) return false;
+                return (
+                    /^[a-z0-9-]+$/.test(label) &&
+                    !label.startsWith('-') &&
+                    !label.endsWith('-')
+                );
+            });
+        },
+        { message: 'Invalid hostname' },
+    );
+
+export const NodeForwardingTargetAddressSchema = z.union([
+    NodeForwardingIPv4Schema,
+    NodeForwardingHostnameSchema,
+]);
+
 export const NodeForwardingRuleSchema = z.object({
     id: z.uuid(),
     name: z.string().trim().min(1).max(64),
     enabled: z.boolean(),
     protocol: NodeForwardingProtocolSchema,
     listenPort: z.number().int().min(1).max(65_535),
-    targetAddress: z.ipv4(),
+    targetAddress: NodeForwardingTargetAddressSchema,
     targetPort: z.number().int().min(1).max(65_535),
 });
 
@@ -54,6 +82,7 @@ export const NodeForwardingRuntimeStatusSchema = z.object({
         .array(
             z.object({
                 id: z.uuid(),
+                resolvedTargetAddress: z.ipv4().optional(),
                 tcp: NodeForwardingDirectionCountersSchema.optional(),
                 udp: NodeForwardingDirectionCountersSchema.optional(),
             }),

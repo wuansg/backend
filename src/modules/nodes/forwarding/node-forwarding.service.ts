@@ -2,6 +2,7 @@ import { ERRORS } from '@contract/constants';
 import {
     NodeForwardingConfig,
     NodeForwardingConfigSchema,
+    NodeForwardingIPv4Schema,
     NodeForwardingRuntimeStatus,
 } from '@contract/models';
 import { createHash } from 'node:crypto';
@@ -17,6 +18,7 @@ import { NodesEntity } from '../entities';
 import { NodesRepository } from '../repositories/nodes.repository';
 
 const FORWARDING_CAPABILITY = 'port_forwarding_v1';
+const FORWARDING_DNS_CAPABILITY = 'port_forwarding_dns_v1';
 const DEFAULT_CONFIG: NodeForwardingConfig = {
     enabled: false,
     listenInterface: 'auto',
@@ -59,7 +61,12 @@ export class NodeForwardingService {
         }
 
         const previous = this.readConfig(node);
-        const capability = await this.capabilityState(node);
+        const capability = await this.capabilityState(node, config);
+        if (capability === 'unsupported' && this.requiresDNSCapability(config)) {
+            return fail(
+                ERRORS.FORWARDING_APPLY_ERROR.withMessage(this.unsupportedMessage(config)),
+            );
+        }
         if (capability === 'supported') {
             const validation = await this.axios.validateNodeForwarding(
                 config,
@@ -67,6 +74,9 @@ export class NodeForwardingService {
             );
             if (!validation.isOk && validation.code === 'FORWARDING_PORT_CONFLICT') {
                 return fail(ERRORS.FORWARDING_PORT_CONFLICT.withMessage(validation.message));
+            }
+            if (!validation.isOk) {
+                return fail(ERRORS.FORWARDING_APPLY_ERROR.withMessage(validation.message));
             }
         }
 
@@ -101,7 +111,7 @@ export class NodeForwardingService {
                 state: capability === 'unsupported' ? 'unsupported' : 'pending',
                 lastError:
                     capability === 'unsupported'
-                        ? 'Remnawave Node does not advertise port_forwarding_v1; upgrade to >= 3.2.0'
+                        ? this.unsupportedMessage(config)
                         : 'Node is unreachable; configuration will be synchronized when it reconnects',
                 rules: [],
             }),
@@ -112,12 +122,12 @@ export class NodeForwardingService {
         const node = await this.nodesRepository.findByUUID(uuid);
         if (!node) return fail(ERRORS.NODE_NOT_FOUND);
         const config = this.readConfig(node);
-        const capability = await this.capabilityState(node);
+        const capability = await this.capabilityState(node, config);
         if (capability !== 'supported') {
             return fail(
                 ERRORS.FORWARDING_APPLY_ERROR.withMessage(
                     capability === 'unsupported'
-                        ? 'Remnawave Node does not support port_forwarding_v1'
+                        ? this.unsupportedMessage(config)
                         : 'Node is unreachable',
                 ),
             );
@@ -134,7 +144,7 @@ export class NodeForwardingService {
 
     public async syncForNode(node: NodesEntity): Promise<void> {
         const config = this.readConfig(node);
-        if ((await this.capabilityState(node)) !== 'supported') return;
+        if ((await this.capabilityState(node, config)) !== 'supported') return;
         const response = await this.axios.syncNodeForwarding(config, this.connectionOptions(node));
         if (!response.isOk) {
             this.logger.warn(
@@ -155,13 +165,13 @@ export class NodeForwardingService {
         node: NodesEntity,
         config: NodeForwardingConfig,
     ): Promise<NodeForwardingRuntimeStatus> {
-        const capability = await this.capabilityState(node);
+        const capability = await this.capabilityState(node, config);
         if (capability !== 'supported') {
             return this.statusWithDesiredHash(config, {
                 state: capability === 'unsupported' ? 'unsupported' : 'unreachable',
                 lastError:
                     capability === 'unsupported'
-                        ? 'Remnawave Node does not advertise port_forwarding_v1; upgrade to >= 3.2.0'
+                        ? this.unsupportedMessage(config)
                         : 'Unable to reach Remnawave Node',
                 rules: [],
             });
@@ -179,6 +189,7 @@ export class NodeForwardingService {
 
     private async capabilityState(
         node: NodesEntity,
+        config: NodeForwardingConfig,
     ): Promise<'supported' | 'unsupported' | 'unreachable'> {
         try {
             await this.ensureJwt();
@@ -190,7 +201,23 @@ export class NodeForwardingService {
         if (!health.isOk) return 'unreachable';
         const capabilities = (health.response as unknown as { capabilities?: string[] })
             .capabilities;
-        return capabilities?.includes(FORWARDING_CAPABILITY) ? 'supported' : 'unsupported';
+        if (!capabilities?.includes(FORWARDING_CAPABILITY)) return 'unsupported';
+        if (this.requiresDNSCapability(config) && !capabilities.includes(FORWARDING_DNS_CAPABILITY)) {
+            return 'unsupported';
+        }
+        return 'supported';
+    }
+
+    private requiresDNSCapability(config: NodeForwardingConfig): boolean {
+        return config.rules.some(
+            (rule) => !NodeForwardingIPv4Schema.safeParse(rule.targetAddress).success,
+        );
+    }
+
+    private unsupportedMessage(config: NodeForwardingConfig): string {
+        return this.requiresDNSCapability(config)
+            ? 'Hostname forwarding requires Remnawave Node >= 3.3.0 with port_forwarding_dns_v1'
+            : 'Remnawave Node does not advertise port_forwarding_v1; upgrade to >= 3.2.0';
     }
 
     private ensureJwt(): Promise<void> {
