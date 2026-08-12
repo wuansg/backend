@@ -315,6 +315,10 @@ export class NodesRepository implements ICrud<NodesEntity> {
     }
 
     public async addInboundsToNode(nodeUuid: string, inboundsUuids: string[]): Promise<boolean> {
+        if (inboundsUuids.length === 0) {
+            return true;
+        }
+
         const result = await this.qb.kysely
             .insertInto('configProfileInboundsToNodes')
             .values(
@@ -345,6 +349,10 @@ export class NodesRepository implements ICrud<NodesEntity> {
         nodeUuids: string[],
         inboundsUuids: string[],
     ): Promise<boolean> {
+        if (nodeUuids.length === 0 || inboundsUuids.length === 0) {
+            return true;
+        }
+
         const values = nodeUuids.flatMap((nodeUuid) =>
             inboundsUuids.map((uuid) => ({
                 nodeUuid: getKyselyUuid(nodeUuid),
