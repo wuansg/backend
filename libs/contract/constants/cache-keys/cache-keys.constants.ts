@@ -24,7 +24,7 @@ export const CACHE_KEYS_TTL = {
     EXTERNAL_SQUAD_SETTINGS: 3_600, // 1 hour
     SUBSCRIPTION_SETTINGS: 3_600, // 1 hour
     NODE_SYSTEM_STATS: 30, // 30 seconds
-    NODE_USERS_ONLINE: 16, // 16 seconds
+    NODE_USERS_ONLINE: 45, // 3 scheduler cycles
     NODE_XRAY_UPTIME: 16, // 16 seconds
     RAW_INBOUND: 3_600, // 1 hour
     XRAY_JSON_TEMPLATE: 3_600, // 1 hour

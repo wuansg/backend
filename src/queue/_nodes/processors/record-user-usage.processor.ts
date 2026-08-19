@@ -7,7 +7,7 @@ import { CommandBus } from '@nestjs/cqrs';
 
 import { GetUsersStatsCommand } from '@remnawave/node-contract';
 
-import { AxiosService } from '@common/axios';
+import { AxiosService, INodeConnectionOpts } from '@common/axios';
 import { TypedConfigService } from '@common/config/app-config';
 import { RawCacheService } from '@common/raw-cache';
 import { multiplyConsumption } from '@common/utils/nano';
@@ -59,18 +59,23 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
     async process(job: Job<IRecordUserUsagePayload>) {
         try {
             const { nodeUuid, connectionOpts, consumptionMultiplier, nodeId } = job.data;
+            const nodeConnectionOpts = {
+                address: connectionOpts.address,
+                port: connectionOpts.port,
+                proxyUrl: connectionOpts.proxyUrl,
+            };
 
-            if (await this.usageSnapshots.isActive(nodeUuid)) return;
+            const [snapshotsActive] = await Promise.all([
+                this.usageSnapshots.isActive(nodeUuid),
+                this.refreshOnlineUsers(nodeUuid, nodeConnectionOpts),
+            ]);
+            if (snapshotsActive) return;
 
             const usersInboundStats = await this.axios.getUsersInboundStats(
                 {
                     reset: true,
                 },
-                {
-                    address: connectionOpts.address,
-                    port: connectionOpts.port,
-                    proxyUrl: connectionOpts.proxyUrl,
-                },
+                nodeConnectionOpts,
             );
 
             if (usersInboundStats.isOk) {
@@ -87,11 +92,7 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
                 {
                     reset: true,
                 },
-                {
-                    address: connectionOpts.address,
-                    port: connectionOpts.port,
-                    proxyUrl: connectionOpts.proxyUrl,
-                },
+                nodeConnectionOpts,
             );
 
             switch (queryResult.isOk) {
@@ -104,12 +105,6 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
                         [],
                     );
                 case false:
-                    await this.rawCacheService.set(
-                        CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
-                        0,
-                        CACHE_KEYS_TTL.NODE_USERS_ONLINE,
-                    );
-
                     this.logger.error(
                         `Failed to get users stats, node: ${nodeUuid} – ${connectionOpts.address}:${connectionOpts.port}, error: ${JSON.stringify(
                             queryResult,
@@ -126,6 +121,35 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
         }
     }
 
+    private async refreshOnlineUsers(
+        nodeUuid: string,
+        connectionOpts: INodeConnectionOpts,
+    ): Promise<void> {
+        try {
+            const result = await this.axios.getUsersIpsList(connectionOpts);
+            if (!result.isOk) {
+                this.logger.debug(
+                    `Failed to refresh online users for node ${nodeUuid}: ${result.message}`,
+                );
+                return;
+            }
+
+            const onlineUserIds = new Set<string>();
+            for (const user of result.response.users) {
+                if (user.ips.length === 0 || !/^\d+$/.test(user.userId)) continue;
+                onlineUserIds.add(BigInt(user.userId).toString());
+            }
+
+            await this.rawCacheService.set(
+                CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
+                onlineUserIds.size,
+                CACHE_KEYS_TTL.NODE_USERS_ONLINE,
+            );
+        } catch (error) {
+            this.logger.debug(`Failed to cache online users for node ${nodeUuid}: ${error}`);
+        }
+    }
+
     private async handleOk(
         nodeUuid: string,
         nodeId: bigint,
@@ -137,12 +161,6 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
 
         try {
             if (response.users.length === 0) {
-                await this.rawCacheService.set(
-                    CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
-                    0,
-                    CACHE_KEYS_TTL.NODE_USERS_ONLINE,
-                );
-
                 return;
             }
 
@@ -181,12 +199,6 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
             pipeline.expire(nodeRedisKey, INTERNAL_CACHE_KEYS_TTL.NODE_USER_USAGE);
 
             await pipeline.exec();
-
-            await this.rawCacheService.set(
-                CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
-                userUsageIndex,
-                CACHE_KEYS_TTL.NODE_USERS_ONLINE,
-            );
 
             await this.usersQueuesService.updateUserUsage(userUsageList.slice(0, userUsageIndex));
 
