@@ -1,6 +1,7 @@
 import { SplitHTTPMode, TCPHeaderHTTP, TCPHeaderNone, VLessFlow } from 'xray-typed';
 
 import { TMihomoIpVersion, TSubscriptionTemplateType } from '@libs/contracts/constants';
+import { THostMapper } from '@libs/contracts/models';
 
 // ─── Protocol Options ────────────────────────────────────
 
@@ -109,6 +110,7 @@ export interface ITlsSecurityOptions {
     echConfigList: string | null;
     echForceQuery: string | null;
     echSockopt: Record<string, unknown> | null;
+    cipherSuites: string | null;
 }
 
 export interface IRealitySecurityOptions {
@@ -280,6 +282,7 @@ export type ResolvedProxyConfig = {
         mihomoIpVersion: TMihomoIpVersion | null;
         serverDescription: string | null;
         xrayJsonTemplate: object | null;
+        mapper: THostMapper;
     };
 
     metadata: IProxyEntryMetadata;

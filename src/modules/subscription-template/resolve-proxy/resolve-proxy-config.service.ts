@@ -55,6 +55,7 @@ export interface IResolveProxyConfigOptions {
     fallbackOptions?: {
         showHwidMaxDeviceRemarks?: boolean;
         showHwidNotSupportedRemarks?: boolean;
+        respondWithRemarks?: string[];
     };
     excludeHostsByTags?: ISRRContext['excludeHostsByTags'];
 }
@@ -183,6 +184,9 @@ export class ResolveProxyConfigService {
                 }
                 if (fallbackOptions.showHwidNotSupportedRemarks) {
                     return settings.customRemarks.HWIDNotSupported;
+                }
+                if (fallbackOptions.respondWithRemarks?.length) {
+                    return fallbackOptions.respondWithRemarks;
                 }
             }
 
@@ -445,6 +449,7 @@ export class ResolveProxyConfigService {
                         echSockopt: toNonEmptyRecord(tls?.echSockopt),
                         pinnedPeerCertSha256: inputHost.pinnedPeerCertSha256,
                         verifyPeerCertByName: inputHost.verifyPeerCertByName,
+                        cipherSuites: tls?.cipherSuites || null,
                     },
                 };
             }
@@ -627,6 +632,7 @@ export class ResolveProxyConfigService {
                     ? Buffer.from(inputHost.serverDescription).toString('base64')
                     : null,
                 xrayJsonTemplate: inputHost.xrayJsonTemplate,
+                mapper: inputHost.mapper,
             },
             metadata: {
                 uuid: inputHost.uuid,
@@ -679,6 +685,7 @@ export class ResolveProxyConfigService {
                       echConfigList: null,
                       echForceQuery: null,
                       echSockopt: null,
+                      cipherSuites: null,
                   },
               }
             : {
@@ -702,6 +709,7 @@ export class ResolveProxyConfigService {
                     ? Buffer.from(inputHost.serverDescription).toString('base64')
                     : null,
                 xrayJsonTemplate: inputHost.xrayJsonTemplate,
+                mapper: inputHost.mapper,
             },
             metadata: {
                 uuid: inputHost.uuid,
@@ -978,6 +986,7 @@ export class ResolveProxyConfigService {
                         serverDescription: null,
                         xrayJsonTemplate: null,
                         mihomoIpVersion: null,
+                        mapper: {},
                     },
                     metadata: {
                         uuid: '00000000-0000-0000-0000-000000000000',

@@ -4,6 +4,7 @@ import {
     TSecurityLayers,
     TSubscriptionTemplateType,
 } from '@contract/constants';
+import { THostMapper } from '@contract/models';
 import { Hosts } from '@prisma/client';
 
 export class HostsEntity implements Hosts {
@@ -41,6 +42,7 @@ export class HostsEntity implements Hosts {
 
     xrayJsonTemplateUuid: string | null;
     excludeFromSubscriptionTypes: TSubscriptionTemplateType[];
+    mapper: THostMapper;
 
     nodes: {
         nodeUuid: string;
@@ -52,6 +54,7 @@ export class HostsEntity implements Hosts {
 
     constructor(data: Partial<Hosts>) {
         Object.assign(this, data);
+        this.mapper = (data.mapper as THostMapper | undefined) ?? {};
 
         if (data.excludeFromSubscriptionTypes) {
             this.excludeFromSubscriptionTypes = data.excludeFromSubscriptionTypes.filter(

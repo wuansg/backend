@@ -6,6 +6,7 @@ import type {
     TRemnawaveInjectorSelector,
 } from '@libs/contracts/models';
 
+import { applyHostMapper } from '../host-mapper';
 import { ResolvedProxyConfig } from '../resolve-proxy/interfaces';
 import { SubscriptionTemplateService } from '../subscription-template.service';
 import {
@@ -170,6 +171,10 @@ function buildTlsSettings(host: ResolvedProxyConfig): Record<string, unknown> {
         settings.echSockopt = host.securityOptions.echSockopt;
     }
 
+    if (host.securityOptions.cipherSuites) {
+        settings.cipherSuites = host.securityOptions.cipherSuites;
+    }
+
     return settings;
 }
 
@@ -295,7 +300,7 @@ export class XrayJsonGeneratorService {
             }
         }
 
-        return outbound;
+        return applyHostMapper(outbound, host.clientOverrides.mapper.xrayJson, host);
     }
 
     private buildTransportEntry(host: ResolvedProxyConfig): object {

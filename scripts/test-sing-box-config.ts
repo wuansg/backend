@@ -135,7 +135,7 @@ function buildDefaultSingBoxConfig(): {
 function buildUsers(): UserForConfigEntity[] {
     return [
         new UserForConfigEntity({
-            tId: 1n,
+            id: 1n,
             tags: ['AnyTLS_test'],
             trojanPassword: 'trojan-1',
             vlessUuid: '00000000-0000-0000-0000-000000000001',
@@ -143,7 +143,7 @@ function buildUsers(): UserForConfigEntity[] {
             anytlsPassword: 'anytls-1',
         }),
         new UserForConfigEntity({
-            tId: 2n,
+            id: 2n,
             tags: ['VLESS_test'],
             trojanPassword: 'trojan-2',
             vlessUuid: '00000000-0000-0000-0000-000000000002',
@@ -151,7 +151,7 @@ function buildUsers(): UserForConfigEntity[] {
             anytlsPassword: 'anytls-2',
         }),
         new UserForConfigEntity({
-            tId: 3n,
+            id: 3n,
             tags: ['VMess_test'],
             trojanPassword: 'trojan-3',
             vlessUuid: '00000000-0000-0000-0000-000000000003',
@@ -159,7 +159,7 @@ function buildUsers(): UserForConfigEntity[] {
             anytlsPassword: 'anytls-3',
         }),
         new UserForConfigEntity({
-            tId: 4n,
+            id: 4n,
             tags: ['Trojan_test'],
             trojanPassword: 'trojan-4',
             vlessUuid: '00000000-0000-0000-0000-000000000004',
@@ -167,7 +167,7 @@ function buildUsers(): UserForConfigEntity[] {
             anytlsPassword: 'anytls-4',
         }),
         new UserForConfigEntity({
-            tId: 5n,
+            id: 5n,
             tags: ['Shadowsocks_test'],
             trojanPassword: 'trojan-5',
             vlessUuid: '00000000-0000-0000-0000-000000000005',
@@ -175,7 +175,7 @@ function buildUsers(): UserForConfigEntity[] {
             anytlsPassword: 'anytls-5',
         }),
         new UserForConfigEntity({
-            tId: 6n,
+            id: 6n,
             tags: ['Hysteria2_test'],
             trojanPassword: 'trojan-6',
             vlessUuid: '00000000-0000-0000-0000-000000000006',
@@ -183,7 +183,7 @@ function buildUsers(): UserForConfigEntity[] {
             anytlsPassword: 'anytls-6',
         }),
         new UserForConfigEntity({
-            tId: 7n,
+            id: 7n,
             tags: ['TUIC_test'],
             trojanPassword: 'trojan-7',
             vlessUuid: '00000000-0000-0000-0000-000000000007',
@@ -191,7 +191,7 @@ function buildUsers(): UserForConfigEntity[] {
             anytlsPassword: 'anytls-7',
         }),
         new UserForConfigEntity({
-            tId: 8n,
+            id: 8n,
             tags: ['ShadowTLS_test'],
             trojanPassword: 'trojan-8',
             vlessUuid: '00000000-0000-0000-0000-000000000008',

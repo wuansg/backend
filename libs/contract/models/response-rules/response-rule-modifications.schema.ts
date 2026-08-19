@@ -116,6 +116,11 @@ export const ResponseRuleModificationsSchema = z
                 markdownDescription:
                     'Excludes hosts from the subscription output if at least one tag in the host matches the given tags.',
             }),
+        respondWithRemarks: z.array(z.string()).optional().meta({
+            title: 'Respond With Remarks',
+            markdownDescription:
+                'Replaces the subscription body with the provided remarks instead of sending actual hosts.',
+        }),
     })
     .optional()
     .meta({

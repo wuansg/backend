@@ -44,6 +44,7 @@ export class HostsRepository implements ICrud<HostsEntity> {
                 muxParams: model.muxParams as Prisma.InputJsonValue,
                 sockoptParams: model.sockoptParams as Prisma.InputJsonValue,
                 finalMask: model.finalMask as Prisma.InputJsonValue,
+                mapper: model.mapper as Prisma.InputJsonValue,
             },
             include: INCLUDE_RELATED,
         });
@@ -76,6 +77,7 @@ export class HostsRepository implements ICrud<HostsEntity> {
                 muxParams: data.muxParams as Prisma.InputJsonValue,
                 sockoptParams: data.sockoptParams as Prisma.InputJsonValue,
                 finalMask: data.finalMask as Prisma.InputJsonValue,
+                mapper: data.mapper as Prisma.InputJsonValue,
             },
             include: INCLUDE_RELATED,
         });
@@ -102,6 +104,7 @@ export class HostsRepository implements ICrud<HostsEntity> {
                 muxParams: data.muxParams as Prisma.InputJsonValue,
                 sockoptParams: data.sockoptParams as Prisma.InputJsonValue,
                 finalMask: data.finalMask as Prisma.InputJsonValue,
+                mapper: data.mapper as Prisma.InputJsonValue,
             },
         });
 
@@ -119,6 +122,7 @@ export class HostsRepository implements ICrud<HostsEntity> {
             | 'excludeFromSubscriptionTypes'
             | 'finalMask'
             | 'tags'
+            | 'mapper'
         >,
     ): Promise<HostsEntity[]> {
         const list = await this.prisma.tx.hosts.findMany({

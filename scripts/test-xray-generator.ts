@@ -19,6 +19,7 @@ function buildBaseHost(overrides: Partial<ResolvedProxyConfig>): ResolvedProxyCo
             mihomoIpVersion: null,
             serverDescription: null,
             xrayJsonTemplate: null,
+            mapper: {},
         },
         metadata: {
             uuid: 'host-uuid',
@@ -48,6 +49,8 @@ function buildBaseHost(overrides: Partial<ResolvedProxyConfig>): ResolvedProxyCo
             verifyPeerCertByName: null,
             echConfigList: null,
             echForceQuery: null,
+            echSockopt: null,
+            cipherSuites: null,
         },
         transport: 'tcp',
         transportOptions: {
@@ -81,6 +84,8 @@ function main() {
             verifyPeerCertByName: null,
             echConfigList: null,
             echForceQuery: null,
+            echSockopt: null,
+            cipherSuites: null,
         },
     });
 
@@ -101,6 +106,8 @@ function main() {
             verifyPeerCertByName: null,
             echConfigList: null,
             echForceQuery: null,
+            echSockopt: null,
+            cipherSuites: null,
         },
     });
 
@@ -122,6 +129,18 @@ function main() {
             verifyPeerCertByName: null,
             echConfigList: null,
             echForceQuery: null,
+            echSockopt: null,
+            cipherSuites: 'TLS_AES_128_GCM_SHA256',
+        },
+        clientOverrides: {
+            shuffleHost: false,
+            mihomoX25519: false,
+            mihomoIpVersion: null,
+            serverDescription: null,
+            xrayJsonTemplate: null,
+            mapper: {
+                base64: [{ op: 'set', to: 'mapped', value: 'yes' }],
+            },
         },
     });
 
@@ -152,6 +171,8 @@ function main() {
     assert.equal(vlessUrl.searchParams.get('security'), 'tls');
     assert.equal(vlessUrl.searchParams.get('sni'), 'vless.example.com');
     assert.equal(vlessUrl.searchParams.get('fp'), 'chrome');
+    assert.equal(vlessUrl.searchParams.get('cs'), 'TLS_AES_128_GCM_SHA256');
+    assert.equal(vlessUrl.searchParams.get('mapped'), 'yes');
 
     const base64Config = service.generateConfig([anyTlsWithTlsParams], true, false);
 

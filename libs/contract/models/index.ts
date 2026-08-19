@@ -9,6 +9,7 @@ export * from './extended-users.schema';
 export * from './external-squad.schema';
 export * from './external-squads';
 export * from './hosts.schema';
+export * from './host-mapper';
 export * from './hwid-user-device.schema';
 export * from './infra-billing-available-node.schema';
 export * from './infra-billing-history-record.schema';
