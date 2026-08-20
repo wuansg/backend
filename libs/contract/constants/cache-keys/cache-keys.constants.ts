@@ -12,6 +12,7 @@ export const CACHE_KEYS = {
     NODE_SYSTEM_STATS: (uuid: string) => `node_system_stats:${uuid}`,
     NODE_USERS_ONLINE: (uuid: string) => `node_users_online:${uuid}`,
     NODE_VERSIONS: (uuid: string) => `node_versions:${uuid}`,
+    NODE_CONFIG_APPLY: (uuid: string) => `node_config_apply:${uuid}`,
     NODE_XRAY_UPTIME: (uuid: string) => `node_xray_uptime:${uuid}`,
     RAW_INBOUND: (uuid: string) => `raw_inbound:${uuid}`,
     XRAY_JSON_TEMPLATE: (uuid: string) => `xray_json_template:${uuid}`,

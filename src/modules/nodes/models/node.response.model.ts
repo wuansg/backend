@@ -4,7 +4,7 @@ import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
 import { InfraProviderEntity } from '@modules/infra-billing/entities';
 
 import { NodesEntity } from '../entities';
-import { INodeHotCache, INodeSystem, INodeVersions } from '../interfaces';
+import { INodeConfigApply, INodeHotCache, INodeSystem, INodeVersions } from '../interfaces';
 
 export class NodeResponseModel {
     public uuid: string;
@@ -44,6 +44,7 @@ export class NodeResponseModel {
     public usersOnline: number;
     public system: INodeSystem | null;
     public versions: INodeVersions | null;
+    public configApply: INodeConfigApply | null;
     public usageSnapshot: {
         receivedThrough: number;
         appliedThrough: number;
@@ -92,6 +93,7 @@ export class NodeResponseModel {
         this.system = hotCache.system;
         this.usersOnline = hotCache.onlineUsers;
         this.versions = hotCache.versions;
+        this.configApply = hotCache.configApply;
         this.xrayUptime = hotCache.xrayUptime;
         this.usageSnapshot = data.usageSnapshotState
             ? {

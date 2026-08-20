@@ -66,6 +66,14 @@ type CoreStartResponse = {
             xray: string | null;
             singBox: string | null;
         };
+        configApply?: {
+            status: 'PENDING' | 'APPLIED' | 'UNCHANGED' | 'REJECTED' | 'ROLLED_BACK' | 'FAILED';
+            requestedHash: string;
+            activeHash: string | null;
+            attemptedAt: string;
+            appliedAt: string | null;
+            rollback: 'NOT_REQUIRED' | 'SUCCEEDED' | 'FAILED' | 'NOT_AVAILABLE';
+        };
     } & StartXrayCommand.Response['response'];
 } & StartXrayCommand.Response;
 

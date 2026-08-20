@@ -20,7 +20,12 @@ import {
 } from '@integration-modules/notifications/interfaces';
 
 import { BaseUserHwidDevicesResponseModel } from '@modules/hwid-user-devices/models';
-import { INodeHotCache, INodeSystem, INodeVersions } from '@modules/nodes/interfaces';
+import {
+    INodeConfigApply,
+    INodeHotCache,
+    INodeSystem,
+    INodeVersions,
+} from '@modules/nodes/interfaces';
 import { NodeResponseModel } from '@modules/nodes/models';
 import { GetFullUserResponseModel } from '@modules/users/models';
 
@@ -259,12 +264,13 @@ export class WebhookEvents {
     }
 
     private async getNodesSystemInfo(uuid: string): Promise<INodeHotCache> {
-        const [info, stats, onlineUsers, xrayUptime, versions] = await Promise.all([
+        const [info, stats, onlineUsers, xrayUptime, versions, configApply] = await Promise.all([
             this.rawCacheService.get<INodeSystem['info']>(CACHE_KEYS.NODE_SYSTEM_INFO(uuid)),
             this.rawCacheService.get<INodeSystem['stats']>(CACHE_KEYS.NODE_SYSTEM_STATS(uuid)),
             this.rawCacheService.getNumber(CACHE_KEYS.NODE_USERS_ONLINE(uuid)),
             this.rawCacheService.getNumber(CACHE_KEYS.NODE_XRAY_UPTIME(uuid)),
             this.rawCacheService.get<INodeVersions>(CACHE_KEYS.NODE_VERSIONS(uuid)),
+            this.rawCacheService.get<INodeConfigApply>(CACHE_KEYS.NODE_CONFIG_APPLY(uuid)),
         ]);
 
         return {
@@ -272,6 +278,7 @@ export class WebhookEvents {
             onlineUsers,
             versions,
             xrayUptime,
+            configApply,
         };
     }
 }

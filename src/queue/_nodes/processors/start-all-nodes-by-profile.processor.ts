@@ -368,6 +368,10 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                                           }
                                         : null,
                             },
+                            {
+                                key: CACHE_KEYS.NODE_CONFIG_APPLY(node.uuid),
+                                value: nodeResponse.configApply ?? null,
+                            },
                         ]);
 
                         await this.commandBus.execute(

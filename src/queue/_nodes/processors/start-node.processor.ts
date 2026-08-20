@@ -345,6 +345,10 @@ export class StartNodeProcessor extends WorkerHost {
                     value: nodeResponse.system.stats,
                     ttlSeconds: CACHE_KEYS_TTL.NODE_SYSTEM_STATS,
                 },
+                {
+                    key: CACHE_KEYS.NODE_CONFIG_APPLY(node.uuid),
+                    value: nodeResponse.configApply ?? null,
+                },
             ]);
 
             const updateNodeResult = await this.commandBus.execute(

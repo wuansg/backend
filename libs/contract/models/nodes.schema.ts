@@ -47,6 +47,24 @@ export const NodesSchema = z.object({
             core: z.enum(['XRAY', 'SING_BOX']).nullable().optional().default('XRAY'),
         }),
     ),
+    configApply: z
+        .object({
+            status: z.enum([
+                'PENDING',
+                'APPLIED',
+                'UNCHANGED',
+                'REJECTED',
+                'ROLLED_BACK',
+                'FAILED',
+            ]),
+            requestedHash: z.string().length(64),
+            activeHash: z.string().length(64).nullable(),
+            attemptedAt: z.iso.datetime(),
+            appliedAt: z.iso.datetime().nullable(),
+            rollback: z.enum(['NOT_REQUIRED', 'SUCCEEDED', 'FAILED', 'NOT_AVAILABLE']),
+        })
+        .nullable()
+        .optional(),
     xrayUptime: z.number(),
     usersOnline: z.number(),
     note: z.nullable(z.string()),
