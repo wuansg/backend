@@ -42,10 +42,10 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
-          cache-from: type=gha,scope=backend-anytls-arm64
-          cache-to: type=gha,mode=max,scope=backend-anytls-arm64
+          cache-from: type=gha,scope=backend-anytls-amd64
+          cache-to: type=gha,mode=max,scope=backend-anytls-amd64
           build-args: |
             FRONTEND_REPO=https://github.com/${{ github.repository_owner }}/frontend.git
             FRONTEND_REF=${{ github.ref_name }}
