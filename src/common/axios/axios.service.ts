@@ -1,4 +1,8 @@
-import type { NodeForwardingConfig, NodeForwardingRuntimeStatus } from '@contract/models';
+import type {
+    NodeForwardingConfig,
+    NodeForwardingRuntimeStatus,
+    TNodeRuntimeStatus,
+} from '@contract/models';
 
 import { ERRORS } from '@contract/constants';
 import axios, {
@@ -76,6 +80,20 @@ type CoreStartResponse = {
         };
     } & StartXrayCommand.Response['response'];
 } & StartXrayCommand.Response;
+
+export type NodeAgentHealthResponse = GetNodeHealthCheckCommand.Response['response'] & {
+    runningCore?: 'XRAY' | 'SING_BOX' | null;
+    supportedCores?: Array<'XRAY' | 'SING_BOX'>;
+    coreVersions?: {
+        xray: string | null;
+        singBox: string | null;
+    };
+    capabilities?: string[];
+    runtimeMode?: TNodeRuntimeStatus['mode'];
+    coreOnline?: boolean;
+    forwarding?: NonNullable<TNodeRuntimeStatus['forwarding']>;
+    usageSnapshot?: NonNullable<TNodeRuntimeStatus['usageSnapshot']>;
+};
 
 export interface GetUsersInboundStatsResponse {
     response: {
@@ -358,8 +376,8 @@ export class AxiosService {
 
     public async getNodeHealth(
         opts: INodeConnectionOpts,
-    ): Promise<TResult<GetNodeHealthCheckCommand.Response['response']>> {
-        return this.request<GetNodeHealthCheckCommand.Response>({
+    ): Promise<TResult<NodeAgentHealthResponse>> {
+        return this.request<{ response: NodeAgentHealthResponse }>({
             label: 'GET NODE HEALTH',
             path: GetNodeHealthCheckCommand.url,
             opts,

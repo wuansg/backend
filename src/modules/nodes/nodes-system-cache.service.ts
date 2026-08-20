@@ -1,3 +1,5 @@
+import type { TNodeRuntimeStatus } from '@contract/models';
+
 import { CACHE_KEYS } from '@contract/constants';
 
 import { Injectable } from '@nestjs/common';
@@ -19,12 +21,13 @@ export class NodesSystemCacheService {
             pipe.get(CACHE_KEYS.NODE_VERSIONS(node.uuid));
             pipe.get(CACHE_KEYS.NODE_XRAY_UPTIME(node.uuid));
             pipe.get(CACHE_KEYS.NODE_CONFIG_APPLY(node.uuid));
+            pipe.get(CACHE_KEYS.NODE_RUNTIME_STATUS(node.uuid));
         }
 
         const results = await pipe.exec();
         const map = new Map<string, INodeHotCache>();
 
-        const KEYS_PER_NODE = 6;
+        const KEYS_PER_NODE = 7;
 
         if (!results) {
             for (const node of nodes) {
@@ -34,6 +37,7 @@ export class NodesSystemCacheService {
                     xrayUptime: 0,
                     onlineUsers: 0,
                     configApply: null,
+                    runtimeStatus: null,
                 });
             }
             return map;
@@ -47,6 +51,7 @@ export class NodesSystemCacheService {
             const [versionsErr, rawVersions] = results[base + 3];
             const [uptimeErr, rawUptime] = results[base + 4];
             const [configApplyErr, rawConfigApply] = results[base + 5];
+            const [runtimeStatusErr, rawRuntimeStatus] = results[base + 6];
 
             const system =
                 !infoErr && !statsErr && rawInfo && rawStats
@@ -63,6 +68,10 @@ export class NodesSystemCacheService {
                 !configApplyErr && rawConfigApply
                     ? (JSON.parse(rawConfigApply as string) as INodeConfigApply)
                     : null;
+            const runtimeStatus =
+                !runtimeStatusErr && rawRuntimeStatus
+                    ? (JSON.parse(rawRuntimeStatus as string) as TNodeRuntimeStatus)
+                    : null;
 
             map.set(nodes[i].uuid, {
                 system,
@@ -70,6 +79,7 @@ export class NodesSystemCacheService {
                 xrayUptime,
                 onlineUsers,
                 configApply,
+                runtimeStatus,
             });
         }
 
@@ -77,14 +87,16 @@ export class NodesSystemCacheService {
     }
 
     async getOne(uuid: string): Promise<INodeHotCache> {
-        const [info, stats, versions, xrayUptime, onlineUsers, configApply] = await Promise.all([
-            this.rawCacheService.get<INodeSystem['info']>(CACHE_KEYS.NODE_SYSTEM_INFO(uuid)),
-            this.rawCacheService.get<INodeSystem['stats']>(CACHE_KEYS.NODE_SYSTEM_STATS(uuid)),
-            this.rawCacheService.get<INodeVersions>(CACHE_KEYS.NODE_VERSIONS(uuid)),
-            this.rawCacheService.getNumber(CACHE_KEYS.NODE_XRAY_UPTIME(uuid)),
-            this.rawCacheService.getNumber(CACHE_KEYS.NODE_USERS_ONLINE(uuid)),
-            this.rawCacheService.get<INodeConfigApply>(CACHE_KEYS.NODE_CONFIG_APPLY(uuid)),
-        ]);
+        const [info, stats, versions, xrayUptime, onlineUsers, configApply, runtimeStatus] =
+            await Promise.all([
+                this.rawCacheService.get<INodeSystem['info']>(CACHE_KEYS.NODE_SYSTEM_INFO(uuid)),
+                this.rawCacheService.get<INodeSystem['stats']>(CACHE_KEYS.NODE_SYSTEM_STATS(uuid)),
+                this.rawCacheService.get<INodeVersions>(CACHE_KEYS.NODE_VERSIONS(uuid)),
+                this.rawCacheService.getNumber(CACHE_KEYS.NODE_XRAY_UPTIME(uuid)),
+                this.rawCacheService.getNumber(CACHE_KEYS.NODE_USERS_ONLINE(uuid)),
+                this.rawCacheService.get<INodeConfigApply>(CACHE_KEYS.NODE_CONFIG_APPLY(uuid)),
+                this.rawCacheService.get<TNodeRuntimeStatus>(CACHE_KEYS.NODE_RUNTIME_STATUS(uuid)),
+            ]);
 
         let system: INodeSystem | null = null;
         if (info && stats) {
@@ -94,7 +106,7 @@ export class NodesSystemCacheService {
             };
         }
 
-        return { system, versions, xrayUptime, onlineUsers, configApply };
+        return { system, versions, xrayUptime, onlineUsers, configApply, runtimeStatus };
     }
 
     async delete(uuid: string): Promise<void> {
@@ -105,6 +117,7 @@ export class NodesSystemCacheService {
             CACHE_KEYS.NODE_VERSIONS(uuid),
             CACHE_KEYS.NODE_XRAY_UPTIME(uuid),
             CACHE_KEYS.NODE_CONFIG_APPLY(uuid),
+            CACHE_KEYS.NODE_RUNTIME_STATUS(uuid),
         ]);
     }
 

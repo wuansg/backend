@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { ConfigProfileInboundsSchema } from './config-profile-inbounds.schema';
 import { PartialInfraProviderSchema } from './infra-provider.schema';
+import { NodeRuntimeStatusSchema } from './node-runtime-status.schema';
 import { NodeSystemSchema } from './node-system.schema';
 
 export const NodesSchema = z.object({
@@ -65,6 +66,7 @@ export const NodesSchema = z.object({
         })
         .nullable()
         .optional(),
+    runtimeStatus: NodeRuntimeStatusSchema.nullable().optional(),
     xrayUptime: z.number(),
     usersOnline: z.number(),
     note: z.nullable(z.string()),

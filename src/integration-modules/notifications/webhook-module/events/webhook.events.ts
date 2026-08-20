@@ -1,3 +1,5 @@
+import type { TNodeRuntimeStatus } from '@contract/models';
+
 import dayjs from 'dayjs';
 import { serialize } from 'superjson';
 
@@ -264,14 +266,16 @@ export class WebhookEvents {
     }
 
     private async getNodesSystemInfo(uuid: string): Promise<INodeHotCache> {
-        const [info, stats, onlineUsers, xrayUptime, versions, configApply] = await Promise.all([
-            this.rawCacheService.get<INodeSystem['info']>(CACHE_KEYS.NODE_SYSTEM_INFO(uuid)),
-            this.rawCacheService.get<INodeSystem['stats']>(CACHE_KEYS.NODE_SYSTEM_STATS(uuid)),
-            this.rawCacheService.getNumber(CACHE_KEYS.NODE_USERS_ONLINE(uuid)),
-            this.rawCacheService.getNumber(CACHE_KEYS.NODE_XRAY_UPTIME(uuid)),
-            this.rawCacheService.get<INodeVersions>(CACHE_KEYS.NODE_VERSIONS(uuid)),
-            this.rawCacheService.get<INodeConfigApply>(CACHE_KEYS.NODE_CONFIG_APPLY(uuid)),
-        ]);
+        const [info, stats, onlineUsers, xrayUptime, versions, configApply, runtimeStatus] =
+            await Promise.all([
+                this.rawCacheService.get<INodeSystem['info']>(CACHE_KEYS.NODE_SYSTEM_INFO(uuid)),
+                this.rawCacheService.get<INodeSystem['stats']>(CACHE_KEYS.NODE_SYSTEM_STATS(uuid)),
+                this.rawCacheService.getNumber(CACHE_KEYS.NODE_USERS_ONLINE(uuid)),
+                this.rawCacheService.getNumber(CACHE_KEYS.NODE_XRAY_UPTIME(uuid)),
+                this.rawCacheService.get<INodeVersions>(CACHE_KEYS.NODE_VERSIONS(uuid)),
+                this.rawCacheService.get<INodeConfigApply>(CACHE_KEYS.NODE_CONFIG_APPLY(uuid)),
+                this.rawCacheService.get<TNodeRuntimeStatus>(CACHE_KEYS.NODE_RUNTIME_STATUS(uuid)),
+            ]);
 
         return {
             system: info && stats ? { info, stats } : null,
@@ -279,6 +283,7 @@ export class WebhookEvents {
             versions,
             xrayUptime,
             configApply,
+            runtimeStatus,
         };
     }
 }

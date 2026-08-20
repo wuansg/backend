@@ -1,3 +1,5 @@
+import type { TNodeRuntimeStatus } from '@contract/models';
+
 import { INodeSystem } from './node-host-info.interface';
 
 export interface INodeVersions {
@@ -22,4 +24,5 @@ export interface INodeHotCache {
     xrayUptime: number;
     onlineUsers: number;
     configApply: INodeConfigApply | null;
+    runtimeStatus: TNodeRuntimeStatus | null;
 }

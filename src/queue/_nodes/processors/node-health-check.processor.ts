@@ -7,7 +7,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 
 import { GetSystemStatsCommand } from '@remnawave/node-contract';
 
-import { AxiosService, INodeConnectionOpts } from '@common/axios';
+import { AxiosService, INodeConnectionOpts, NodeAgentHealthResponse } from '@common/axios';
 import { RawCacheService } from '@common/raw-cache';
 import { CACHE_KEYS, CACHE_KEYS_TTL, EVENTS } from '@libs/contracts/constants';
 
@@ -20,6 +20,7 @@ import { QUEUES_NAMES } from '@queue/queue.enum';
 
 import { NODES_JOB_NAMES } from '../constants/nodes-job-name.constant';
 import { INodeHealthCheckPayload } from '../interfaces';
+import { resolveNodeRuntimeStatus } from '../node-runtime-status.util';
 
 @Processor(QUEUES_NAMES.NODES.HEALTH_CHECK, {
     concurrency: 40,
@@ -40,8 +41,36 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
         try {
             const { nodeUuid, isConnected, expectsCore, connectionOpts } = job.data;
 
+            const healthResult = await this.axios.getNodeHealth(connectionOpts);
+            if (!healthResult.isOk) {
+                return await this.handleDisconnectedNode(
+                    nodeUuid,
+                    isConnected,
+                    healthResult.message ?? 'Node agent is unavailable',
+                );
+            }
+            if (!healthResult.response.isAlive) {
+                return await this.handleDisconnectedNode(
+                    nodeUuid,
+                    isConnected,
+                    'Node agent reported that it is not alive',
+                );
+            }
+
+            const runtimeStatus = resolveNodeRuntimeStatus(healthResult.response, expectsCore);
+            await this.cacheRuntimeStatus(nodeUuid, runtimeStatus);
+
             if (!expectsCore) {
-                return await this.handleCorelessNode(connectionOpts, nodeUuid, isConnected);
+                return await this.handleCorelessNode(healthResult.response, nodeUuid, isConnected);
+            }
+
+            if (!runtimeStatus.coreOnline) {
+                return await this.handleDegradedCore(
+                    nodeUuid,
+                    isConnected,
+                    runtimeStatus,
+                    'Node agent is online, but the configured core is unavailable',
+                );
             }
 
             const attemptsLimit = 2;
@@ -59,6 +88,7 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
                             nodeUuid,
                             isConnected,
                             statResult.response,
+                            runtimeStatus,
                         );
                     case false:
                         message = statResult.message ?? 'Unknown error';
@@ -85,7 +115,7 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
                 }
             }
 
-            return await this.handleDisconnectedNode(nodeUuid, isConnected, message);
+            return await this.handleDegradedCore(nodeUuid, isConnected, runtimeStatus, message);
         } catch (error) {
             this.logger.error(
                 `Error handling "${NODES_JOB_NAMES.NODE_HEALTH_CHECK}" job: ${error}`,
@@ -95,61 +125,24 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
     }
 
     private async handleCorelessNode(
-        connectionOpts: INodeConnectionOpts,
+        health: NodeAgentHealthResponse,
         nodeUuid: string,
         isConnected: boolean,
     ) {
-        const healthResult = await this.axios.getNodeHealth(connectionOpts);
-        if (!healthResult.isOk) {
-            return await this.handleDisconnectedNode(
-                nodeUuid,
-                isConnected,
-                healthResult.message ?? 'Node agent is unavailable',
-            );
-        }
-        if (!healthResult.response.isAlive) {
-            return await this.handleDisconnectedNode(
-                nodeUuid,
-                isConnected,
-                'Node agent reported that it is not alive',
-            );
-        }
-
         await this.rawCacheService.delMany([
             CACHE_KEYS.NODE_SYSTEM_STATS(nodeUuid),
             CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
             CACHE_KEYS.NODE_XRAY_UPTIME(nodeUuid),
         ]);
 
-        if (healthResult.response.xrayInternalStatusCached) {
+        if (health.xrayInternalStatusCached) {
             this.logger.warn(
                 `Node ${nodeUuid} has no active inbounds but a core is running; scheduling core stop.`,
             );
             await this.nodesQueuesService.startNode({ nodeUuid });
         }
 
-        if (!isConnected) {
-            const nodeUpdatedResponse = await this.commandBus.execute(
-                new UpdateNodeCommand({
-                    uuid: nodeUuid,
-                    isConnected: true,
-                    isConnecting: false,
-                    lastStatusMessage: null,
-                    lastStatusChange: new Date(),
-                }),
-            );
-
-            if (!nodeUpdatedResponse.isOk) {
-                return;
-            }
-
-            this.eventEmitter.emit(
-                EVENTS.NODE.CONNECTION_RESTORED,
-                new NodeEvent(nodeUpdatedResponse.response, EVENTS.NODE.CONNECTION_RESTORED),
-            );
-        }
-
-        return;
+        return await this.markAgentConnected(nodeUuid, isConnected);
     }
 
     private async handleConnectedNode(
@@ -157,20 +150,17 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
         nodeUuid: string,
         isConnected: boolean,
         stats: GetSystemStatsCommand.Response['response'],
+        runtimeStatus: ReturnType<typeof resolveNodeRuntimeStatus>,
     ) {
         if (stats.xrayInfo === null) {
             this.logger.error(`Node ${nodeUuid} – xrayInfo is null`);
 
-            await this.commandBus.execute(
-                new UpdateNodeCommand({
-                    uuid: nodeUuid,
-                    isConnected: false,
-                    lastStatusChange: new Date(),
-                    lastStatusMessage: 'Required info is missing. Outdated version?',
-                }),
+            return await this.handleDegradedCore(
+                nodeUuid,
+                isConnected,
+                runtimeStatus,
+                'Required core info is missing. Outdated node agent?',
             );
-
-            return;
         }
 
         await this.rawCacheService.setMany([
@@ -219,6 +209,69 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
         return;
     }
 
+    private async cacheRuntimeStatus(
+        nodeUuid: string,
+        runtimeStatus: ReturnType<typeof resolveNodeRuntimeStatus>,
+    ): Promise<void> {
+        await this.rawCacheService.set(
+            CACHE_KEYS.NODE_RUNTIME_STATUS(nodeUuid),
+            runtimeStatus,
+            CACHE_KEYS_TTL.NODE_RUNTIME_STATUS,
+        );
+    }
+
+    private async handleDegradedCore(
+        nodeUuid: string,
+        isConnected: boolean,
+        runtimeStatus: ReturnType<typeof resolveNodeRuntimeStatus>,
+        message: string,
+    ): Promise<void> {
+        await Promise.all([
+            this.cacheRuntimeStatus(nodeUuid, {
+                ...runtimeStatus,
+                mode: 'DEGRADED',
+                coreOnline: false,
+            }),
+            this.rawCacheService.delMany([
+                CACHE_KEYS.NODE_SYSTEM_STATS(nodeUuid),
+                CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
+                CACHE_KEYS.NODE_XRAY_UPTIME(nodeUuid),
+            ]),
+        ]);
+
+        await this.markAgentConnected(nodeUuid, isConnected, message);
+        await this.nodesQueuesService.startNode({ nodeUuid });
+
+        const logMessage = `Node agent ${nodeUuid} is online but its core is degraded: ${message}`;
+        if (isConnected) this.logger.debug(logMessage);
+        else this.logger.warn(logMessage);
+    }
+
+    private async markAgentConnected(
+        nodeUuid: string,
+        isConnected: boolean,
+        message: string | null = null,
+    ): Promise<void> {
+        if (isConnected) return;
+
+        const nodeUpdatedResponse = await this.commandBus.execute(
+            new UpdateNodeCommand({
+                uuid: nodeUuid,
+                isConnected: true,
+                isConnecting: false,
+                lastStatusMessage: message,
+                lastStatusChange: new Date(),
+            }),
+        );
+
+        if (!nodeUpdatedResponse.isOk) return;
+
+        this.eventEmitter.emit(
+            EVENTS.NODE.CONNECTION_RESTORED,
+            new NodeEvent(nodeUpdatedResponse.response, EVENTS.NODE.CONNECTION_RESTORED),
+        );
+    }
+
     private async handleDisconnectedNode(
         nodeUuid: string,
         isConnected: boolean,
@@ -228,6 +281,7 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             CACHE_KEYS.NODE_SYSTEM_INFO(nodeUuid),
             CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
             CACHE_KEYS.NODE_XRAY_UPTIME(nodeUuid),
+            CACHE_KEYS.NODE_RUNTIME_STATUS(nodeUuid),
         ]);
 
         const newNodeEntity = await this.commandBus.execute(

@@ -1,3 +1,5 @@
+import type { TNodeRuntimeStatus } from '@contract/models';
+
 import { fromNanoToNumber } from '@common/utils/nano';
 
 import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
@@ -45,6 +47,7 @@ export class NodeResponseModel {
     public system: INodeSystem | null;
     public versions: INodeVersions | null;
     public configApply: INodeConfigApply | null;
+    public runtimeStatus: TNodeRuntimeStatus | null;
     public usageSnapshot: {
         receivedThrough: number;
         appliedThrough: number;
@@ -94,6 +97,7 @@ export class NodeResponseModel {
         this.usersOnline = hotCache.onlineUsers;
         this.versions = hotCache.versions;
         this.configApply = hotCache.configApply;
+        this.runtimeStatus = hotCache.runtimeStatus;
         this.xrayUptime = hotCache.xrayUptime;
         this.usageSnapshot = data.usageSnapshotState
             ? {

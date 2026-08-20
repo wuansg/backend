@@ -22,6 +22,7 @@ import { QUEUES_NAMES } from '@queue/queue.enum';
 
 import { NODES_JOB_NAMES } from '../constants/nodes-job-name.constant';
 import { syncForwardingIfSupported } from '../forwarding-sync.util';
+import { resolveNodeRuntimeStatus } from '../node-runtime-status.util';
 import { NodesQueuesService } from '../nodes-queues.service';
 
 @Processor(QUEUES_NAMES.NODES.START, {
@@ -207,6 +208,18 @@ export class StartNodeProcessor extends WorkerHost {
                     node: health.nodeVersion,
                     core: null,
                 });
+                const refreshedHealth = await this.axios.getNodeHealth({
+                    address: node.address,
+                    port: node.port,
+                    proxyUrl: node.proxyUrl,
+                });
+                if (refreshedHealth.isOk) {
+                    await this.rawCacheService.set(
+                        CACHE_KEYS.NODE_RUNTIME_STATUS(node.uuid),
+                        resolveNodeRuntimeStatus(refreshedHealth.response, false),
+                        CACHE_KEYS_TTL.NODE_RUNTIME_STATUS,
+                    );
+                }
 
                 const updateNodeResult = await this.commandBus.execute(
                     new UpdateNodeCommand({
@@ -320,6 +333,19 @@ export class StartNodeProcessor extends WorkerHost {
             if (forwardingError) {
                 this.logger.warn(
                     `Forwarding sync failed for node ${node.uuid}; keeping the last applied rules: ${forwardingError}`,
+                );
+            }
+
+            const refreshedHealth = await this.axios.getNodeHealth({
+                address: node.address,
+                port: node.port,
+                proxyUrl: node.proxyUrl,
+            });
+            if (refreshedHealth.isOk) {
+                await this.rawCacheService.set(
+                    CACHE_KEYS.NODE_RUNTIME_STATUS(node.uuid),
+                    resolveNodeRuntimeStatus(refreshedHealth.response, true),
+                    CACHE_KEYS_TTL.NODE_RUNTIME_STATUS,
                 );
             }
 
