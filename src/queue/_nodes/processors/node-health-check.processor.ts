@@ -20,7 +20,7 @@ import { QUEUES_NAMES } from '@queue/queue.enum';
 
 import { NODES_JOB_NAMES } from '../constants/nodes-job-name.constant';
 import { INodeHealthCheckPayload } from '../interfaces';
-import { resolveNodeRuntimeStatus } from '../node-runtime-status.util';
+import { resolveNodeRuntimeStatus, resolveNodeVersions } from '../node-runtime-status.util';
 
 @Processor(QUEUES_NAMES.NODES.HEALTH_CHECK, {
     concurrency: 40,
@@ -58,7 +58,13 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             }
 
             const runtimeStatus = resolveNodeRuntimeStatus(healthResult.response, expectsCore);
-            await this.cacheRuntimeStatus(nodeUuid, runtimeStatus);
+            await Promise.all([
+                this.cacheRuntimeStatus(nodeUuid, runtimeStatus),
+                this.rawCacheService.set(
+                    CACHE_KEYS.NODE_VERSIONS(nodeUuid),
+                    resolveNodeVersions(healthResult.response),
+                ),
+            ]);
 
             if (!expectsCore) {
                 return await this.handleCorelessNode(healthResult.response, nodeUuid, isConnected);

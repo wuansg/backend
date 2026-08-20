@@ -24,3 +24,15 @@ export function resolveNodeRuntimeStatus(
         usageSnapshot: health.usageSnapshot ?? null,
     };
 }
+
+export function resolveNodeVersions(health: NodeAgentHealthResponse) {
+    const coreOnline = health.coreOnline ?? health.xrayInternalStatusCached;
+    const runningCore = health.runningCore ?? (coreOnline ? 'XRAY' : null);
+
+    return {
+        xray: health.coreVersions?.xray ?? health.xrayVersion,
+        singBox: health.coreVersions?.singBox ?? null,
+        node: health.nodeVersion,
+        core: runningCore,
+    };
+}

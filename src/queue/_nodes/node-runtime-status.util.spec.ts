@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { resolveNodeRuntimeStatus } from './node-runtime-status.util';
+import { resolveNodeRuntimeStatus, resolveNodeVersions } from './node-runtime-status.util';
 
 describe('resolveNodeRuntimeStatus', () => {
     it('preserves the runtime mode advertised by a new node agent', () => {
@@ -57,6 +57,39 @@ describe('resolveNodeRuntimeStatus', () => {
                 true,
             ).mode,
             'DEGRADED',
+        );
+    });
+
+    it('refreshes node and core versions from every health response', () => {
+        assert.deepEqual(
+            resolveNodeVersions({
+                isAlive: true,
+                xrayInternalStatusCached: false,
+                xrayVersion: '26.3.27',
+                nodeVersion: '3.4.0',
+                runningCore: null,
+                coreOnline: false,
+                coreVersions: {
+                    xray: '26.3.27',
+                    singBox: '1.13.16',
+                },
+            }),
+            {
+                xray: '26.3.27',
+                singBox: '1.13.16',
+                node: '3.4.0',
+                core: null,
+            },
+        );
+
+        assert.equal(
+            resolveNodeVersions({
+                isAlive: true,
+                xrayInternalStatusCached: true,
+                xrayVersion: '25.1.30',
+                nodeVersion: '2.7.0',
+            }).core,
+            'XRAY',
         );
     });
 });
