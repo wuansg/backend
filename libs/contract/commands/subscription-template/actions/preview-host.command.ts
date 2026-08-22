@@ -19,7 +19,7 @@ export namespace PreviewHostSubscriptionCommand {
         SUBSCRIPTION_TEMPLATE_ROUTES.ACTIONS.PREVIEW_HOST,
         'post',
         'Preview a generated host before and after Host Mapper operations',
-        { scope: 'get', kind: 'read' },
+        { scope: 'preview-host', kind: 'read' },
     );
 
     export const RequestBodySchema = z.object({
