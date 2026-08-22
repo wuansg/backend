@@ -5,6 +5,7 @@ import { THostMapperOperation } from '@libs/contracts/models';
 import { ResolvedProxyConfig } from '../resolve-proxy/interfaces';
 
 const HOST_SOURCE_PREFIX = '$host.';
+const UNSAFE_PATH_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
 const HOST_ALLOWED_PATHS = [
     'address',
     'clientOverrides.serverDescription',
@@ -27,6 +28,10 @@ const HOST_ALLOWED_PATHS = [
 interface CopySource {
     path: string[];
     root: object;
+}
+
+function isSafePath(segments: string[]): boolean {
+    return segments.length > 0 && segments.every((segment) => !UNSAFE_PATH_SEGMENTS.has(segment));
 }
 
 function isBlockedByPrimitive(target: object, path: string): boolean {
@@ -52,14 +57,15 @@ function isAllowedHostPath(segments: string[]): boolean {
 function resolveCopySource(from: string, host: ResolvedProxyConfig): CopySource | null {
     if (!from.startsWith(HOST_SOURCE_PREFIX)) {
         const rawInbound = host.metadata.rawInbound;
+        const path = toPath(from);
 
-        if (!rawInbound || typeof rawInbound !== 'object') return null;
+        if (!rawInbound || typeof rawInbound !== 'object' || !isSafePath(path)) return null;
 
-        return { root: rawInbound, path: toPath(from) };
+        return { root: rawInbound, path };
     }
 
     const path = toPath(from.slice(HOST_SOURCE_PREFIX.length));
-    if (!path.length || !isAllowedHostPath(path)) return null;
+    if (!isSafePath(path) || !isAllowedHostPath(path)) return null;
 
     return { root: host, path };
 }
@@ -76,8 +82,9 @@ export function applyHostMapper<T extends object>(
 
     for (const operation of operations) {
         try {
-            const to = flatTargets ? [operation.to] : operation.to;
+            const to = flatTargets ? [operation.to] : toPath(operation.to);
 
+            if (!isSafePath(to)) continue;
             if (!flatTargets && isBlockedByPrimitive(result, operation.to)) continue;
 
             switch (operation.op) {

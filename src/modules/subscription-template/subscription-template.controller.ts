@@ -17,6 +17,7 @@ import {
     DeleteSubscriptionTemplateCommand,
     GetSubscriptionTemplateCommand,
     GetSubscriptionTemplatesCommand,
+    PreviewHostSubscriptionCommand,
     ReorderSubscriptionTemplateCommand,
     UpdateSubscriptionTemplateCommand,
 } from '@libs/contracts/commands';
@@ -28,11 +29,14 @@ import {
     GetTemplateParamDto,
     GetTemplateResponseDto,
     GetTemplatesResponseDto,
+    PreviewHostSubscriptionBodyDto,
+    PreviewHostSubscriptionResponseDto,
     ReorderSubscriptionTemplatesBodyDto,
     ReorderSubscriptionTemplatesResponseDto,
     UpdateTemplateResponseDto,
     UpdateTemplateBodyDto,
 } from './dtos/subscription-templates.dtos';
+import { HostPreviewService } from './host-preview.service';
 import { SubscriptionTemplateService } from './subscription-template.service';
 
 @ApiBearerAuth('Authorization')
@@ -43,7 +47,10 @@ import { SubscriptionTemplateService } from './subscription-template.service';
 @UseFilters(HttpExceptionFilter)
 @Controller(SUBSCRIPTION_TEMPLATE_CONTROLLER)
 export class SubscriptionTemplateController {
-    constructor(private readonly subscriptionTemplateService: SubscriptionTemplateService) {}
+    constructor(
+        private readonly subscriptionTemplateService: SubscriptionTemplateService,
+        private readonly hostPreviewService: HostPreviewService,
+    ) {}
 
     @Endpoint({
         command: GetSubscriptionTemplatesCommand,
@@ -135,5 +142,19 @@ export class SubscriptionTemplateController {
         return {
             response: data,
         };
+    }
+
+    @Endpoint({
+        command: PreviewHostSubscriptionCommand,
+        httpCode: HttpStatus.OK,
+        type: PreviewHostSubscriptionResponseDto,
+    })
+    async previewHostSubscription(
+        @Body() body: PreviewHostSubscriptionBodyDto,
+    ): Promise<PreviewHostSubscriptionResponseDto> {
+        const result = await this.hostPreviewService.preview(body);
+        const data = errorHandler(result);
+
+        return { response: data };
     }
 }

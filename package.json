@@ -1,6 +1,6 @@
 {
   "name": "@remnawave/backend",
-  "version": "3.3.1",
+  "version": "3.4.0",
   "private": false,
   "description": "Remnawave Panel Backend",
   "homepage": "https://github.com/remnawave",
@@ -26,6 +26,7 @@
     "test:usage-snapshots": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-usage-snapshot-reliability.ts",
     "test:inbound-diff": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-inbound-diff.ts",
     "test:node-runtime-status": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register src/queue/_nodes/node-runtime-status.util.spec.ts",
+    "test:host-mapper": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-host-mapper.ts",
     "test:xray-generator": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-xray-generator.ts",
     "migrate:dev": "prisma migrate dev",
     "migrate:generate": "prisma generate",
