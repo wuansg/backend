@@ -10,6 +10,7 @@ export const SUBSCRIPTION_TEMPLATE_ROUTES = {
     CREATE: '', // post
 
     ACTIONS: {
+        PREVIEW_HOST: `${ACTIONS_ROUTE}/preview-host`,
         REORDER: `${ACTIONS_ROUTE}/reorder`,
     },
 } as const;

@@ -1196,4 +1196,10 @@ export const ERRORS = {
         httpCode: 422,
         withMessage: (message: string) => ({ code: 'A238', message, httpCode: 422 }),
     },
+    HOST_SUBSCRIPTION_PREVIEW_ERROR: {
+        code: 'A239',
+        message: 'Failed to generate host subscription preview',
+        httpCode: 422,
+        withMessage: (message: string) => ({ code: 'A239', message, httpCode: 422 }),
+    },
 } as const;
