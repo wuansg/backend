@@ -23,17 +23,61 @@ const IpCidrOrExtSchema = z
         markdownDescription: `IP address or CIDR range. \n\n You can use lists from **sharedLists** in the format: **ext:list_name**.${DOCS_LINK}`,
     });
 
+const DomainOrExtSchema = z.union([
+    z
+        .string()
+        .trim()
+        .toLowerCase()
+        .min(1)
+        .max(253)
+        .regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/),
+    z.string().startsWith('ext:'),
+]);
+
+const IpListSchema = z.object({
+    type: z.literal('ipList'),
+    items: z.array(z.union([z.cidrv4(), cidrv6(), z.union([z.ipv4(), ipv6()])])).max(4096),
+});
+
+const AsListSchema = z.object({
+    type: z.literal('asList'),
+    items: z.array(z.int().min(1).max(4294967295)).max(4096),
+});
+
+const DomainListSchema = z.object({
+    type: z.literal('domainList'),
+    items: z
+        .array(
+            z
+                .string()
+                .trim()
+                .toLowerCase()
+                .min(1)
+                .max(253)
+                .regex(
+                    /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/,
+                ),
+        )
+        .max(4096),
+});
+
+const PortListSchema = z.object({
+    type: z.literal('portList'),
+    items: z.array(z.int().min(1).max(65535)).max(4096),
+});
+
+export const SharedListConfigSchema = z.discriminatedUnion('type', [
+    IpListSchema,
+    AsListSchema,
+    DomainListSchema,
+    PortListSchema,
+]);
+
 export const SharedListSchema = z.discriminatedUnion('type', [
-    z.object({
-        name: z.string().startsWith('ext:'),
-        type: z.literal('ipList'),
-        items: z.array(z.union([z.cidrv4(), cidrv6(), z.union([z.ipv4(), ipv6()])])),
-    }),
-    z.object({
-        name: z.string().startsWith('ext:'),
-        type: z.literal('asList'),
-        items: z.array(z.int().min(1).max(4294967295)),
-    }),
+    IpListSchema.extend({ name: z.string().startsWith('ext:') }),
+    AsListSchema.extend({ name: z.string().startsWith('ext:') }),
+    DomainListSchema.extend({ name: z.string().startsWith('ext:') }),
+    PortListSchema.extend({ name: z.string().startsWith('ext:') }),
 ]);
 
 export const TorrentBlockerPluginSchema = z.object({
@@ -113,11 +157,18 @@ export const EgressFilterPluginSchema = z.object({
             markdownDescription: `List of destination IP addresses and CIDR ranges to block. \n\n You can use lists from **sharedLists** in the format: **ext:list_name**. \n\n Example: \`["10.0.0.1", "ext:blocked_destinations"]\`${DOCS_LINK}`,
         }),
     blockedPorts: z
-        .array(z.int().min(1).max(65535))
+        .array(z.union([z.int().min(1).max(65535), z.string().startsWith('ext:')]))
         .optional()
         .meta({
             title: 'Blocked Ports',
             markdownDescription: `List of destination ports to block. \n\n Example: \`[25, 465, 587]\` to block SMTP traffic.${DOCS_LINK}`,
+        }),
+    blockedDomains: z
+        .array(DomainOrExtSchema)
+        .optional()
+        .meta({
+            title: 'Blocked Domains',
+            markdownDescription: `Destination domains resolved by the node and blocked through nftables. Shared domain lists use the **ext:list_name** form.${DOCS_LINK}`,
         }),
 });
 
@@ -192,4 +243,8 @@ export const NodePluginSchema = z.object({
     }),
 });
 
+export const NodePluginEditorSchema = NodePluginSchema.omit({ sharedLists: true });
+
+export type TSharedListConfig = z.infer<typeof SharedListConfigSchema>;
 export type TNodePlugin = z.infer<typeof NodePluginSchema>;
+export type TNodePluginEditor = z.infer<typeof NodePluginEditorSchema>;

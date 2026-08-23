@@ -27,6 +27,7 @@ import {
     DropIpsCommand,
     DropUsersConnectionsCommand,
     GetCombinedStatsCommand,
+    GetGeocheckCommand,
     GetNodeHealthCheckCommand,
     GetSystemStatsCommand,
     GetUserIpListCommand,
@@ -534,6 +535,21 @@ export class AxiosService {
             data,
             handle500: true,
             logAxiosError: false,
+        });
+    }
+
+    public async getGeocheck(
+        data: GetGeocheckCommand.Request,
+        opts: INodeConnectionOpts,
+    ): Promise<TResult<GetGeocheckCommand.Response['response']>> {
+        return this.request<GetGeocheckCommand.Response>({
+            label: 'GET GEO CHECK',
+            path: GetGeocheckCommand.url,
+            opts,
+            data,
+            handle500: true,
+            logAxiosError: false,
+            timeout: 55_000,
         });
     }
 

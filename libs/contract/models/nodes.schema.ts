@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { ConfigProfileInboundsSchema } from './config-profile-inbounds.schema';
 import { PartialInfraProviderSchema } from './infra-provider.schema';
+import { NodeIpsSchema } from './node-ips.schema';
 import { NodeRuntimeStatusSchema } from './node-runtime-status.schema';
 import { NodeSystemSchema } from './node-system.schema';
 
@@ -27,6 +28,7 @@ export const NodesSchema = z.object({
     consumptionMultiplier: z.number(),
     nodeConsumptionMultiplier: z.number(),
     tags: z.array(z.string()),
+    ips: NodeIpsSchema,
 
     createdAt: z.iso.datetime().transform((str) => new Date(str)),
     updatedAt: z.iso.datetime().transform((str) => new Date(str)),

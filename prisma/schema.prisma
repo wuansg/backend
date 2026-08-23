@@ -190,6 +190,8 @@ model Nodes {
   trafficLimitBytes       BigInt? @default(0) @map("traffic_limit_bytes")
   trafficUsedBytes        BigInt? @default(0) @map("traffic_used_bytes")
   notifyPercent           Int?    @default(0) @map("notify_percent")
+  /// [NodeIps]
+  ips                     Json    @default("[]") @map("ips")
 
   providerUuid String? @map("provider_uuid") @db.Uuid
 
@@ -663,6 +665,16 @@ model SubscriptionPageConfig {
   externalSquads ExternalSquads[]
 
   @@map("subscription_page_config")
+}
+
+model SharedLists {
+  name   String @id @map("name") @db.VarChar(255)
+  config Json   @map("config")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("shared_lists")
 }
 
 model NodePlugin {

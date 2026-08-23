@@ -1,5 +1,4 @@
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import { NodePluginSchema } from 'libs/node-plugins';
 import { nanoid } from 'nanoid';
 
 import { Injectable, Logger } from '@nestjs/common';
@@ -8,6 +7,7 @@ import { QueryBus } from '@nestjs/cqrs';
 import { fail, ok, TResult } from '@common/types';
 import { GetTorrentBlockerReportsCommand } from '@libs/contracts/commands';
 import { ERRORS } from '@libs/contracts/constants';
+import { NodePluginEditorSchema } from '@libs/node-plugins/models';
 
 import { NodesEntity } from '@modules/nodes/entities/nodes.entity';
 import { FindNodesByCriteriaQuery } from '@modules/nodes/queries/find-nodes-by-criteria';
@@ -26,7 +26,9 @@ import {
 } from './models';
 import {} from './models/base-node-plugin.response.model';
 import { NodePluginRepository } from './repositories/node-plugins.repository';
+import { SharedListsRepository } from './repositories/shared-lists.repository';
 import { TorrentBlockerReportsRepository } from './repositories/torrent-blocker-report.repository';
+import { validateSharedListReferences } from './utils';
 
 @Injectable()
 export class NodePluginService {
@@ -34,6 +36,7 @@ export class NodePluginService {
 
     constructor(
         private readonly nodePluginRepository: NodePluginRepository,
+        private readonly sharedListsRepository: SharedListsRepository,
         private readonly nodeQueuesService: NodesQueuesService,
         private readonly torrentBlockerReportsRepository: TorrentBlockerReportsRepository,
         private readonly queryBus: QueryBus,
@@ -78,7 +81,7 @@ export class NodePluginService {
             }
 
             if (inputConfig) {
-                const validatedConfig = await NodePluginSchema.safeParseAsync(inputConfig);
+                const validatedConfig = await NodePluginEditorSchema.safeParseAsync(inputConfig);
 
                 if (!validatedConfig.success) {
                     const errorMessage = validatedConfig.error.issues
@@ -89,6 +92,19 @@ export class NodePluginService {
                         .join(', ');
                     this.logger.error(errorMessage);
                     return fail(ERRORS.INVALID_NODE_PLUGIN_CONFIG.withMessage(errorMessage));
+                }
+
+                const sharedLists = await this.sharedListsRepository.getAllSharedLists();
+                const referenceErrors = validateSharedListReferences(
+                    validatedConfig.data,
+                    sharedLists,
+                );
+                if (referenceErrors.length > 0) {
+                    return fail(
+                        ERRORS.INVALID_NODE_PLUGIN_CONFIG.withMessage(
+                            `Invalid shared list reference(s): ${referenceErrors.join(', ')}`,
+                        ),
+                    );
                 }
 
                 inputConfig = validatedConfig.data;
@@ -216,6 +232,13 @@ export class NodePluginService {
             this.logger.error(error);
             return fail(ERRORS.CREATE_NODE_PLUGIN_ERROR);
         }
+    }
+
+    public async syncNodePluginByUuid(pluginUuid: string): Promise<TResult<boolean>> {
+        const nodePlugin = await this.nodePluginRepository.findByUUID(pluginUuid);
+        if (!nodePlugin) return fail(ERRORS.NODE_PLUGIN_NOT_FOUND);
+        await this.syncNodePlugins(pluginUuid);
+        return ok(true);
     }
 
     private async syncNodePlugins(pluginUuid: string): Promise<void> {

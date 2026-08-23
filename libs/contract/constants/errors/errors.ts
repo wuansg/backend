@@ -1202,4 +1202,57 @@ export const ERRORS = {
         httpCode: 422,
         withMessage: (message: string) => ({ code: 'A239', message, httpCode: 422 }),
     },
+    SHARED_LIST_NOT_FOUND: {
+        code: 'A240',
+        message: 'Shared list not found',
+        httpCode: 404,
+    },
+    SHARED_LIST_NAME_ALREADY_EXISTS: {
+        code: 'A241',
+        message: 'Shared list name already exists',
+        httpCode: 400,
+    },
+    GET_ALL_SHARED_LISTS_ERROR: {
+        code: 'A242',
+        message: 'Get all shared lists error',
+        httpCode: 500,
+    },
+    GET_SHARED_LIST_BY_NAME_ERROR: {
+        code: 'A243',
+        message: 'Get shared list by name error',
+        httpCode: 500,
+    },
+    CREATE_SHARED_LIST_ERROR: {
+        code: 'A244',
+        message: 'Create shared list error',
+        httpCode: 500,
+    },
+    UPDATE_SHARED_LIST_ERROR: {
+        code: 'A245',
+        message: 'Update shared list error',
+        httpCode: 500,
+    },
+    DELETE_SHARED_LIST_ERROR: {
+        code: 'A246',
+        message: 'Delete shared list error',
+        httpCode: 500,
+    },
+    INVALID_SHARED_LIST_CONFIG: {
+        code: 'A247',
+        message: 'Invalid shared list config',
+        httpCode: 400,
+        withMessage: (message: string) => ({ code: 'A247', message, httpCode: 400 }),
+    },
+    SHARED_LIST_IN_USE: {
+        code: 'A248',
+        message: 'Shared list is referenced by one or more node plugins',
+        httpCode: 409,
+        withMessage: (message: string) => ({ code: 'A248', message, httpCode: 409 }),
+    },
+    SHARED_LIST_LIMIT_EXCEEDED: {
+        code: 'A249',
+        message: 'Shared list exceeds configured limits',
+        httpCode: 400,
+        withMessage: (message: string) => ({ code: 'A249', message, httpCode: 400 }),
+    },
 } as const;
