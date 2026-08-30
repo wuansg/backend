@@ -229,7 +229,13 @@ model NodeUsageSnapshotState {
   appliedThrough  BigInt   @default(0) @map("applied_through")
   pending         Int      @default(0) @map("pending")
   nodeQueueBytes  BigInt   @default(0) @map("node_queue_bytes")
+  capturing       Boolean  @default(false) @map("capturing")
+  ingestSuccesses BigInt   @default(0) @map("ingest_successes")
+  ingestFailures  BigInt   @default(0) @map("ingest_failures")
+  databaseRetries BigInt   @default(0) @map("database_retries")
   lastCapturedAt  DateTime? @map("last_captured_at")
+  lastSuccessAt   DateTime? @map("last_success_at")
+  lastDurationMs  Int?     @map("last_duration_ms")
   lastError       String?  @map("last_error")
   updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
 

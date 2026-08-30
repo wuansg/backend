@@ -54,7 +54,13 @@ export class NodeResponseModel {
         appliedThrough: number;
         pending: number;
         queueBytes: number;
+        capturing: boolean;
+        ingestSuccesses: number;
+        ingestFailures: number;
+        databaseRetries: number;
         lastCapturedAt: Date | null;
+        lastSuccessAt: Date | null;
+        lastDurationMs: number | null;
         lastError: string | null;
     } | null;
 
@@ -107,7 +113,13 @@ export class NodeResponseModel {
                   appliedThrough: Number(data.usageSnapshotState.appliedThrough),
                   pending: data.usageSnapshotState.pending,
                   queueBytes: Number(data.usageSnapshotState.nodeQueueBytes),
+                  capturing: data.usageSnapshotState.capturing,
+                  ingestSuccesses: Number(data.usageSnapshotState.ingestSuccesses),
+                  ingestFailures: Number(data.usageSnapshotState.ingestFailures),
+                  databaseRetries: Number(data.usageSnapshotState.databaseRetries),
                   lastCapturedAt: data.usageSnapshotState.lastCapturedAt,
+                  lastSuccessAt: data.usageSnapshotState.lastSuccessAt,
+                  lastDurationMs: data.usageSnapshotState.lastDurationMs,
                   lastError: data.usageSnapshotState.lastError,
               }
             : null;

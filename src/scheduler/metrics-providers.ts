@@ -200,6 +200,36 @@ export const METRIC_PROVIDERS = [
         help: 'Whether the most recent snapshot ingestion attempt failed',
         labelNames: ['node_uuid'],
     }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_USAGE_SNAPSHOT_CAPTURING,
+        help: 'Whether the node is currently capturing usage snapshots from a running core',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_USAGE_SNAPSHOT_INGEST_SUCCESSES,
+        help: 'Total successful usage snapshot ingestion attempts persisted in the database',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_USAGE_SNAPSHOT_INGEST_FAILURES,
+        help: 'Total failed usage snapshot ingestion attempts persisted in the database',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_USAGE_SNAPSHOT_DATABASE_RETRIES,
+        help: 'Total retried usage snapshot database transactions',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_USAGE_SNAPSHOT_LAST_SUCCESS_TIMESTAMP_SECONDS,
+        help: 'Unix timestamp of the most recent successful usage snapshot ingestion',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_USAGE_SNAPSHOT_LAST_DURATION_SECONDS,
+        help: 'Duration of the most recent successful usage snapshot ingestion in seconds',
+        labelNames: ['node_uuid'],
+    }),
 ];
 
 export interface INodeBaseMetricLabels {

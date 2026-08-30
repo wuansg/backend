@@ -2,15 +2,19 @@ import { Prisma } from '@prisma/client';
 
 import { Injectable } from '@nestjs/common';
 
-import {
-    AxiosService,
-    INodeConnectionOpts,
-    UsageSnapshot,
-    UsageSnapshotCounter,
-} from '@common/axios';
+import { AxiosService, INodeConnectionOpts, UsageSnapshot } from '@common/axios';
 import { PrismaService } from '@common/database/prisma.service';
 
 import { buildNodeMetricsFromSnapshots, NodeMetricsPublisher } from './node-metrics.publisher';
+import {
+    collectSortedUsageUserIds,
+    retryDatabaseTransaction,
+} from './usage-snapshot-transaction.util';
+import {
+    buildUsageSnapshotWriteBatch,
+    UsageDelta,
+    UsageSnapshotWriteBatch,
+} from './usage-snapshot-write-batch.util';
 
 type SnapshotStateRow = {
     generation: string;
@@ -46,7 +50,9 @@ export class UsageSnapshotIngestService {
         await this.prisma
             .$executeRaw(Prisma.sql`
             UPDATE node_usage_snapshot_state
-            SET last_error = ${message.slice(0, 2_000)}, updated_at = now()
+            SET last_error = ${message.slice(0, 2_000)},
+                ingest_failures = ingest_failures + 1,
+                updated_at = now()
             WHERE node_uuid = ${nodeUuid}::uuid
         `)
             .catch(() => undefined);
@@ -60,6 +66,7 @@ export class UsageSnapshotIngestService {
         userConsumptionMultiplier: string,
         nodeConsumptionMultiplier: string,
     ): Promise<boolean> {
+        const startedAt = Date.now();
         let nodeStatus = await this.axios.getUsageSnapshotStatus(connectionOpts);
         if (nodeStatus === null) return false;
 
@@ -80,10 +87,11 @@ export class UsageSnapshotIngestService {
             await this.prisma.$executeRaw(Prisma.sql`
                 INSERT INTO node_usage_snapshot_state (
                     node_uuid, generation, received_through, applied_through,
-                    pending, node_queue_bytes, last_captured_at, last_error, updated_at
+                    pending, node_queue_bytes, capturing, last_captured_at, last_error, updated_at
                 ) VALUES (
                     ${nodeUuid}::uuid, ${nodeStatus.generation}, 0, 0,
                     ${nodeStatus.pending}, ${BigInt(nodeStatus.bytes)},
+                    ${isCapturing(nodeStatus)},
                     ${nodeStatus.lastCapturedAt ? new Date(nodeStatus.lastCapturedAt) : null}, NULL, now()
                 )
                 ON CONFLICT (node_uuid) DO UPDATE SET
@@ -92,6 +100,7 @@ export class UsageSnapshotIngestService {
                     applied_through = 0,
                     pending = EXCLUDED.pending,
                     node_queue_bytes = EXCLUDED.node_queue_bytes,
+                    capturing = EXCLUDED.capturing,
                     last_captured_at = EXCLUDED.last_captured_at,
                     last_error = NULL,
                     updated_at = now()
@@ -132,6 +141,7 @@ export class UsageSnapshotIngestService {
             nodeConsumptionMultiplier,
         );
         await this.updateNodeStatus(nodeUuid, nodeStatus);
+        await this.recordSuccess(nodeUuid, Date.now() - startedAt);
         return true;
     }
 
@@ -151,7 +161,13 @@ export class UsageSnapshotIngestService {
         generation: string,
         currentThrough: number,
         snapshots: UsageSnapshot[],
-        nodeStatus: { pending: number; bytes: number; lastCapturedAt?: string },
+        nodeStatus: {
+            active: boolean;
+            capturing?: boolean;
+            pending: number;
+            bytes: number;
+            lastCapturedAt?: string;
+        },
     ): Promise<number> {
         const ordered = [...snapshots].sort((a, b) => a.sequence - b.sequence);
         let through = currentThrough;
@@ -164,29 +180,32 @@ export class UsageSnapshotIngestService {
             through = snapshot.sequence;
         }
 
-        await this.prisma.$transaction(async (tx) => {
-            for (const snapshot of ordered) {
+        await this.retryTransaction(nodeUuid, () =>
+            this.prisma.$transaction(async (tx) => {
+                for (const snapshot of ordered) {
+                    await tx.$executeRaw(Prisma.sql`
+                        INSERT INTO node_usage_snapshot_inbox (
+                            node_uuid, generation, sequence, captured_at, core, payload
+                        ) VALUES (
+                            ${nodeUuid}::uuid, ${generation}, ${BigInt(snapshot.sequence)},
+                            ${new Date(snapshot.capturedAt)}, ${snapshot.core},
+                            ${JSON.stringify(snapshot)}::jsonb
+                        ) ON CONFLICT DO NOTHING
+                    `);
+                }
                 await tx.$executeRaw(Prisma.sql`
-                    INSERT INTO node_usage_snapshot_inbox (
-                        node_uuid, generation, sequence, captured_at, core, payload
-                    ) VALUES (
-                        ${nodeUuid}::uuid, ${generation}, ${BigInt(snapshot.sequence)},
-                        ${new Date(snapshot.capturedAt)}, ${snapshot.core},
-                        ${JSON.stringify(snapshot)}::jsonb
-                    ) ON CONFLICT DO NOTHING
+                    UPDATE node_usage_snapshot_state SET
+                        received_through = GREATEST(received_through, ${BigInt(through)}),
+                        pending = ${nodeStatus.pending},
+                        node_queue_bytes = ${BigInt(nodeStatus.bytes)},
+                        capturing = ${isCapturing(nodeStatus)},
+                        last_captured_at = ${nodeStatus.lastCapturedAt ? new Date(nodeStatus.lastCapturedAt) : null},
+                        last_error = NULL,
+                        updated_at = now()
+                    WHERE node_uuid = ${nodeUuid}::uuid AND generation = ${generation}
                 `);
-            }
-            await tx.$executeRaw(Prisma.sql`
-                UPDATE node_usage_snapshot_state SET
-                    received_through = GREATEST(received_through, ${BigInt(through)}),
-                    pending = ${nodeStatus.pending},
-                    node_queue_bytes = ${BigInt(nodeStatus.bytes)},
-                    last_captured_at = ${nodeStatus.lastCapturedAt ? new Date(nodeStatus.lastCapturedAt) : null},
-                    last_error = NULL,
-                    updated_at = now()
-                WHERE node_uuid = ${nodeUuid}::uuid AND generation = ${generation}
-            `);
-        });
+            }),
+        );
         return through;
     }
 
@@ -196,126 +215,131 @@ export class UsageSnapshotIngestService {
         userMultiplier: string,
         nodeMultiplier: string,
     ): Promise<void> {
-        const appliedSnapshots = await this.prisma.$transaction(async (tx) => {
-            const rows = await tx.$queryRaw<InboxRow[]>(Prisma.sql`
-                SELECT generation, sequence, payload
-                FROM node_usage_snapshot_inbox
-                WHERE node_uuid = ${nodeUuid}::uuid AND applied_at IS NULL
-                ORDER BY received_at, sequence
-                LIMIT 500
-                FOR UPDATE
-            `);
-            const snapshots: UsageSnapshot[] = [];
-            for (const row of rows) {
-                const snapshot = row.payload as UsageSnapshot;
-                await this.applySnapshot(
+        const appliedSnapshots = await this.retryTransaction(nodeUuid, () =>
+            this.prisma.$transaction(async (tx) => {
+                // This row is the per-node ingestion mutex. It prevents two
+                // workers from applying the same node inbox concurrently.
+                await tx.$queryRaw(Prisma.sql`
+                    SELECT node_uuid FROM node_usage_snapshot_state
+                    WHERE node_uuid = ${nodeUuid}::uuid
+                    FOR UPDATE
+                `);
+                const rows = await tx.$queryRaw<InboxRow[]>(Prisma.sql`
+                    SELECT generation, sequence, payload
+                    FROM node_usage_snapshot_inbox
+                    WHERE node_uuid = ${nodeUuid}::uuid AND applied_at IS NULL
+                    ORDER BY received_at, sequence
+                    LIMIT 500
+                    FOR UPDATE
+                `);
+                const snapshots = rows.map((row) => row.payload as UsageSnapshot);
+                const userIds = collectSortedUsageUserIds(snapshots);
+                if (userIds.length > 0) {
+                    // Cross-node transactions share user_traffic rows. Lock
+                    // every row up front in one stable order to avoid 40P01.
+                    await tx.$queryRaw(Prisma.sql`
+                        SELECT id FROM user_traffic
+                        WHERE id IN (${Prisma.join(userIds)})
+                        ORDER BY id
+                        FOR UPDATE
+                    `);
+                }
+
+                await this.applyWriteBatch(
                     tx,
                     nodeUuid,
                     nodeId,
-                    snapshot,
-                    userMultiplier,
-                    nodeMultiplier,
+                    buildUsageSnapshotWriteBatch(snapshots, userMultiplier, nodeMultiplier),
                 );
-                await tx.$executeRaw(Prisma.sql`
-                    UPDATE node_usage_snapshot_inbox SET applied_at = now()
-                    WHERE node_uuid = ${nodeUuid}::uuid
-                      AND generation = ${row.generation}
-                      AND sequence = ${row.sequence}
-                `);
-                await tx.$executeRaw(Prisma.sql`
-                    UPDATE node_usage_snapshot_state SET
-                        applied_through = CASE WHEN generation = ${row.generation}
-                            THEN GREATEST(applied_through, ${row.sequence}) ELSE applied_through END,
-                        last_error = NULL,
-                        updated_at = now()
-                    WHERE node_uuid = ${nodeUuid}::uuid
-                `);
-                snapshots.push(snapshot);
-            }
-            return snapshots;
-        });
+
+                for (let index = 0; index < rows.length; index++) {
+                    const row = rows[index];
+                    await tx.$executeRaw(Prisma.sql`
+                        UPDATE node_usage_snapshot_inbox SET applied_at = now()
+                        WHERE node_uuid = ${nodeUuid}::uuid
+                          AND generation = ${row.generation}
+                          AND sequence = ${row.sequence}
+                    `);
+                    await tx.$executeRaw(Prisma.sql`
+                        UPDATE node_usage_snapshot_state SET
+                            applied_through = CASE WHEN generation = ${row.generation}
+                                THEN GREATEST(applied_through, ${row.sequence}) ELSE applied_through END,
+                            last_error = NULL,
+                            updated_at = now()
+                        WHERE node_uuid = ${nodeUuid}::uuid
+                    `);
+                }
+                return snapshots;
+            }),
+        );
 
         const metrics = buildNodeMetricsFromSnapshots(nodeUuid, appliedSnapshots);
         if (metrics) this.nodeMetricsPublisher.publish(metrics);
     }
 
-    private async applySnapshot(
+    private async applyWriteBatch(
         tx: Prisma.TransactionClient,
         nodeUuid: string,
         nodeId: bigint,
-        snapshot: UsageSnapshot,
-        userMultiplier: string,
-        nodeMultiplier: string,
+        batch: UsageSnapshotWriteBatch,
     ): Promise<void> {
-        const capturedAt = new Date(snapshot.capturedAt);
-        const hour = new Date(capturedAt);
-        hour.setMinutes(0, 0, 0);
-        const day = new Date(capturedAt);
-        day.setUTCHours(0, 0, 0, 0);
-        const outbounds = aggregate(
-            snapshot.counters.filter((counter) => counter.kind === 'outbound'),
-        );
-        const inbounds = aggregate(
-            snapshot.counters.filter((counter) => counter.kind === 'inbound'),
-        );
-        const users = aggregateUsers(
-            snapshot.counters.filter((counter) => counter.kind === 'user'),
-        );
-        const nodeUpload = sumDirection(outbounds, 'uplink');
-        const nodeDownload = sumDirection(outbounds, 'downlink');
-        const nodeTotal = nodeUpload + nodeDownload;
-
-        if (nodeTotal > 0n) {
+        for (const { hour, usage } of batch.nodeHours) {
+            const total = usage.uplink + usage.downlink;
             await tx.$executeRaw(Prisma.sql`
                 INSERT INTO nodes_usage_history (node_uuid, download_bytes, upload_bytes, total_bytes, created_at)
-                VALUES (${nodeUuid}::uuid, ${nodeDownload}, ${nodeUpload}, ${nodeTotal}, ${hour})
+                VALUES (${nodeUuid}::uuid, ${usage.downlink}, ${usage.uplink}, ${total}, ${hour})
                 ON CONFLICT (node_uuid, created_at) DO UPDATE SET
                     download_bytes = nodes_usage_history.download_bytes + EXCLUDED.download_bytes,
                     upload_bytes = nodes_usage_history.upload_bytes + EXCLUDED.upload_bytes,
                     total_bytes = nodes_usage_history.total_bytes + EXCLUDED.total_bytes,
                     updated_at = now()
             `);
+        }
+        if (batch.nodeMultipliedTotal > 0n) {
             await tx.$executeRaw(Prisma.sql`
                 UPDATE nodes SET traffic_used_bytes = COALESCE(traffic_used_bytes, 0) +
-                    ${multiplyUsage(nodeMultiplier, nodeTotal)}
+                    ${batch.nodeMultipliedTotal}
                 WHERE uuid = ${nodeUuid}::uuid
             `);
         }
 
-        for (const [username, usage] of users) {
-            if (!/^\d+$/.test(username)) continue;
-            const userId = BigInt(username),
-                total = usage.uplink + usage.downlink;
-            if (total === 0n) continue;
-            const multiplied = multiplyUsage(userMultiplier, total);
+        for (const user of batch.users) {
             await tx.$executeRaw(Prisma.sql`
                 UPDATE user_traffic SET
-                    used_traffic_bytes = used_traffic_bytes + ${multiplied},
-                    lifetime_used_traffic_bytes = lifetime_used_traffic_bytes + ${multiplied},
-                    online_at = ${capturedAt},
-                    last_connected_node_uuid = ${nodeUuid}::uuid,
-                    first_connected_at = COALESCE(first_connected_at, ${capturedAt})
-                WHERE id = ${userId}
+                    used_traffic_bytes = used_traffic_bytes + ${user.multipliedTotal},
+                    lifetime_used_traffic_bytes = lifetime_used_traffic_bytes + ${user.multipliedTotal},
+                    last_connected_node_uuid = CASE
+                        WHEN online_at IS NULL OR online_at <= ${user.lastCapturedAt}
+                        THEN ${nodeUuid}::uuid ELSE last_connected_node_uuid END,
+                    online_at = GREATEST(COALESCE(online_at, ${user.lastCapturedAt}), ${user.lastCapturedAt}),
+                    first_connected_at = CASE WHEN first_connected_at IS NULL
+                        THEN ${user.firstCapturedAt}
+                        ELSE LEAST(first_connected_at, ${user.firstCapturedAt}) END
+                WHERE id = ${user.userId}
             `);
+        }
+        for (const userDay of batch.userDays) {
             await tx.$executeRaw(Prisma.sql`
                 INSERT INTO nodes_user_usage_history (node_id, user_id, total_bytes, created_at)
-                VALUES (${nodeId}, ${userId}, ${total}, ${day})
+                VALUES (${nodeId}, ${userDay.userId}, ${userDay.total}, ${userDay.day})
                 ON CONFLICT (node_id, created_at, user_id) DO UPDATE SET
                     total_bytes = nodes_user_usage_history.total_bytes + EXCLUDED.total_bytes,
                     updated_at = now()
             `);
         }
 
-        for (const [tag, usage] of inbounds) {
-            await this.applyHostUsage(tx, nodeUuid, tag, usage, hour);
+        for (const host of batch.hosts) {
+            await this.applyHostUsage(tx, nodeUuid, host.tag, host.usage, host.hour);
         }
-        for (const [key, usage] of aggregateUserInbounds(snapshot.counters)) {
-            const separator = key.indexOf('\u0000');
-            const username = key.slice(0, separator),
-                tag = key.slice(separator + 1);
-            if (tag && /^\d+$/.test(username)) {
-                await this.applyUserHostUsage(tx, nodeUuid, BigInt(username), tag, usage, hour);
-            }
+        for (const userHost of batch.userHosts) {
+            await this.applyUserHostUsage(
+                tx,
+                nodeUuid,
+                userHost.userId,
+                userHost.tag,
+                userHost.usage,
+                userHost.hour,
+            );
         }
     }
 
@@ -323,7 +347,7 @@ export class UsageSnapshotIngestService {
         tx: Prisma.TransactionClient,
         nodeUuid: string,
         tag: string,
-        usage: Usage,
+        usage: UsageDelta,
         hour: Date,
     ) {
         const total = usage.uplink + usage.downlink;
@@ -339,6 +363,7 @@ export class UsageSnapshotIngestService {
             JOIN hosts_to_nodes htn ON htn.host_uuid = h.uuid AND htn.node_uuid = ${nodeUuid}::uuid
             JOIN config_profile_inbounds cpi ON cpi.uuid = h.config_profile_inbound_uuid
             WHERE NOT h.is_disabled AND cpi.tag = ${tag}
+            ORDER BY h.uuid
             ON CONFLICT (host_uuid, node_uuid, inbound_tag, created_at) DO UPDATE SET
                 download_bytes = hosts_usage_history.download_bytes + EXCLUDED.download_bytes,
                 upload_bytes = hosts_usage_history.upload_bytes + EXCLUDED.upload_bytes,
@@ -352,7 +377,7 @@ export class UsageSnapshotIngestService {
         nodeUuid: string,
         userId: bigint,
         tag: string,
-        usage: Usage,
+        usage: UsageDelta,
         hour: Date,
     ) {
         const total = usage.uplink + usage.downlink;
@@ -368,6 +393,7 @@ export class UsageSnapshotIngestService {
             JOIN hosts_to_nodes htn ON htn.host_uuid = h.uuid AND htn.node_uuid = ${nodeUuid}::uuid
             JOIN config_profile_inbounds cpi ON cpi.uuid = h.config_profile_inbound_uuid
             WHERE NOT h.is_disabled AND cpi.tag = ${tag}
+            ORDER BY h.uuid
             ON CONFLICT (user_id, host_uuid, node_uuid, inbound_tag, created_at) DO UPDATE SET
                 download_bytes = user_hosts_usage_history.download_bytes + EXCLUDED.download_bytes,
                 upload_bytes = user_hosts_usage_history.upload_bytes + EXCLUDED.upload_bytes,
@@ -378,52 +404,51 @@ export class UsageSnapshotIngestService {
 
     private async updateNodeStatus(
         nodeUuid: string,
-        status: { pending: number; bytes: number; lastCapturedAt?: string },
+        status: {
+            active: boolean;
+            capturing?: boolean;
+            pending: number;
+            bytes: number;
+            lastCapturedAt?: string;
+        },
     ) {
         await this.prisma.$executeRaw(Prisma.sql`
             UPDATE node_usage_snapshot_state SET
                 pending = ${status.pending}, node_queue_bytes = ${BigInt(status.bytes)},
+                capturing = ${isCapturing(status)},
                 last_captured_at = ${status.lastCapturedAt ? new Date(status.lastCapturedAt) : null},
                 last_error = NULL, updated_at = now()
             WHERE node_uuid = ${nodeUuid}::uuid
         `);
     }
-}
 
-type Usage = { uplink: bigint; downlink: bigint };
-
-function aggregate(counters: UsageSnapshotCounter[]): Map<string, Usage> {
-    const result = new Map<string, Usage>();
-    for (const counter of counters) {
-        const usage = result.get(counter.name) ?? { uplink: 0n, downlink: 0n };
-        usage[counter.direction] += BigInt(counter.value);
-        result.set(counter.name, usage);
+    private async retryTransaction<T>(nodeUuid: string, operation: () => Promise<T>): Promise<T> {
+        return retryDatabaseTransaction(operation, {
+            onRetry: async () => {
+                await this.prisma
+                    .$executeRaw(Prisma.sql`
+                        UPDATE node_usage_snapshot_state
+                        SET database_retries = database_retries + 1, updated_at = now()
+                        WHERE node_uuid = ${nodeUuid}::uuid
+                    `)
+                    .catch(() => undefined);
+            },
+        });
     }
-    return result;
-}
 
-function aggregateUsers(counters: UsageSnapshotCounter[]): Map<string, Usage> {
-    return aggregate(counters);
-}
-
-function aggregateUserInbounds(counters: UsageSnapshotCounter[]): Map<string, Usage> {
-    const result = new Map<string, Usage>();
-    for (const counter of counters) {
-        if (counter.kind !== 'user' || !counter.inbound) continue;
-        const key = `${counter.name}\u0000${counter.inbound}`;
-        const usage = result.get(key) ?? { uplink: 0n, downlink: 0n };
-        usage[counter.direction] += BigInt(counter.value);
-        result.set(key, usage);
+    private async recordSuccess(nodeUuid: string, durationMs: number): Promise<void> {
+        await this.prisma.$executeRaw(Prisma.sql`
+            UPDATE node_usage_snapshot_state SET
+                ingest_successes = ingest_successes + 1,
+                last_success_at = now(),
+                last_duration_ms = ${Math.max(0, Math.round(durationMs))},
+                last_error = NULL,
+                updated_at = now()
+            WHERE node_uuid = ${nodeUuid}::uuid
+        `);
     }
-    return result;
 }
 
-function sumDirection(items: Map<string, Usage>, direction: keyof Usage): bigint {
-    let total = 0n;
-    for (const usage of items.values()) total += usage[direction];
-    return total;
-}
-
-function multiplyUsage(multiplier: string, bytes: bigint): bigint {
-    return (BigInt(multiplier) * bytes) / 1_000_000_000n;
+function isCapturing(status: { active: boolean; capturing?: boolean }): boolean {
+    return status.capturing ?? status.active;
 }

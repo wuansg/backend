@@ -35,6 +35,13 @@ export const METRIC_NAMES = {
     NODE_USAGE_SNAPSHOT_LAG_SECONDS: 'node_usage_snapshot_lag_seconds',
     NODE_USAGE_SNAPSHOT_SEQUENCE_GAP: 'node_usage_snapshot_sequence_gap',
     NODE_USAGE_SNAPSHOT_ERROR: 'node_usage_snapshot_error',
+    NODE_USAGE_SNAPSHOT_CAPTURING: 'node_usage_snapshot_capturing',
+    NODE_USAGE_SNAPSHOT_INGEST_SUCCESSES: 'node_usage_snapshot_ingest_successes_total',
+    NODE_USAGE_SNAPSHOT_INGEST_FAILURES: 'node_usage_snapshot_ingest_failures_total',
+    NODE_USAGE_SNAPSHOT_DATABASE_RETRIES: 'node_usage_snapshot_database_retries_total',
+    NODE_USAGE_SNAPSHOT_LAST_SUCCESS_TIMESTAMP_SECONDS:
+        'node_usage_snapshot_last_success_timestamp_seconds',
+    NODE_USAGE_SNAPSHOT_LAST_DURATION_SECONDS: 'node_usage_snapshot_last_duration_seconds',
     NODE_NETWORK_TX_BYTES_TOTAL: 'node_network_tx_bytes_total',
     NODE_MEMORY_TOTAL_BYTES: 'node_memory_total_bytes',
     NODE_MEMORY_FREE_BYTES: 'node_memory_free_bytes',

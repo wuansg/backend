@@ -100,6 +100,18 @@ export class ExportMetricsTask {
         public nodeUsageSnapshotSequenceGap: Gauge<string>,
         @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_ERROR)
         public nodeUsageSnapshotError: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_CAPTURING)
+        public nodeUsageSnapshotCapturing: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_INGEST_SUCCESSES)
+        public nodeUsageSnapshotIngestSuccesses: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_INGEST_FAILURES)
+        public nodeUsageSnapshotIngestFailures: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_DATABASE_RETRIES)
+        public nodeUsageSnapshotDatabaseRetries: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_LAST_SUCCESS_TIMESTAMP_SECONDS)
+        public nodeUsageSnapshotLastSuccessTimestampSeconds: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_LAST_DURATION_SECONDS)
+        public nodeUsageSnapshotLastDurationSeconds: Gauge<string>,
 
         private readonly queryBus: QueryBus,
         private readonly prisma: PrismaService,
@@ -335,6 +347,12 @@ export class ExportMetricsTask {
                 appliedThrough: bigint;
                 lagSeconds: number | null;
                 hasError: boolean;
+                capturing: boolean;
+                ingestSuccesses: bigint;
+                ingestFailures: bigint;
+                databaseRetries: bigint;
+                lastSuccessTimestampSeconds: number | null;
+                lastDurationMs: number | null;
             }>
         >`
             SELECT node_uuid AS "nodeUuid", pending,
@@ -342,7 +360,13 @@ export class ExportMetricsTask {
                    received_through AS "receivedThrough",
                    applied_through AS "appliedThrough",
                    EXTRACT(EPOCH FROM (now() - last_captured_at))::double precision AS "lagSeconds",
-                   last_error IS NOT NULL AS "hasError"
+                   last_error IS NOT NULL AS "hasError",
+                   capturing,
+                   ingest_successes AS "ingestSuccesses",
+                   ingest_failures AS "ingestFailures",
+                   database_retries AS "databaseRetries",
+                   EXTRACT(EPOCH FROM last_success_at)::double precision AS "lastSuccessTimestampSeconds",
+                   last_duration_ms AS "lastDurationMs"
             FROM node_usage_snapshot_state
         `;
         this.nodeUsageSnapshotPending.reset();
@@ -350,16 +374,37 @@ export class ExportMetricsTask {
         this.nodeUsageSnapshotLagSeconds.reset();
         this.nodeUsageSnapshotSequenceGap.reset();
         this.nodeUsageSnapshotError.reset();
+        this.nodeUsageSnapshotCapturing.reset();
+        this.nodeUsageSnapshotIngestSuccesses.reset();
+        this.nodeUsageSnapshotIngestFailures.reset();
+        this.nodeUsageSnapshotDatabaseRetries.reset();
+        this.nodeUsageSnapshotLastSuccessTimestampSeconds.reset();
+        this.nodeUsageSnapshotLastDurationSeconds.reset();
         for (const row of rows) {
             const labels = { node_uuid: row.nodeUuid };
             this.nodeUsageSnapshotPending.set(labels, row.pending);
             this.nodeUsageSnapshotQueueBytes.set(labels, Number(row.nodeQueueBytes));
-            this.nodeUsageSnapshotLagSeconds.set(labels, Math.max(0, row.lagSeconds ?? 0));
+            if (row.capturing && row.lagSeconds !== null) {
+                this.nodeUsageSnapshotLagSeconds.set(labels, Math.max(0, row.lagSeconds));
+            }
             this.nodeUsageSnapshotSequenceGap.set(
                 labels,
                 Number(row.receivedThrough - row.appliedThrough),
             );
             this.nodeUsageSnapshotError.set(labels, row.hasError ? 1 : 0);
+            this.nodeUsageSnapshotCapturing.set(labels, row.capturing ? 1 : 0);
+            this.nodeUsageSnapshotIngestSuccesses.set(labels, Number(row.ingestSuccesses));
+            this.nodeUsageSnapshotIngestFailures.set(labels, Number(row.ingestFailures));
+            this.nodeUsageSnapshotDatabaseRetries.set(labels, Number(row.databaseRetries));
+            if (row.lastSuccessTimestampSeconds !== null) {
+                this.nodeUsageSnapshotLastSuccessTimestampSeconds.set(
+                    labels,
+                    row.lastSuccessTimestampSeconds,
+                );
+            }
+            if (row.lastDurationMs !== null) {
+                this.nodeUsageSnapshotLastDurationSeconds.set(labels, row.lastDurationMs / 1_000);
+            }
         }
     }
 

@@ -140,6 +140,7 @@ export interface UsageSnapshot {
 
 export interface UsageSnapshotStatus {
     active: boolean;
+    capturing?: boolean;
     generation: string;
     oldestSequence: number;
     latestSequence: number;

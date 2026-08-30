@@ -22,7 +22,7 @@ import { NodeMetricsPublisher } from '../node-metrics.publisher';
 import { UsageSnapshotIngestService } from '../usage-snapshot-ingest.service';
 
 @Processor(QUEUES_NAMES.NODES.RECORD_NODE_USAGE, {
-    concurrency: 40,
+    concurrency: 20,
 })
 export class RecordNodeUsageQueueProcessor extends WorkerHost {
     private readonly logger = new Logger(RecordNodeUsageQueueProcessor.name);

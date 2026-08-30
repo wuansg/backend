@@ -23,6 +23,8 @@ export const NodeRuntimeStatusSchema = z.object({
         .object({
             supported: z.boolean(),
             active: z.boolean(),
+            enabled: z.boolean().optional(),
+            capturing: z.boolean().optional(),
         })
         .nullable(),
 });

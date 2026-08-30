@@ -78,12 +78,23 @@ export const NodesSchema = z.object({
             appliedThrough: z.number().int().nonnegative(),
             pending: z.number().int().nonnegative(),
             queueBytes: z.number().int().nonnegative(),
+            capturing: z.boolean(),
+            ingestSuccesses: z.number().int().nonnegative(),
+            ingestFailures: z.number().int().nonnegative(),
+            databaseRetries: z.number().int().nonnegative(),
             lastCapturedAt: z.nullable(
                 z
                     .string()
                     .datetime()
                     .transform((str) => new Date(str)),
             ),
+            lastSuccessAt: z.nullable(
+                z
+                    .string()
+                    .datetime()
+                    .transform((str) => new Date(str)),
+            ),
+            lastDurationMs: z.number().int().nonnegative().nullable(),
             lastError: z.nullable(z.string()),
         })
         .nullable()
