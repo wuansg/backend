@@ -1,17 +1,16 @@
-import { XrayConfig } from 'xray-typed';
-
 import { Query } from '@nestjs/cqrs';
-
-import { StartXrayCommand } from '@remnawave/node-contract';
 
 import { TResult } from '@common/types';
 
 import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
 
 export interface IGetPreparedConfigWithUsersResponse {
-    coreType: 'XRAY' | 'SING_BOX';
-    config: XrayConfig | Record<string, unknown>;
-    hashesPayload: StartXrayCommand.Request['internals']['hashes'];
+    coreType: 'SING_BOX';
+    config: Record<string, unknown>;
+    hashesPayload: {
+        emptyConfig: string;
+        inbounds: Array<{ tag: string; hash: string; usersCount: number }>;
+    };
 }
 
 export class GetPreparedConfigWithUsersQuery extends Query<

@@ -72,17 +72,17 @@ export class StartNodeProcessor extends WorkerHost {
                 }),
             );
 
-            const xrayStatusResponse = await this.axios.getNodeHealth({
+            const healthResponse = await this.axios.getNodeHealth({
                 address: node.address,
                 port: node.port,
                 proxyUrl: node.proxyUrl,
             });
 
-            if (!xrayStatusResponse.isOk) {
+            if (!healthResponse.isOk) {
                 await this.commandBus.execute(
                     new UpdateNodeCommand({
                         uuid: node.uuid,
-                        lastStatusMessage: xrayStatusResponse.message ?? null,
+                        lastStatusMessage: healthResponse.message ?? null,
                         lastStatusChange: new Date(),
                         isConnected: false,
                         isConnecting: false,
@@ -90,17 +90,17 @@ export class StartNodeProcessor extends WorkerHost {
                 );
 
                 this.logger.error(
-                    `Pre-check failed. Node: ${node.uuid} – ${node.address}:${node.port}, error: ${xrayStatusResponse.message}`,
+                    `Pre-check failed. Node: ${node.uuid} – ${node.address}:${node.port}, error: ${healthResponse.message}`,
                 );
 
                 return;
             }
 
-            if (semver.lt(xrayStatusResponse.response.nodeVersion, '2.7.0')) {
+            if (semver.lt(healthResponse.response.nodeVersion, '2.7.0')) {
                 await this.commandBus.execute(
                     new UpdateNodeCommand({
                         uuid: node.uuid,
-                        lastStatusMessage: `Outdated version ${xrayStatusResponse.response.nodeVersion} of Remnawave Node. Please upgrade to the latest version (>= 2.7.0).`,
+                        lastStatusMessage: `Outdated version ${healthResponse.response.nodeVersion} of Remnawave Node. Please upgrade to the latest version (>= 2.7.0).`,
                         lastStatusChange: new Date(),
                         isConnected: false,
                         isConnecting: false,
@@ -108,7 +108,7 @@ export class StartNodeProcessor extends WorkerHost {
                 );
 
                 this.logger.error(
-                    `Outdated version ${xrayStatusResponse.response.nodeVersion} of Remnawave Node. Please upgrade to the latest version (>= 2.7.0).`,
+                    `Outdated version ${healthResponse.response.nodeVersion} of Remnawave Node. Please upgrade to the latest version (>= 2.7.0).`,
                 );
 
                 return;
@@ -166,7 +166,7 @@ export class StartNodeProcessor extends WorkerHost {
             }
 
             if (node.activeInbounds.length === 0 || !node.activeConfigProfileUuid) {
-                const stopCoreResponse = await this.axios.stopXray({
+                const stopCoreResponse = await this.axios.stopCore({
                     address: node.address,
                     port: node.port,
                     proxyUrl: node.proxyUrl,
@@ -191,7 +191,7 @@ export class StartNodeProcessor extends WorkerHost {
                 const forwardingError = await syncForwardingIfSupported(
                     this.axios,
                     node,
-                    xrayStatusResponse.response,
+                    healthResponse.response,
                 );
                 if (forwardingError) {
                     this.logger.warn(
@@ -199,11 +199,11 @@ export class StartNodeProcessor extends WorkerHost {
                     );
                 }
 
-                const health = xrayStatusResponse.response as typeof xrayStatusResponse.response & {
+                const health = healthResponse.response as typeof healthResponse.response & {
                     coreVersions?: { xray?: string | null; singBox?: string | null };
                 };
                 await this.rawCacheService.set(CACHE_KEYS.NODE_VERSIONS(node.uuid), {
-                    xray: health.coreVersions?.xray ?? health.xrayVersion,
+                    xray: health.coreVersions?.xray ?? '',
                     singBox: health.coreVersions?.singBox ?? null,
                     node: health.nodeVersion,
                     core: null,
@@ -270,41 +270,27 @@ export class StartNodeProcessor extends WorkerHost {
             );
             const preparedConfig = config.response.config as Record<string, unknown>;
 
-            const startNodeResult = await this.axios.startXray(
-                config.response.coreType === 'SING_BOX'
-                    ? {
-                          coreType: 'SING_BOX' as const,
-                          singBoxConfig: {
-                              ...preparedConfig,
-                              inbounds: this.filterSingBoxInbounds(
-                                  preparedConfig.inbounds,
-                                  activeNodeInboundsTags,
-                              ),
-                          },
-                          internals: {
-                              hashes: config.response.hashesPayload,
-                              forceRestart: force ?? false,
-                          },
-                      }
-                    : {
-                          coreType: 'XRAY' as const,
-                          xrayConfig: {
-                              ...preparedConfig,
-                              inbounds: this.filterXrayInbounds(
-                                  preparedConfig.inbounds,
-                                  activeNodeInboundsTags,
-                              ),
-                          },
-                          internals: {
-                              hashes: config.response.hashesPayload,
-                              forceRestart: force ?? false,
-                          },
-                      },
+            const startNodeResult = await this.axios.startCore(
+                {
+                    coreType: 'SING_BOX' as const,
+                    singBoxConfig: {
+                        ...preparedConfig,
+                        inbounds: this.filterSingBoxInbounds(
+                            preparedConfig.inbounds,
+                            activeNodeInboundsTags,
+                        ),
+                    },
+                    internals: {
+                        hashes: config.response.hashesPayload,
+                        forceRestart: force ?? false,
+                    },
+                },
                 {
                     address: node.address,
                     port: node.port,
                     proxyUrl: node.proxyUrl,
                 },
+                semver.lt(healthResponse.response.nodeVersion, '3.7.0'),
             );
 
             this.logger.log(`Started node in ${formatExecutionTime(reqStartTime)}`);
@@ -328,7 +314,7 @@ export class StartNodeProcessor extends WorkerHost {
             const forwardingError = await syncForwardingIfSupported(
                 this.axios,
                 node,
-                xrayStatusResponse.response,
+                healthResponse.response,
             );
             if (forwardingError) {
                 this.logger.warn(
@@ -359,8 +345,9 @@ export class StartNodeProcessor extends WorkerHost {
                     value:
                         nodeResponse.nodeInformation.version && nodeResponse.version
                             ? {
-                                  xray: nodeResponse.coreVersions?.xray ?? nodeResponse.version,
-                                  singBox: nodeResponse.coreVersions?.singBox ?? null,
+                                  xray: nodeResponse.coreVersions?.xray ?? '',
+                                  singBox:
+                                      nodeResponse.coreVersions?.singBox ?? nodeResponse.version,
                                   node: nodeResponse.nodeInformation.version,
                                   core: nodeResponse.runningCore ?? config.response.coreType,
                               }
@@ -405,25 +392,6 @@ export class StartNodeProcessor extends WorkerHost {
         }
     }
 
-    private filterXrayInbounds(
-        inbounds: unknown,
-        activeNodeInboundsTags: Set<string>,
-    ): Array<Record<string, unknown>> {
-        if (!Array.isArray(inbounds)) {
-            return [];
-        }
-
-        return inbounds.filter((inbound) => {
-            if (!this.isRecord(inbound)) return false;
-            const tag = inbound.tag;
-            const protocol = inbound.protocol;
-            return (
-                (typeof tag === 'string' && activeNodeInboundsTags.has(tag)) ||
-                (typeof protocol === 'string' && this.isUnsecureInbound(protocol))
-            );
-        }) as Array<Record<string, unknown>>;
-    }
-
     private filterSingBoxInbounds(
         inbounds: unknown,
         activeNodeInboundsTags: Set<string>,
@@ -448,6 +416,15 @@ export class StartNodeProcessor extends WorkerHost {
     }
 
     private isUnsecureInbound(protocol: string): boolean {
-        return ['dokodemo-door', 'http', 'mixed', 'tunnel', 'wireguard'].includes(protocol);
+        return [
+            'direct',
+            'http',
+            'mixed',
+            'socks',
+            'tproxy',
+            'redirect',
+            'tun',
+            'wireguard',
+        ].includes(protocol);
     }
 }

@@ -5,7 +5,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 
 import { SingBoxConfig } from '@common/helpers/sing-box-config';
-import { XRayConfig } from '@common/helpers/xray-config';
 import { RawCacheService } from '@common/raw-cache';
 import { fail, ok, TResult } from '@common/types';
 import { diffInbounds } from '@common/utils/inbounds';
@@ -151,7 +150,7 @@ export class ConfigProfileService {
     public async createConfigProfile(
         name: string,
         config: object,
-        coreType: 'XRAY' | 'SING_BOX' = 'XRAY',
+        coreType: 'SING_BOX' = 'SING_BOX',
     ): Promise<TResult<GetConfigProfileByUuidResponseModel>> {
         try {
             if (name === 'Default-Profile') {
@@ -212,7 +211,7 @@ export class ConfigProfileService {
         uuid: string,
         name?: string,
         config?: object,
-        coreType?: 'XRAY' | 'SING_BOX',
+        coreType?: 'SING_BOX',
     ): Promise<TResult<GetConfigProfileByUuidResponseModel>> {
         try {
             const existingConfigProfile =
@@ -288,11 +287,10 @@ export class ConfigProfileService {
         uuid: string,
         name?: string,
         config?: object,
-        coreType?: 'XRAY' | 'SING_BOX',
+        coreType?: 'SING_BOX',
     ): Promise<boolean> {
         try {
-            const targetCoreType =
-                coreType ?? (existingConfigProfile.coreType as 'XRAY' | 'SING_BOX');
+            const targetCoreType = coreType ?? existingConfigProfile.coreType;
             const configProfileEntity = new ConfigProfileEntity({
                 uuid,
                 name,
@@ -306,14 +304,7 @@ export class ConfigProfileService {
                     targetCoreType,
                     config ?? (existingConfigProfile.config as object),
                 );
-                if (targetCoreType === 'XRAY') {
-                    const xrayConfig = validatedConfig as XRayConfig;
-                    xrayConfig.cleanInboundClients(false);
-                    xrayConfig.fixIncorrectServerNames();
-                    xrayConfig.validateOutbounds();
-                } else {
-                    (validatedConfig as SingBoxConfig).cleanInboundClients();
-                }
+                validatedConfig.cleanInboundClients();
                 const sortedConfig = validatedConfig.getSortedConfig();
                 const inbounds = validatedConfig.getAllInbounds();
 
@@ -444,15 +435,11 @@ export class ConfigProfileService {
         }
     }
 
-    private createConfigHelper(
-        coreType: string | undefined,
-        config: object,
-    ): XRayConfig | SingBoxConfig {
-        if (coreType === 'SING_BOX') {
-            return new SingBoxConfig(config);
+    private createConfigHelper(coreType: string | undefined, config: object): SingBoxConfig {
+        if (coreType !== 'SING_BOX') {
+            throw new Error('Only SING_BOX config profiles are supported');
         }
-
-        return new XRayConfig(config);
+        return new SingBoxConfig(config);
     }
 
     private getSortedConfig(coreType: string | undefined, config: object): object {

@@ -141,7 +141,7 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             CACHE_KEYS.NODE_XRAY_UPTIME(nodeUuid),
         ]);
 
-        if (health.xrayInternalStatusCached) {
+        if (health.coreOnline ?? health.xrayInternalStatusCached) {
             this.logger.warn(
                 `Node ${nodeUuid} has no active inbounds but a core is running; scheduling core stop.`,
             );
@@ -158,8 +158,9 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
         stats: GetSystemStatsCommand.Response['response'],
         runtimeStatus: ReturnType<typeof resolveNodeRuntimeStatus>,
     ) {
-        if (stats.xrayInfo === null) {
-            this.logger.error(`Node ${nodeUuid} – xrayInfo is null`);
+        const coreInfo = stats.xrayInfo;
+        if (coreInfo === null) {
+            this.logger.error(`Node ${nodeUuid} – core info is missing`);
 
             return await this.handleDegradedCore(
                 nodeUuid,
@@ -177,7 +178,7 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             },
             {
                 key: CACHE_KEYS.NODE_XRAY_UPTIME(nodeUuid),
-                value: stats.xrayInfo.uptime,
+                value: coreInfo.uptime,
                 ttlSeconds: CACHE_KEYS_TTL.NODE_XRAY_UPTIME,
             },
         ]);

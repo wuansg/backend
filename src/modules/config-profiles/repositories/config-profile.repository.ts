@@ -104,13 +104,14 @@ export class ConfigProfileRepository {
     }
 
     public async getTotalConfigProfiles(): Promise<number> {
-        return await this.prisma.tx.configProfiles.count();
+        return await this.prisma.tx.configProfiles.count({ where: { coreType: 'SING_BOX' } });
     }
 
     public async getAllConfigProfiles(): Promise<ConfigProfileWithInboundsAndNodesEntity[]> {
         const result = await this.qb.kysely
             .selectFrom('configProfiles')
             .selectAll('configProfiles')
+            .where('configProfiles.coreType', '=', 'SING_BOX')
             .orderBy('configProfiles.viewPosition', 'asc')
             .select((eb) => [
                 // inbounds
@@ -130,6 +131,7 @@ export class ConfigProfileRepository {
             .selectFrom('configProfiles')
             .selectAll('configProfiles')
             .where('configProfiles.uuid', '=', getKyselyUuid(uuid))
+            .where('configProfiles.coreType', '=', 'SING_BOX')
             .select((eb) => [
                 // inbounds
                 this.includeInbounds(eb),

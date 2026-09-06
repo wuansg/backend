@@ -490,8 +490,8 @@ model ConfigProfiles {
   uuid         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   viewPosition Int    @default(autoincrement()) @map("view_position")
   name         String @unique @map("name")
-  /// @kyselyType('XRAY' | 'SING_BOX')
-  coreType     String @default("XRAY") @map("core_type") @db.VarChar(16)
+  /// @kyselyType('SING_BOX')
+  coreType     String @default("SING_BOX") @map("core_type") @db.VarChar(16)
   config       Json   @map("config")
 
   createdAt DateTime @default(now()) @map("created_at")

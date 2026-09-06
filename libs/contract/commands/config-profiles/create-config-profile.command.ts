@@ -25,7 +25,7 @@ export namespace CreateConfigProfileCommand {
                 'Name can only contain letters, numbers, underscores, dashes and spaces',
             ),
         config: z.looseObject({}),
-        coreType: z.enum(['SING_BOX', 'XRAY']).default('XRAY'),
+        coreType: z.literal('SING_BOX').default('SING_BOX'),
     });
 
     export const ResponseSchema = z.object({

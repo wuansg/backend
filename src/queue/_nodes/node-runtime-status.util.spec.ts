@@ -43,7 +43,7 @@ describe('resolveNodeRuntimeStatus', () => {
         );
         assert.deepEqual(
             { mode: active.mode, runningCore: active.runningCore, coreOnline: active.coreOnline },
-            { mode: 'CORE_ACTIVE', runningCore: 'XRAY', coreOnline: true },
+            { mode: 'CORE_ACTIVE', runningCore: 'SING_BOX', coreOnline: true },
         );
 
         assert.equal(
@@ -89,7 +89,7 @@ describe('resolveNodeRuntimeStatus', () => {
                 xrayVersion: '25.1.30',
                 nodeVersion: '2.7.0',
             }).core,
-            'XRAY',
+            'SING_BOX',
         );
     });
 });

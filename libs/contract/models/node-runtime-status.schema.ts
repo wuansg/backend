@@ -4,10 +4,10 @@ export const NodeRuntimeModeSchema = z.enum(['CORE_ACTIVE', 'FORWARDING_ONLY', '
 
 export const NodeRuntimeStatusSchema = z.object({
     mode: NodeRuntimeModeSchema,
-    runningCore: z.enum(['XRAY', 'SING_BOX']).nullable(),
+    runningCore: z.literal('SING_BOX').nullable(),
     coreOnline: z.boolean(),
     capabilities: z.array(z.string()),
-    supportedCores: z.array(z.enum(['XRAY', 'SING_BOX'])),
+    supportedCores: z.array(z.literal('SING_BOX')),
     forwarding: z
         .object({
             state: z.string(),

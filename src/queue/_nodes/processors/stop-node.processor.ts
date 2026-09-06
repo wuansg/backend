@@ -44,7 +44,7 @@ export class StopNodeProcessor extends WorkerHost {
                 return true;
             }
 
-            await this.axios.stopXray({
+            await this.axios.stopCore({
                 address: result.response.address,
                 port: result.response.port,
                 proxyUrl: result.response.proxyUrl,

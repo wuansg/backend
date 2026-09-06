@@ -4,7 +4,6 @@ import { IQueryHandler, QueryBus, QueryHandler } from '@nestjs/cqrs';
 import { HashedSet } from '@remnawave/hashed-set';
 
 import { SingBoxConfig } from '@common/helpers/sing-box-config';
-import { XRayConfig } from '@common/helpers/xray-config/xray-config.validator';
 import { fail, ok, TResult } from '@common/types';
 import { ERRORS } from '@libs/contracts/constants';
 
@@ -31,7 +30,7 @@ export class GetPreparedConfigWithUsersHandler implements IQueryHandler<
     async execute(
         query: GetPreparedConfigWithUsersQuery,
     ): Promise<TResult<IGetPreparedConfigWithUsersResponse>> {
-        let config: XRayConfig | SingBoxConfig | null = null;
+        let config: SingBoxConfig | null = null;
         const inboundsUserSets: Map<string, HashedSet> = new Map();
         const snippetsMap: Map<string, unknown> = new Map();
         try {
@@ -53,21 +52,9 @@ export class GetPreparedConfigWithUsersHandler implements IQueryHandler<
 
             const activeInboundsTags = new Set(activeInbounds.map((inbound) => inbound.tag));
 
-            const coreType = configProfile.response.coreType === 'SING_BOX' ? 'SING_BOX' : 'XRAY';
-
-            config =
-                coreType === 'SING_BOX'
-                    ? new SingBoxConfig(configProfile.response.config as object)
-                    : new XRayConfig(configProfile.response.config as object);
-
-            if (coreType === 'SING_BOX') {
-                const singBoxConfig = config as SingBoxConfig;
-                singBoxConfig.cleanInboundClients();
-            } else {
-                const xrayConfig = config as XRayConfig;
-                xrayConfig.cleanInboundClients(true);
-                xrayConfig.processCertificates();
-            }
+            const coreType = 'SING_BOX' as const;
+            config = new SingBoxConfig(configProfile.response.config as object);
+            config.cleanInboundClients();
 
             config.replaceSnippets(snippetsMap);
 

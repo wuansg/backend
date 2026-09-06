@@ -52,21 +52,14 @@ import { INodeConnectionOpts, INodeRequestOpts, IMtlsOptions } from './axios.int
 import { MtlsSocksProxyAgent } from './mtls-agent';
 import { retryTransient } from './transient-retry';
 
-type CoreStartRequest = (
-    | {
-          coreType?: 'XRAY';
-          xrayConfig: Record<string, unknown>;
-      }
-    | {
-          coreType: 'SING_BOX';
-          singBoxConfig: Record<string, unknown>;
-      }
-) &
-    Omit<StartXrayCommand.Request, 'xrayConfig'>;
+type CoreStartRequest = {
+    coreType: 'SING_BOX';
+    singBoxConfig: Record<string, unknown>;
+} & Omit<StartXrayCommand.Request, 'xrayConfig'>;
 
 type CoreStartResponse = {
     response: {
-        runningCore?: 'XRAY' | 'SING_BOX' | null;
+        runningCore?: 'SING_BOX' | null;
         coreVersions?: {
             xray: string | null;
             singBox: string | null;
@@ -83,8 +76,8 @@ type CoreStartResponse = {
 } & StartXrayCommand.Response;
 
 export type NodeAgentHealthResponse = GetNodeHealthCheckCommand.Response['response'] & {
-    runningCore?: 'XRAY' | 'SING_BOX' | null;
-    supportedCores?: Array<'XRAY' | 'SING_BOX'>;
+    runningCore?: 'SING_BOX' | null;
+    supportedCores?: Array<'SING_BOX'>;
     coreVersions?: {
         xray: string | null;
         singBox: string | null;
@@ -346,17 +339,14 @@ export class AxiosService {
         }
     }
 
-    /*
-     * XRAY MANAGEMENT
-     */
-
-    public async startXray(
+    public async startCore(
         data: CoreStartRequest,
         opts: INodeConnectionOpts,
+        useLegacyRoute = false,
     ): Promise<TResult<CoreStartResponse['response']>> {
         return this.request<CoreStartResponse>({
-            label: 'START XRAY',
-            path: StartXrayCommand.url,
+            label: 'START CORE',
+            path: useLegacyRoute ? StartXrayCommand.url : '/node/core/start',
             opts,
             data,
             compress: true,
@@ -365,11 +355,18 @@ export class AxiosService {
         });
     }
 
-    public async stopXray(
+    public async stopCore(
         opts: INodeConnectionOpts,
     ): Promise<TResult<StopXrayCommand.Response['response']>> {
+        const result = await this.request<StopXrayCommand.Response>({
+            label: 'STOP CORE',
+            path: '/node/core/stop',
+            opts,
+            method: 'get',
+        });
+        if (result.isOk) return result;
         return this.request<StopXrayCommand.Response>({
-            label: 'STOP XRAY',
+            label: 'STOP CORE (LEGACY ROUTE)',
             path: StopXrayCommand.url,
             opts,
             method: 'get',
@@ -379,8 +376,17 @@ export class AxiosService {
     public async getNodeHealth(
         opts: INodeConnectionOpts,
     ): Promise<TResult<NodeAgentHealthResponse>> {
-        return this.request<{ response: NodeAgentHealthResponse }>({
+        const result = await this.request<{ response: NodeAgentHealthResponse }>({
             label: 'GET NODE HEALTH',
+            path: '/node/core/healthcheck',
+            opts,
+            method: 'get',
+            logAxiosError: false,
+            timeout: 15_000,
+        });
+        if (result.isOk) return result;
+        return this.request<{ response: NodeAgentHealthResponse }>({
+            label: 'GET NODE HEALTH (LEGACY ROUTE)',
             path: GetNodeHealthCheckCommand.url,
             opts,
             method: 'get',

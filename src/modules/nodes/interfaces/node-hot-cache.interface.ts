@@ -6,7 +6,7 @@ export interface INodeVersions {
     xray: string;
     singBox: string | null;
     node: string;
-    core: 'SING_BOX' | 'XRAY' | null;
+    core: 'SING_BOX' | null;
 }
 
 export interface INodeConfigApply {

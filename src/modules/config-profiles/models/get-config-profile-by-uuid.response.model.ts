@@ -5,7 +5,7 @@ export class GetConfigProfileByUuidResponseModel {
     public readonly uuid: string;
     public readonly viewPosition: number;
     public readonly name: string;
-    public readonly coreType: 'SING_BOX' | 'XRAY';
+    public readonly coreType: 'SING_BOX';
     public readonly config: object;
     public readonly inbounds: ConfigProfileInboundEntity[];
     public readonly nodes: {
@@ -21,7 +21,10 @@ export class GetConfigProfileByUuidResponseModel {
         this.uuid = entity.uuid;
         this.viewPosition = entity.viewPosition;
         this.name = entity.name;
-        this.coreType = entity.coreType === 'SING_BOX' ? 'SING_BOX' : 'XRAY';
+        if (entity.coreType !== 'SING_BOX') {
+            throw new Error('Only SING_BOX config profiles are supported');
+        }
+        this.coreType = 'SING_BOX';
         this.config = entity.config as object;
         this.inbounds = entity.inbounds;
         this.nodes = entity.nodes;

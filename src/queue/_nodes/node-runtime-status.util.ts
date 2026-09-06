@@ -7,9 +7,9 @@ export function resolveNodeRuntimeStatus(
     expectsCore: boolean,
 ): TNodeRuntimeStatus {
     const coreOnline = health.coreOnline ?? health.xrayInternalStatusCached;
-    const runningCore = health.runningCore ?? (coreOnline ? 'XRAY' : null);
+    const runningCore = health.runningCore ?? (coreOnline ? 'SING_BOX' : null);
     const supportedCores = (health.supportedCores ?? (runningCore ? [runningCore] : [])).filter(
-        (core): core is 'XRAY' | 'SING_BOX' => core === 'XRAY' || core === 'SING_BOX',
+        (core): core is 'SING_BOX' => core === 'SING_BOX',
     );
     const mode =
         health.runtimeMode ?? (coreOnline ? 'CORE_ACTIVE' : expectsCore ? 'DEGRADED' : 'IDLE');
@@ -27,10 +27,10 @@ export function resolveNodeRuntimeStatus(
 
 export function resolveNodeVersions(health: NodeAgentHealthResponse) {
     const coreOnline = health.coreOnline ?? health.xrayInternalStatusCached;
-    const runningCore = health.runningCore ?? (coreOnline ? 'XRAY' : null);
+    const runningCore = health.runningCore ?? (coreOnline ? 'SING_BOX' : null);
 
     return {
-        xray: health.coreVersions?.xray ?? health.xrayVersion,
+        xray: health.coreVersions?.xray ?? '',
         singBox: health.coreVersions?.singBox ?? null,
         node: health.nodeVersion,
         core: runningCore,
