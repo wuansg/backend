@@ -26,7 +26,7 @@ import {
 } from './extra-models';
 
 const description = `
-Remnawave is a powerful proxy managment tool, built on top of Xray-core, with a focus on simplicity and ease of use.
+Remnawave is a powerful proxy management tool, built on top of sing-box, with a focus on simplicity and ease of use.
 
 ## Resources
 * https://t.me/remnawave

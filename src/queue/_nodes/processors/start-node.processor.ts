@@ -22,7 +22,10 @@ import { QUEUES_NAMES } from '@queue/queue.enum';
 
 import { NODES_JOB_NAMES } from '../constants/nodes-job-name.constant';
 import { syncForwardingIfSupported } from '../forwarding-sync.util';
-import { resolveNodeRuntimeStatus } from '../node-runtime-status.util';
+import {
+    MINIMUM_SING_BOX_AGENT_VERSION,
+    resolveNodeRuntimeStatus,
+} from '../node-runtime-status.util';
 import { NodesQueuesService } from '../nodes-queues.service';
 
 @Processor(QUEUES_NAMES.NODES.START, {
@@ -62,7 +65,7 @@ export class StartNodeProcessor extends WorkerHost {
             await this.rawCacheService.delMany([
                 CACHE_KEYS.NODE_SYSTEM_STATS(nodeUuid),
                 CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
-                CACHE_KEYS.NODE_XRAY_UPTIME(nodeUuid),
+                CACHE_KEYS.NODE_CORE_UPTIME(nodeUuid),
             ]);
 
             await this.commandBus.execute(
@@ -96,11 +99,11 @@ export class StartNodeProcessor extends WorkerHost {
                 return;
             }
 
-            if (semver.lt(healthResponse.response.nodeVersion, '2.7.0')) {
+            if (semver.lt(healthResponse.response.nodeVersion, MINIMUM_SING_BOX_AGENT_VERSION)) {
                 await this.commandBus.execute(
                     new UpdateNodeCommand({
                         uuid: node.uuid,
-                        lastStatusMessage: `Outdated version ${healthResponse.response.nodeVersion} of Remnawave Node. Please upgrade to the latest version (>= 2.7.0).`,
+                        lastStatusMessage: `Outdated version ${healthResponse.response.nodeVersion} of Remnawave Node. Please upgrade to the latest version (>= ${MINIMUM_SING_BOX_AGENT_VERSION}).`,
                         lastStatusChange: new Date(),
                         isConnected: false,
                         isConnecting: false,
@@ -108,7 +111,7 @@ export class StartNodeProcessor extends WorkerHost {
                 );
 
                 this.logger.error(
-                    `Outdated version ${healthResponse.response.nodeVersion} of Remnawave Node. Please upgrade to the latest version (>= 2.7.0).`,
+                    `Outdated version ${healthResponse.response.nodeVersion} of Remnawave Node. Please upgrade to the latest version (>= ${MINIMUM_SING_BOX_AGENT_VERSION}).`,
                 );
 
                 return;
@@ -199,13 +202,9 @@ export class StartNodeProcessor extends WorkerHost {
                     );
                 }
 
-                const health = healthResponse.response as typeof healthResponse.response & {
-                    coreVersions?: { xray?: string | null; singBox?: string | null };
-                };
                 await this.rawCacheService.set(CACHE_KEYS.NODE_VERSIONS(node.uuid), {
-                    xray: health.coreVersions?.xray ?? '',
-                    singBox: health.coreVersions?.singBox ?? null,
-                    node: health.nodeVersion,
+                    singBox: healthResponse.response.coreVersions?.singBox ?? null,
+                    node: healthResponse.response.nodeVersion,
                     core: null,
                 });
                 const refreshedHealth = await this.axios.getNodeHealth({
@@ -216,7 +215,7 @@ export class StartNodeProcessor extends WorkerHost {
                 if (refreshedHealth.isOk) {
                     await this.rawCacheService.set(
                         CACHE_KEYS.NODE_RUNTIME_STATUS(node.uuid),
-                        resolveNodeRuntimeStatus(refreshedHealth.response, false),
+                        resolveNodeRuntimeStatus(refreshedHealth.response),
                         CACHE_KEYS_TTL.NODE_RUNTIME_STATUS,
                     );
                 }
@@ -290,7 +289,6 @@ export class StartNodeProcessor extends WorkerHost {
                     port: node.port,
                     proxyUrl: node.proxyUrl,
                 },
-                semver.lt(healthResponse.response.nodeVersion, '3.7.0'),
             );
 
             this.logger.log(`Started node in ${formatExecutionTime(reqStartTime)}`);
@@ -330,7 +328,7 @@ export class StartNodeProcessor extends WorkerHost {
             if (refreshedHealth.isOk) {
                 await this.rawCacheService.set(
                     CACHE_KEYS.NODE_RUNTIME_STATUS(node.uuid),
-                    resolveNodeRuntimeStatus(refreshedHealth.response, true),
+                    resolveNodeRuntimeStatus(refreshedHealth.response),
                     CACHE_KEYS_TTL.NODE_RUNTIME_STATUS,
                 );
             }
@@ -345,7 +343,6 @@ export class StartNodeProcessor extends WorkerHost {
                     value:
                         nodeResponse.nodeInformation.version && nodeResponse.version
                             ? {
-                                  xray: nodeResponse.coreVersions?.xray ?? '',
                                   singBox:
                                       nodeResponse.coreVersions?.singBox ?? nodeResponse.version,
                                   node: nodeResponse.nodeInformation.version,

@@ -3,93 +3,44 @@ import { describe, it } from 'node:test';
 
 import { resolveNodeRuntimeStatus, resolveNodeVersions } from './node-runtime-status.util';
 
+const health = {
+    isAlive: true,
+    nodeVersion: '3.8.0',
+    runtimeMode: 'FORWARDING_ONLY' as const,
+    runningCore: null,
+    coreOnline: false,
+    supportedCores: ['SING_BOX' as const],
+    capabilities: ['runtime_mode_v1', 'core_sing_box_v1'],
+    forwarding: {
+        state: 'applied',
+        configuredRules: 2,
+        enabledRules: 2,
+        dnsResults: { edge: '198.51.100.10' },
+    },
+    usageSnapshot: {
+        supported: true,
+        active: false,
+        enabled: false,
+        capturing: false,
+    },
+    coreVersions: { singBox: '1.14.0' },
+};
+
 describe('resolveNodeRuntimeStatus', () => {
-    it('preserves the runtime mode advertised by a new node agent', () => {
-        const result = resolveNodeRuntimeStatus(
-            {
-                isAlive: true,
-                xrayInternalStatusCached: false,
-                xrayVersion: '26.3.27',
-                nodeVersion: '3.4.0',
-                runtimeMode: 'FORWARDING_ONLY',
-                runningCore: null,
-                coreOnline: false,
-                supportedCores: ['SING_BOX'],
-                capabilities: ['runtime_mode_v1', 'core_sing_box_v1'],
-                forwarding: {
-                    state: 'applied',
-                    configuredRules: 2,
-                    enabledRules: 2,
-                    dnsResults: { edge: '198.51.100.10' },
-                },
-            },
-            false,
-        );
+    it('preserves the runtime state advertised by the node agent', () => {
+        const result = resolveNodeRuntimeStatus(health);
 
         assert.equal(result.mode, 'FORWARDING_ONLY');
         assert.equal(result.forwarding?.enabledRules, 2);
         assert.deepEqual(result.supportedCores, ['SING_BOX']);
+        assert.equal(result.usageSnapshot?.capturing, false);
     });
 
-    it('derives a compatible state for an older agent', () => {
-        const active = resolveNodeRuntimeStatus(
-            {
-                isAlive: true,
-                xrayInternalStatusCached: true,
-                xrayVersion: '26.3.27',
-                nodeVersion: '2.7.0',
-            },
-            true,
-        );
-        assert.deepEqual(
-            { mode: active.mode, runningCore: active.runningCore, coreOnline: active.coreOnline },
-            { mode: 'CORE_ACTIVE', runningCore: 'SING_BOX', coreOnline: true },
-        );
-
-        assert.equal(
-            resolveNodeRuntimeStatus(
-                {
-                    isAlive: true,
-                    xrayInternalStatusCached: false,
-                    xrayVersion: '26.3.27',
-                    nodeVersion: '2.7.0',
-                },
-                true,
-            ).mode,
-            'DEGRADED',
-        );
-    });
-
-    it('refreshes node and core versions from every health response', () => {
-        assert.deepEqual(
-            resolveNodeVersions({
-                isAlive: true,
-                xrayInternalStatusCached: false,
-                xrayVersion: '26.3.27',
-                nodeVersion: '3.4.0',
-                runningCore: null,
-                coreOnline: false,
-                coreVersions: {
-                    xray: '26.3.27',
-                    singBox: '1.13.16',
-                },
-            }),
-            {
-                xray: '26.3.27',
-                singBox: '1.13.16',
-                node: '3.4.0',
-                core: null,
-            },
-        );
-
-        assert.equal(
-            resolveNodeVersions({
-                isAlive: true,
-                xrayInternalStatusCached: true,
-                xrayVersion: '25.1.30',
-                nodeVersion: '2.7.0',
-            }).core,
-            'SING_BOX',
-        );
+    it('refreshes sing-box and node versions from every health response', () => {
+        assert.deepEqual(resolveNodeVersions(health), {
+            singBox: '1.14.0',
+            node: '3.8.0',
+            core: null,
+        });
     });
 });

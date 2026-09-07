@@ -25,9 +25,9 @@ const FILTER_COLUMN_MAP = {
     'node.uuid': sql.ref('nodes.uuid'),
     'node.name': sql.ref('nodes.name'),
     'report.actionReport.ip': sql`report->'actionReport'->>'ip'`,
-    'report.xrayReport.inboundTag': sql`report->'xrayReport'->>'inboundTag'`,
-    'report.xrayReport.outboundTag': sql`report->'xrayReport'->>'outboundTag'`,
-    'report.xrayReport.protocol': sql`report->'xrayReport'->>'protocol'`,
+    'report.coreReport.inboundTag': sql`report->'coreReport'->>'inboundTag'`,
+    'report.coreReport.outboundTag': sql`report->'coreReport'->>'outboundTag'`,
+    'report.coreReport.protocol': sql`report->'coreReport'->>'protocol'`,
 } as const;
 
 const SORT_COLUMN_MAP: Record<string, string> = {

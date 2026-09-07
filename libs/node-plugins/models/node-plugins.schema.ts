@@ -189,13 +189,13 @@ export const preStartPluginSchema = z.object({
         .default(false)
         .meta({
             title: 'Enabled',
-            markdownDescription: `Enables the pre-start stage. All enabled sections below run every time before the Xray-Core process starts — on node startup, on core restart, and after any configuration change that triggers a core reload. If a section fails, the failure is logged and the core still starts.${DOCS_LINK}`,
+            markdownDescription: `Enables the pre-start stage. All enabled sections below run every time before the proxy core starts — on node startup, on core restart, and after any configuration change that triggers a core reload. If a section fails, the failure is logged and the core still starts.${DOCS_LINK}`,
         }),
     cleanupSockets: z
         .object({
             enabled: z.boolean().meta({
                 title: 'Enable socket cleanup',
-                markdownDescription: `Removes stale unix socket files left behind by a previous core process that did not shut down cleanly. Such leftovers make Xray-Core fail to bind with \`address already in use\`. Only entries that are actually unix sockets are removed — regular files, directories and symlinks are always skipped.${DOCS_LINK}`,
+                markdownDescription: `Removes stale unix socket files left behind by a previous core process that did not shut down cleanly. Such leftovers make the core fail to bind with \`address already in use\`. Only entries that are actually unix sockets are removed — regular files, directories and symlinks are always skipped.${DOCS_LINK}`,
             }),
             files: z
                 .array(cleanupPathSchema)

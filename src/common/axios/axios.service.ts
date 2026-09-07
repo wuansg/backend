@@ -2,6 +2,7 @@ import type {
     NodeForwardingConfig,
     NodeForwardingRuntimeStatus,
     TNodeRuntimeStatus,
+    TNodeSystem,
 } from '@contract/models';
 
 import { ERRORS } from '@contract/constants';
@@ -23,21 +24,16 @@ import {
     AddUserCommand,
     AddUsersCommand,
     BlockIpsCommand,
-    CollectReportsCommand,
     DropIpsCommand,
     DropUsersConnectionsCommand,
     GetCombinedStatsCommand,
     GetGeocheckCommand,
-    GetNodeHealthCheckCommand,
-    GetSystemStatsCommand,
     GetUserIpListCommand,
     GetUsersIpListCommand,
     GetUsersStatsCommand,
     RecreateTablesCommand,
     RemoveUserCommand,
     RemoveUsersCommand,
-    StartXrayCommand,
-    StopXrayCommand,
     SyncCommand,
     UnblockIpsCommand,
 } from '@remnawave/node-contract';
@@ -55,13 +51,32 @@ import { retryTransient } from './transient-retry';
 type CoreStartRequest = {
     coreType: 'SING_BOX';
     singBoxConfig: Record<string, unknown>;
-} & Omit<StartXrayCommand.Request, 'xrayConfig'>;
+    internals: {
+        metadata?: {
+            name: string;
+            uuid: string;
+            id: number;
+            tags: string[];
+            countryCode: string;
+        };
+        integrations?: Record<string, unknown>;
+        forceRestart?: boolean;
+        hashes: {
+            emptyConfig: string;
+            inbounds: Array<{ usersCount: number; hash: string; tag: string }>;
+        };
+    };
+};
 
 type CoreStartResponse = {
     response: {
+        isStarted: boolean;
+        version: string | null;
+        error: string | null;
+        nodeInformation: { version: string | null };
+        system: TNodeSystem;
         runningCore?: 'SING_BOX' | null;
         coreVersions?: {
-            xray: string | null;
             singBox: string | null;
         };
         configApply?: {
@@ -72,21 +87,71 @@ type CoreStartResponse = {
             appliedAt: string | null;
             rollback: 'NOT_REQUIRED' | 'SUCCEEDED' | 'FAILED' | 'NOT_AVAILABLE';
         };
-    } & StartXrayCommand.Response['response'];
-} & StartXrayCommand.Response;
+    };
+};
 
-export type NodeAgentHealthResponse = GetNodeHealthCheckCommand.Response['response'] & {
-    runningCore?: 'SING_BOX' | null;
-    supportedCores?: Array<'SING_BOX'>;
+type CoreStopResponse = { response: { isStopped: boolean } };
+
+type CollectReportsResponse = {
+    response: {
+        reports: Array<{
+            actionReport: {
+                blocked: boolean;
+                ip: string;
+                blockDuration: number;
+                willUnblockAt: Date;
+                userId: string;
+                processedAt: Date;
+            };
+            coreReport: {
+                email: string | null;
+                level: number | null;
+                protocol: string | null;
+                network: string;
+                source: string | null;
+                destination: string;
+                routeTarget: string | null;
+                originalTarget: string | null;
+                inboundTag: string | null;
+                inboundName: string | null;
+                inboundLocal: string | null;
+                outboundTag: string | null;
+                ts: number;
+            };
+        }>;
+    };
+};
+
+export type NodeAgentHealthResponse = {
+    isAlive: boolean;
+    nodeVersion: string;
+    runningCore: 'SING_BOX' | null;
+    supportedCores: Array<'SING_BOX'>;
     coreVersions?: {
-        xray: string | null;
         singBox: string | null;
     };
-    capabilities?: string[];
-    runtimeMode?: TNodeRuntimeStatus['mode'];
-    coreOnline?: boolean;
-    forwarding?: NonNullable<TNodeRuntimeStatus['forwarding']>;
-    usageSnapshot?: NonNullable<TNodeRuntimeStatus['usageSnapshot']>;
+    capabilities: string[];
+    runtimeMode: TNodeRuntimeStatus['mode'];
+    coreOnline: boolean;
+    forwarding: TNodeRuntimeStatus['forwarding'];
+    usageSnapshot: TNodeRuntimeStatus['usageSnapshot'];
+};
+
+export type NodeSystemStatsResponse = {
+    coreInfo: {
+        numGoroutine: number;
+        numGC: number;
+        alloc: number;
+        totalAlloc: number;
+        sys: number;
+        mallocs: number;
+        frees: number;
+        liveObjects: number;
+        pauseTotalNs: number;
+        uptime: number;
+    } | null;
+    plugins: { torrentBlocker: { reportsCount: number } };
+    system: { stats: TNodeSystem['stats'] };
 };
 
 export interface GetUsersInboundStatsResponse {
@@ -342,11 +407,10 @@ export class AxiosService {
     public async startCore(
         data: CoreStartRequest,
         opts: INodeConnectionOpts,
-        useLegacyRoute = false,
     ): Promise<TResult<CoreStartResponse['response']>> {
         return this.request<CoreStartResponse>({
             label: 'START CORE',
-            path: useLegacyRoute ? StartXrayCommand.url : '/node/core/start',
+            path: '/node/core/start',
             opts,
             data,
             compress: true,
@@ -357,17 +421,10 @@ export class AxiosService {
 
     public async stopCore(
         opts: INodeConnectionOpts,
-    ): Promise<TResult<StopXrayCommand.Response['response']>> {
-        const result = await this.request<StopXrayCommand.Response>({
+    ): Promise<TResult<CoreStopResponse['response']>> {
+        return this.request<CoreStopResponse>({
             label: 'STOP CORE',
             path: '/node/core/stop',
-            opts,
-            method: 'get',
-        });
-        if (result.isOk) return result;
-        return this.request<StopXrayCommand.Response>({
-            label: 'STOP CORE (LEGACY ROUTE)',
-            path: StopXrayCommand.url,
             opts,
             method: 'get',
         });
@@ -376,18 +433,9 @@ export class AxiosService {
     public async getNodeHealth(
         opts: INodeConnectionOpts,
     ): Promise<TResult<NodeAgentHealthResponse>> {
-        const result = await this.request<{ response: NodeAgentHealthResponse }>({
+        return this.request<{ response: NodeAgentHealthResponse }>({
             label: 'GET NODE HEALTH',
             path: '/node/core/healthcheck',
-            opts,
-            method: 'get',
-            logAxiosError: false,
-            timeout: 15_000,
-        });
-        if (result.isOk) return result;
-        return this.request<{ response: NodeAgentHealthResponse }>({
-            label: 'GET NODE HEALTH (LEGACY ROUTE)',
-            path: GetNodeHealthCheckCommand.url,
             opts,
             method: 'get',
             logAxiosError: false,
@@ -519,10 +567,10 @@ export class AxiosService {
 
     public async getSystemStats(
         opts: INodeConnectionOpts,
-    ): Promise<TResult<GetSystemStatsCommand.Response['response']>> {
-        return this.request<GetSystemStatsCommand.Response>({
+    ): Promise<TResult<NodeSystemStatsResponse>> {
+        return this.request<{ response: NodeSystemStatsResponse }>({
             label: 'GET SYSTEM STATS',
-            path: GetSystemStatsCommand.url,
+            path: '/node/stats/get-system-stats',
             opts,
             method: 'get',
             handle500: true,
@@ -744,10 +792,10 @@ export class AxiosService {
 
     public async collectTorrentBlockerReports(
         opts: INodeConnectionOpts,
-    ): Promise<TResult<CollectReportsCommand.Response['response']>> {
-        return this.request<CollectReportsCommand.Response>({
+    ): Promise<TResult<CollectReportsResponse['response']>> {
+        return this.request<CollectReportsResponse>({
             label: 'COLLECT TORRENT BLOCKER REPORTS',
-            path: CollectReportsCommand.url,
+            path: '/node/plugin/torrent-blocker/collect',
             opts,
             logAxiosError: false,
             timeout: 20_000,

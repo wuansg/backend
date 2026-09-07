@@ -23,6 +23,7 @@ import { NodesQueuesService } from '@queue/_nodes';
 import { QUEUES_NAMES } from '../../queue.enum';
 import { NODES_JOB_NAMES } from '../constants';
 import { syncForwardingIfSupported } from '../forwarding-sync.util';
+import { MINIMUM_SING_BOX_AGENT_VERSION } from '../node-runtime-status.util';
 
 @Processor(
     {
@@ -88,7 +89,7 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                 await this.rawCacheService.delMany([
                     CACHE_KEYS.NODE_SYSTEM_STATS(node.uuid),
                     CACHE_KEYS.NODE_USERS_ONLINE(node.uuid),
-                    CACHE_KEYS.NODE_XRAY_UPTIME(node.uuid),
+                    CACHE_KEYS.NODE_CORE_UPTIME(node.uuid),
                 ]);
 
                 if (node.activeInbounds.length === 0) {
@@ -168,7 +169,6 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                     throw new Error('Failed to get active node inbounds tags');
                 }
 
-                let pluginsSupported = true;
                 const healthResponse = await this.axios.getNodeHealth({
                     address: node.address,
                     port: node.port,
@@ -212,63 +212,70 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                         `Node ${node.uuid} – unknown node version. Please upgrade Remnawave Node to the latest version.`,
                     );
                     return;
-                } else if (semver.lt(healthResponse.response.nodeVersion, '2.7.0')) {
-                    pluginsSupported = false;
-
-                    this.logger.warn(
-                        `Node ${node.uuid} running on outdated version of Remnawave Node. Please upgrade to the latest version. Some features may not work properly.`,
+                } else if (
+                    semver.lt(healthResponse.response.nodeVersion, MINIMUM_SING_BOX_AGENT_VERSION)
+                ) {
+                    const message = `Outdated version ${healthResponse.response.nodeVersion} of Remnawave Node. Please upgrade to the latest version (>= ${MINIMUM_SING_BOX_AGENT_VERSION}).`;
+                    await this.commandBus.execute(
+                        new UpdateNodeCommand({
+                            uuid: node.uuid,
+                            lastStatusMessage: message,
+                            lastStatusChange: new Date(),
+                            isConnected: false,
+                            isConnecting: false,
+                        }),
                     );
+                    this.logger.error(`Node ${node.uuid} – ${message}`);
+                    return;
                 }
 
-                if (pluginsSupported) {
-                    let plugin: {
-                        uuid: string;
-                        config: Record<string, unknown>;
-                        name: string;
-                    } | null = null;
+                let plugin: {
+                    uuid: string;
+                    config: Record<string, unknown>;
+                    name: string;
+                } | null = null;
 
-                    if (node.activePluginUuid) {
-                        const nodePlugin = pluginsMap.get(node.activePluginUuid);
+                if (node.activePluginUuid) {
+                    const nodePlugin = pluginsMap.get(node.activePluginUuid);
 
-                        if (!nodePlugin) {
-                            this.logger.error(`Node plugin not found: ${node.activePluginUuid}`);
-                            return;
-                        }
-
-                        plugin = {
-                            uuid: nodePlugin.uuid,
-                            config: nodePlugin.pluginConfig as Record<string, unknown>,
-                            name: nodePlugin.name,
-                        };
-                    }
-
-                    const syncNodePluginsResponse = await this.axios.syncNodePlugins(
-                        {
-                            plugin,
-                        },
-                        {
-                            address: node.address,
-                            port: node.port,
-                            proxyUrl: node.proxyUrl,
-                        },
-                    );
-
-                    if (!syncNodePluginsResponse.isOk) {
-                        await this.commandBus.execute(
-                            new UpdateNodeCommand({
-                                uuid: node.uuid,
-                                isConnecting: false,
-                                isConnected: false,
-                                lastStatusMessage: `Failed to sync node plugins: ${syncNodePluginsResponse.message}`,
-                                lastStatusChange: new Date(),
-                            }),
-                        );
-
-                        this.logger.error(
-                            `Failed to sync node plugins: ${syncNodePluginsResponse.message}`,
-                        );
+                    if (!nodePlugin) {
+                        this.logger.error(`Node plugin not found: ${node.activePluginUuid}`);
                         return;
                     }
+
+                    plugin = {
+                        uuid: nodePlugin.uuid,
+                        config: nodePlugin.pluginConfig as Record<string, unknown>,
+                        name: nodePlugin.name,
+                    };
+                }
+
+                const syncNodePluginsResponse = await this.axios.syncNodePlugins(
+                    {
+                        plugin,
+                    },
+                    {
+                        address: node.address,
+                        port: node.port,
+                        proxyUrl: node.proxyUrl,
+                    },
+                );
+
+                if (!syncNodePluginsResponse.isOk) {
+                    await this.commandBus.execute(
+                        new UpdateNodeCommand({
+                            uuid: node.uuid,
+                            isConnecting: false,
+                            isConnected: false,
+                            lastStatusMessage: `Failed to sync node plugins: ${syncNodePluginsResponse.message}`,
+                            lastStatusChange: new Date(),
+                        }),
+                    );
+
+                    this.logger.error(
+                        `Failed to sync node plugins: ${syncNodePluginsResponse.message}`,
+                    );
+                    return;
                 }
 
                 const filteredInboundsHashes = config.response.hashesPayload.inbounds.filter(
@@ -301,7 +308,6 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                         port: node.port,
                         proxyUrl: node.proxyUrl,
                     },
-                    semver.lt(healthResponse.response.nodeVersion, '3.7.0'),
                 );
 
                 switch (startCoreResponse.isOk) {
@@ -346,7 +352,6 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                                 value:
                                     nodeResponse.nodeInformation.version && nodeResponse.version
                                         ? {
-                                              xray: nodeResponse.coreVersions?.xray ?? '',
                                               singBox:
                                                   nodeResponse.coreVersions?.singBox ??
                                                   nodeResponse.version,

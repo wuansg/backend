@@ -43,7 +43,7 @@ export class NodeResponseModel {
     public provider: InfraProviderEntity | null;
     public activePluginUuid: string | null;
 
-    public xrayUptime: number;
+    public coreUptime: number;
     public usersOnline: number;
     public system: INodeSystem | null;
     public versions: INodeVersions | null;
@@ -106,7 +106,7 @@ export class NodeResponseModel {
         this.versions = hotCache.versions;
         this.configApply = hotCache.configApply;
         this.runtimeStatus = hotCache.runtimeStatus;
-        this.xrayUptime = hotCache.xrayUptime;
+        this.coreUptime = hotCache.coreUptime;
         this.usageSnapshot = data.usageSnapshotState
             ? {
                   receivedThrough: Number(data.usageSnapshotState.receivedThrough),

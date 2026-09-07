@@ -18,10 +18,7 @@ RUN apk add --no-cache curl unzip ca-certificates git \
         curl -L ${FRONTEND_URL} -o frontend.zip \
         && unzip frontend.zip -d frontend_temp; \
     fi \
-    && curl -L https://validator.remna.dev/wasm_exec.js -o frontend_temp/dist/assets/wasm_exec.js \
-    && curl -L https://validator.remna.dev/xray.schema.json -o frontend_temp/dist/assets/xray.schema.json \
-    && curl -L https://validator.remna.dev/xray.schema.cn.json -o frontend_temp/dist/assets/xray.schema.cn.json \
-    && curl -L https://validator.remna.dev/main.wasm -o frontend_temp/dist/assets/main.wasm
+    && test -d frontend_temp/dist
 
 FROM node:24.19-trixie-slim AS backend-build
 WORKDIR /opt/app

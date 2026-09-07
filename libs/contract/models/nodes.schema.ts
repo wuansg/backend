@@ -44,7 +44,6 @@ export const NodesSchema = z.object({
     system: z.nullable(NodeSystemSchema),
     versions: z.nullable(
         z.object({
-            xray: z.string(),
             singBox: z.string().nullable().optional().default(null),
             node: z.string(),
             core: z.literal('SING_BOX').nullable().optional().default('SING_BOX'),
@@ -69,7 +68,7 @@ export const NodesSchema = z.object({
         .nullable()
         .optional(),
     runtimeStatus: NodeRuntimeStatusSchema.nullable().optional(),
-    xrayUptime: z.number(),
+    coreUptime: z.number(),
     usersOnline: z.number(),
     note: z.nullable(z.string()),
     usageSnapshot: z

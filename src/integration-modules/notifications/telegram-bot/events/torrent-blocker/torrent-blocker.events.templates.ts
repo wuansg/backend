@@ -20,7 +20,7 @@ export const TORRENT_BLOCKER_EVENTS_TEMPLATES: Record<
     TorrentBlockerEventsTemplate
 > = {
     [EVENTS.TORRENT_BLOCKER.REPORT]: (e, panelDomain) => {
-        const { actionReport, xrayReport } = e.data.report;
+        const { actionReport, coreReport } = e.data.report;
 
         const lines = [
             `<tg-emoji emoji-id='5469913852462242978'>🧨️</tg-emoji> #torrentBlocked #${e.data.user.username}`,
@@ -30,9 +30,9 @@ export const TORRENT_BLOCKER_EVENTS_TEMPLATES: Record<
             '<blockquote expandable>',
             '<tg-emoji emoji-id="5271604874419647061">🔗</tg-emoji> <b>Connection</b>',
             `<b>IP:</b> <code>${actionReport.ip}</code>`,
-            `<b>Protocol:</b> <code>${xrayReport.protocol ?? 'unknown'}</code> (<code>${xrayReport.network}</code>)`,
-            `<b>Dest:</b> <code>${xrayReport.destination}</code>`,
-            `<b>Inbound:</b> <code>${xrayReport.inboundTag ?? '—'}</code>`,
+            `<b>Protocol:</b> <code>${coreReport.protocol ?? 'unknown'}</code> (<code>${coreReport.network}</code>)`,
+            `<b>Dest:</b> <code>${coreReport.destination}</code>`,
+            `<b>Inbound:</b> <code>${coreReport.inboundTag ?? '—'}</code>`,
             '',
             '<tg-emoji emoji-id="5472267631979405211">⛔</tg-emoji> <b>Block info</b>',
             `<b>Duration:</b> <code>${Math.floor(actionReport.blockDuration / 60)} min</code>`,

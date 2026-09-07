@@ -3,7 +3,6 @@ import type { TNodeRuntimeStatus } from '@contract/models';
 import { INodeSystem } from './node-host-info.interface';
 
 export interface INodeVersions {
-    xray: string;
     singBox: string | null;
     node: string;
     core: 'SING_BOX' | null;
@@ -21,7 +20,7 @@ export interface INodeConfigApply {
 export interface INodeHotCache {
     system: INodeSystem | null;
     versions: INodeVersions | null;
-    xrayUptime: number;
+    coreUptime: number;
     onlineUsers: number;
     configApply: INodeConfigApply | null;
     runtimeStatus: TNodeRuntimeStatus | null;

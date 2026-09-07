@@ -28,7 +28,7 @@ export const TorrentBlockerReportSchema = z.object({
                 .datetime({ offset: true, local: true })
                 .transform((str) => new Date(str)),
         }),
-        xrayReport: z.object({
+        coreReport: z.object({
             email: z.string().nullable(),
             level: z.number().nullable(),
             protocol: z.string().nullable(),

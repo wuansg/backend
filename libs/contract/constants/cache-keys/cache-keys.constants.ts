@@ -14,7 +14,7 @@ export const CACHE_KEYS = {
     NODE_VERSIONS: (uuid: string) => `node_versions:${uuid}`,
     NODE_CONFIG_APPLY: (uuid: string) => `node_config_apply:${uuid}`,
     NODE_RUNTIME_STATUS: (uuid: string) => `node_runtime_status:${uuid}`,
-    NODE_XRAY_UPTIME: (uuid: string) => `node_xray_uptime:${uuid}`,
+    NODE_CORE_UPTIME: (uuid: string) => `node_core_uptime:${uuid}`,
     RAW_INBOUND: (uuid: string) => `raw_inbound:${uuid}`,
     XRAY_JSON_TEMPLATE: (uuid: string) => `xray_json_template:${uuid}`,
     EXTERNAL_SQUAD_TEMPLATE_NAME: (uuid: string, type: TSubscriptionTemplateType) =>
@@ -27,7 +27,7 @@ export const CACHE_KEYS_TTL = {
     SUBSCRIPTION_SETTINGS: 3_600, // 1 hour
     NODE_SYSTEM_STATS: 30, // 30 seconds
     NODE_USERS_ONLINE: 45, // 3 scheduler cycles
-    NODE_XRAY_UPTIME: 16, // 16 seconds
+    NODE_CORE_UPTIME: 16, // 16 seconds
     NODE_RUNTIME_STATUS: 45, // 3 scheduler cycles
     RAW_INBOUND: 3_600, // 1 hour
     XRAY_JSON_TEMPLATE: 3_600, // 1 hour

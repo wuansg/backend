@@ -1,13 +1,17 @@
 import { Job } from 'bullmq';
+import semver from 'semver';
 
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
-import { GetSystemStatsCommand } from '@remnawave/node-contract';
-
-import { AxiosService, INodeConnectionOpts, NodeAgentHealthResponse } from '@common/axios';
+import {
+    AxiosService,
+    INodeConnectionOpts,
+    NodeAgentHealthResponse,
+    NodeSystemStatsResponse,
+} from '@common/axios';
 import { RawCacheService } from '@common/raw-cache';
 import { CACHE_KEYS, CACHE_KEYS_TTL, EVENTS } from '@libs/contracts/constants';
 
@@ -20,7 +24,11 @@ import { QUEUES_NAMES } from '@queue/queue.enum';
 
 import { NODES_JOB_NAMES } from '../constants/nodes-job-name.constant';
 import { INodeHealthCheckPayload } from '../interfaces';
-import { resolveNodeRuntimeStatus, resolveNodeVersions } from '../node-runtime-status.util';
+import {
+    MINIMUM_SING_BOX_AGENT_VERSION,
+    resolveNodeRuntimeStatus,
+    resolveNodeVersions,
+} from '../node-runtime-status.util';
 
 @Processor(QUEUES_NAMES.NODES.HEALTH_CHECK, {
     concurrency: 40,
@@ -57,7 +65,18 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
                 );
             }
 
-            const runtimeStatus = resolveNodeRuntimeStatus(healthResult.response, expectsCore);
+            if (
+                !semver.valid(healthResult.response.nodeVersion) ||
+                semver.lt(healthResult.response.nodeVersion, MINIMUM_SING_BOX_AGENT_VERSION)
+            ) {
+                return await this.handleDisconnectedNode(
+                    nodeUuid,
+                    isConnected,
+                    `Unsupported Remnawave Node version ${healthResult.response.nodeVersion}; version >= ${MINIMUM_SING_BOX_AGENT_VERSION} is required`,
+                );
+            }
+
+            const runtimeStatus = resolveNodeRuntimeStatus(healthResult.response);
             await Promise.all([
                 this.cacheRuntimeStatus(nodeUuid, runtimeStatus),
                 this.rawCacheService.set(
@@ -138,10 +157,10 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
         await this.rawCacheService.delMany([
             CACHE_KEYS.NODE_SYSTEM_STATS(nodeUuid),
             CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
-            CACHE_KEYS.NODE_XRAY_UPTIME(nodeUuid),
+            CACHE_KEYS.NODE_CORE_UPTIME(nodeUuid),
         ]);
 
-        if (health.coreOnline ?? health.xrayInternalStatusCached) {
+        if (health.coreOnline) {
             this.logger.warn(
                 `Node ${nodeUuid} has no active inbounds but a core is running; scheduling core stop.`,
             );
@@ -155,10 +174,10 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
         connectionOpts: INodeConnectionOpts,
         nodeUuid: string,
         isConnected: boolean,
-        stats: GetSystemStatsCommand.Response['response'],
+        stats: NodeSystemStatsResponse,
         runtimeStatus: ReturnType<typeof resolveNodeRuntimeStatus>,
     ) {
-        const coreInfo = stats.xrayInfo;
+        const coreInfo = stats.coreInfo;
         if (coreInfo === null) {
             this.logger.error(`Node ${nodeUuid} – core info is missing`);
 
@@ -177,9 +196,9 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
                 ttlSeconds: CACHE_KEYS_TTL.NODE_SYSTEM_STATS,
             },
             {
-                key: CACHE_KEYS.NODE_XRAY_UPTIME(nodeUuid),
+                key: CACHE_KEYS.NODE_CORE_UPTIME(nodeUuid),
                 value: coreInfo.uptime,
-                ttlSeconds: CACHE_KEYS_TTL.NODE_XRAY_UPTIME,
+                ttlSeconds: CACHE_KEYS_TTL.NODE_CORE_UPTIME,
             },
         ]);
 
@@ -242,7 +261,7 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             this.rawCacheService.delMany([
                 CACHE_KEYS.NODE_SYSTEM_STATS(nodeUuid),
                 CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
-                CACHE_KEYS.NODE_XRAY_UPTIME(nodeUuid),
+                CACHE_KEYS.NODE_CORE_UPTIME(nodeUuid),
             ]),
         ]);
 
@@ -287,7 +306,7 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
         await this.rawCacheService.delMany([
             CACHE_KEYS.NODE_SYSTEM_INFO(nodeUuid),
             CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
-            CACHE_KEYS.NODE_XRAY_UPTIME(nodeUuid),
+            CACHE_KEYS.NODE_CORE_UPTIME(nodeUuid),
             CACHE_KEYS.NODE_RUNTIME_STATUS(nodeUuid),
         ]);
 

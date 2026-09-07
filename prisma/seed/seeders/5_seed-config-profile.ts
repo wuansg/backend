@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import consola from 'consola';
 
-import { XRAY_DEFAULT_CONFIG } from '../default';
+import { SING_BOX_DEFAULT_CONFIG } from '../default';
 import { syncInbounds } from './6_sync-inbounds';
 
 export async function seedDefaultConfigProfile(prisma: PrismaClient) {
@@ -17,7 +17,8 @@ export async function seedDefaultConfigProfile(prisma: PrismaClient) {
     const config = await prisma.configProfiles.create({
         data: {
             name: 'Default-Profile',
-            config: XRAY_DEFAULT_CONFIG,
+            config: SING_BOX_DEFAULT_CONFIG,
+            coreType: 'SING_BOX',
             uuid: '00000000-0000-0000-0000-000000000000',
         },
     });

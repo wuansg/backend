@@ -7,7 +7,7 @@ export interface ITorrentBlockerReport {
         userId: string;
         processedAt: Date;
     };
-    xrayReport: {
+    coreReport: {
         email: string | null;
         level: number | null;
         protocol: string | null;
