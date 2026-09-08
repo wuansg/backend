@@ -61,11 +61,11 @@ export class TelegramTargetHealthService {
 
                 try {
                     await this.telegramApiService.validateTarget(chatId);
-                    await this.markSuccess(target);
+                    await this.markSuccess(target, false);
                     this.logger.log(`Telegram target "${target}" is available.`);
                 } catch (error) {
                     const telegramError = this.asTelegramError(error);
-                    await this.markFailure(target, telegramError);
+                    await this.markFailure(target, telegramError, false);
                     this.logger.warn(
                         `Telegram target "${target}" failed startup validation (${this.errorKind(telegramError)}).`,
                     );
@@ -80,10 +80,9 @@ export class TelegramTargetHealthService {
         return status.nextProbeAt === null || Date.parse(status.nextProbeAt) <= Date.now();
     }
 
-    public async markSuccess(target: TTelegramTarget): Promise<void> {
+    public async markSuccess(target: TTelegramTarget, countDelivery = true): Promise<void> {
         const now = new Date().toISOString();
-        await Promise.all([
-            this.rawCacheService.increment(CACHE_KEYS.TELEGRAM_TARGET_SUCCESSES(target)),
+        const writes: Array<Promise<unknown>> = [
             this.writeStatus(target, {
                 configured: true,
                 available: true,
@@ -92,14 +91,23 @@ export class TelegramTargetHealthService {
                 lastErrorKind: 'none',
                 nextProbeAt: null,
             }),
-        ]);
+        ];
+        if (countDelivery) {
+            writes.push(
+                this.rawCacheService.increment(CACHE_KEYS.TELEGRAM_TARGET_SUCCESSES(target)),
+            );
+        }
+        await Promise.all(writes);
     }
 
-    public async markFailure(target: TTelegramTarget, error: TelegramApiError): Promise<void> {
+    public async markFailure(
+        target: TTelegramTarget,
+        error: TelegramApiError,
+        countDelivery = true,
+    ): Promise<void> {
         const now = new Date();
         const targetUnavailable = error.targetUnavailable;
-        await Promise.all([
-            this.rawCacheService.increment(CACHE_KEYS.TELEGRAM_TARGET_FAILURES(target)),
+        const writes: Array<Promise<unknown>> = [
             this.writeStatus(target, {
                 configured: true,
                 available: !targetUnavailable,
@@ -110,7 +118,13 @@ export class TelegramTargetHealthService {
                     ? new Date(now.getTime() + CIRCUIT_OPEN_MS).toISOString()
                     : null,
             }),
-        ]);
+        ];
+        if (countDelivery) {
+            writes.push(
+                this.rawCacheService.increment(CACHE_KEYS.TELEGRAM_TARGET_FAILURES(target)),
+            );
+        }
+        await Promise.all(writes);
     }
 
     public getStatus(target: TTelegramTarget): Promise<TelegramTargetStatus | null> {
