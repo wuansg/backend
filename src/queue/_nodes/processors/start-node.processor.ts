@@ -26,6 +26,7 @@ import {
     MINIMUM_SING_BOX_AGENT_VERSION,
     resolveNodeRuntimeStatus,
 } from '../node-runtime-status.util';
+import { isNodePluginInSync } from '../node-sync-state.util';
 import { NodesQueuesService } from '../nodes-queues.service';
 
 @Processor(QUEUES_NAMES.NODES.START, {
@@ -140,32 +141,21 @@ export class StartNodeProcessor extends WorkerHost {
                 };
             }
 
-            const syncNodePluginsResponse = await this.axios.syncNodePlugins(
-                {
-                    plugin,
-                },
-                {
-                    address: node.address,
-                    port: node.port,
-                    proxyUrl: node.proxyUrl,
-                },
-            );
-
-            if (!syncNodePluginsResponse.isOk) {
-                await this.commandBus.execute(
-                    new UpdateNodeCommand({
-                        uuid: node.uuid,
-                        isConnecting: false,
-                        isConnected: false,
-                        lastStatusMessage: `Failed to sync node plugins: ${syncNodePluginsResponse.message}`,
-                        lastStatusChange: new Date(),
-                    }),
+            let pluginError: string | null = null;
+            if (force || !isNodePluginInSync(healthResponse.response, plugin)) {
+                const syncNodePluginsResponse = await this.axios.syncNodePlugins(
+                    { plugin },
+                    {
+                        address: node.address,
+                        port: node.port,
+                        proxyUrl: node.proxyUrl,
+                    },
                 );
 
-                this.logger.error(
-                    `Failed to sync node plugins: ${syncNodePluginsResponse.message}`,
-                );
-                return;
+                if (!syncNodePluginsResponse.isOk) {
+                    pluginError = `Failed to sync node plugins: ${syncNodePluginsResponse.message}`;
+                    this.logger.warn(pluginError);
+                }
             }
 
             if (node.activeInbounds.length === 0 || !node.activeConfigProfileUuid) {
@@ -195,6 +185,7 @@ export class StartNodeProcessor extends WorkerHost {
                     this.axios,
                     node,
                     healthResponse.response,
+                    force,
                 );
                 if (forwardingError) {
                     this.logger.warn(
@@ -225,7 +216,7 @@ export class StartNodeProcessor extends WorkerHost {
                         uuid: node.uuid,
                         isConnected: true,
                         isConnecting: false,
-                        lastStatusMessage: null,
+                        lastStatusMessage: pluginError ?? forwardingError,
                         lastStatusChange: new Date(),
                     }),
                 );
@@ -269,6 +260,18 @@ export class StartNodeProcessor extends WorkerHost {
             );
             const preparedConfig = config.response.config as Record<string, unknown>;
 
+            const forwardingError = await syncForwardingIfSupported(
+                this.axios,
+                node,
+                healthResponse.response,
+                force,
+            );
+            if (forwardingError) {
+                this.logger.warn(
+                    `Forwarding sync failed for node ${node.uuid}; keeping the last applied rules: ${forwardingError}`,
+                );
+            }
+
             const startNodeResult = await this.axios.startCore(
                 {
                     coreType: 'SING_BOX' as const,
@@ -308,17 +311,6 @@ export class StartNodeProcessor extends WorkerHost {
             }
 
             const nodeResponse = startNodeResult.response;
-
-            const forwardingError = await syncForwardingIfSupported(
-                this.axios,
-                node,
-                healthResponse.response,
-            );
-            if (forwardingError) {
-                this.logger.warn(
-                    `Forwarding sync failed for node ${node.uuid}; keeping the last applied rules: ${forwardingError}`,
-                );
-            }
 
             const refreshedHealth = await this.axios.getNodeHealth({
                 address: node.address,
@@ -365,7 +357,7 @@ export class StartNodeProcessor extends WorkerHost {
                 new UpdateNodeCommand({
                     uuid: node.uuid,
                     isConnected: nodeResponse.isStarted,
-                    lastStatusMessage: nodeResponse.error ?? null,
+                    lastStatusMessage: nodeResponse.error ?? pluginError ?? forwardingError,
                     lastStatusChange: new Date(),
                     isConnecting: false,
                 }),

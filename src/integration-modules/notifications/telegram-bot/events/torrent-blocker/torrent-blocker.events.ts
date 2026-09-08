@@ -69,6 +69,7 @@ export class TorrentBlockerEvents implements OnApplicationBootstrap {
             chatId: this.chatId!,
             threadId: this.threadId,
             keyboard: message.keyboard,
+            target: 'tblocker',
         });
     }
 }

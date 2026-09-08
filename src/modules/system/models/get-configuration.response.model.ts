@@ -3,6 +3,25 @@ interface INotificationsConfig {
     bandwidthUsage: number[] | null;
     notConnectedAfter: number[] | null;
     expirationNotifications: number[] | null;
+    telegram: {
+        enabled: boolean;
+        targets: Array<{
+            target: 'users' | 'nodes' | 'crm' | 'service' | 'tblocker';
+            configured: boolean;
+            available: boolean;
+            circuitOpen: boolean;
+            lastCheckedAt: string | null;
+            lastSuccessAt: string | null;
+            lastFailureAt: string | null;
+            lastErrorKind:
+                | 'none'
+                | 'target_unavailable'
+                | 'rate_limited'
+                | 'transient'
+                | 'rejected';
+            nextProbeAt: string | null;
+        }>;
+    };
 }
 
 interface IServiceConfig {

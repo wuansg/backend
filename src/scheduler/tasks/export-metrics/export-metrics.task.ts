@@ -10,7 +10,9 @@ import { RawCacheService } from '@common/raw-cache';
 import { RuntimeMetric } from '@common/runtime-metrics/interfaces';
 import { TResult } from '@common/types';
 import { resolveCountryEmoji } from '@common/utils/resolve-country-emoji';
-import { INTERNAL_CACHE_KEYS, METRIC_NAMES } from '@libs/contracts/constants';
+import { CACHE_KEYS, INTERNAL_CACHE_KEYS, METRIC_NAMES } from '@libs/contracts/constants';
+
+import { TelegramTargetStatus } from '@integration-modules/notifications/telegram-bot/telegram-target-health.service';
 
 import { NodesEntity } from '@modules/nodes/entities/nodes.entity';
 import { GetAllNodesQuery } from '@modules/nodes/queries/get-all-nodes/get-all-nodes.query';
@@ -24,6 +26,8 @@ import {
     INodeMetricLabel,
     INodeSystemMetricLabels,
 } from '@scheduler/metrics-providers';
+
+import { TELEGRAM_TARGETS } from '@queue/notifications/telegram-bot-logger/interfaces';
 
 @Injectable()
 export class ExportMetricsTask {
@@ -112,6 +116,16 @@ export class ExportMetricsTask {
         public nodeUsageSnapshotLastSuccessTimestampSeconds: Gauge<string>,
         @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_LAST_DURATION_SECONDS)
         public nodeUsageSnapshotLastDurationSeconds: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.TELEGRAM_TARGET_CONFIGURED)
+        public telegramTargetConfigured: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.TELEGRAM_TARGET_AVAILABLE)
+        public telegramTargetAvailable: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.TELEGRAM_TARGET_CIRCUIT_OPEN)
+        public telegramTargetCircuitOpen: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.TELEGRAM_TARGET_SEND_SUCCESSES)
+        public telegramTargetSendSuccesses: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.TELEGRAM_TARGET_SEND_FAILURES)
+        public telegramTargetSendFailures: Gauge<string>,
 
         private readonly queryBus: QueryBus,
         private readonly prisma: PrismaService,
@@ -131,6 +145,7 @@ export class ExportMetricsTask {
             await this.reportNodesStats();
             await this.reportRuntimeMetrics();
             await this.reportUsageSnapshotStats();
+            await this.reportTelegramTargetStats();
         } catch (error) {
             this.logger.error(`Error in ExportMetricsTask: ${error}`);
         }
@@ -406,6 +421,33 @@ export class ExportMetricsTask {
                 this.nodeUsageSnapshotLastDurationSeconds.set(labels, row.lastDurationMs / 1_000);
             }
         }
+    }
+
+    private async reportTelegramTargetStats() {
+        const statusKeys = TELEGRAM_TARGETS.map((target) =>
+            CACHE_KEYS.TELEGRAM_TARGET_STATUS(target),
+        );
+        const successKeys = TELEGRAM_TARGETS.map((target) =>
+            CACHE_KEYS.TELEGRAM_TARGET_SUCCESSES(target),
+        );
+        const failureKeys = TELEGRAM_TARGETS.map((target) =>
+            CACHE_KEYS.TELEGRAM_TARGET_FAILURES(target),
+        );
+        const [statuses, successes, failures] = await Promise.all([
+            this.rawCacheService.mget<TelegramTargetStatus>(statusKeys),
+            Promise.all(successKeys.map((key) => this.rawCacheService.getNumber(key))),
+            Promise.all(failureKeys.map((key) => this.rawCacheService.getNumber(key))),
+        ]);
+
+        TELEGRAM_TARGETS.forEach((target, index) => {
+            const labels = { target };
+            const status = statuses[index];
+            this.telegramTargetConfigured.set(labels, status?.configured ? 1 : 0);
+            this.telegramTargetAvailable.set(labels, status?.available ? 1 : 0);
+            this.telegramTargetCircuitOpen.set(labels, status?.circuitOpen ? 1 : 0);
+            this.telegramTargetSendSuccesses.set(labels, successes[index]);
+            this.telegramTargetSendFailures.set(labels, failures[index]);
+        });
     }
 
     private removeNodeSystemMetrics(baseNodeLabels: INodeMetricLabel) {

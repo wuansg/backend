@@ -25,6 +25,14 @@ import { QUEUES_NAMES } from '@queue/queue.enum';
 import { NODES_JOB_NAMES } from '../constants/nodes-job-name.constant';
 import { INodeHealthCheckPayload } from '../interfaces';
 import {
+    NODE_HEALTH_STATE_TTL_SECONDS,
+    NODE_REPAIR_BACKOFF_TTL_SECONDS,
+    NodeRepairBackoff,
+    nextNodeRepairBackoff,
+    shouldEscalateNodeHealthFailure,
+    shouldRestoreNodeHealth,
+} from '../node-health-policy.util';
+import {
     MINIMUM_SING_BOX_AGENT_VERSION,
     resolveNodeRuntimeStatus,
     resolveNodeVersions,
@@ -51,14 +59,14 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
 
             const healthResult = await this.axios.getNodeHealth(connectionOpts);
             if (!healthResult.isOk) {
-                return await this.handleDisconnectedNode(
+                return await this.handleAgentFailure(
                     nodeUuid,
                     isConnected,
                     healthResult.message ?? 'Node agent is unavailable',
                 );
             }
             if (!healthResult.response.isAlive) {
-                return await this.handleDisconnectedNode(
+                return await this.handleAgentFailure(
                     nodeUuid,
                     isConnected,
                     'Node agent reported that it is not alive',
@@ -76,6 +84,8 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
                 );
             }
 
+            await this.rawCacheService.del(CACHE_KEYS.NODE_AGENT_HEALTH_FAILURES(nodeUuid));
+
             const runtimeStatus = resolveNodeRuntimeStatus(healthResult.response);
             await Promise.all([
                 this.cacheRuntimeStatus(nodeUuid, runtimeStatus),
@@ -86,11 +96,12 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             ]);
 
             if (!expectsCore) {
+                await this.clearCoreFailureState(nodeUuid);
                 return await this.handleCorelessNode(healthResult.response, nodeUuid, isConnected);
             }
 
             if (!runtimeStatus.coreOnline) {
-                return await this.handleDegradedCore(
+                return await this.handleCoreFailure(
                     nodeUuid,
                     isConnected,
                     runtimeStatus,
@@ -108,6 +119,7 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
 
                 switch (statResult.isOk) {
                     case true:
+                        await this.clearCoreFailureState(nodeUuid);
                         return await this.handleConnectedNode(
                             connectionOpts,
                             nodeUuid,
@@ -140,7 +152,7 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
                 }
             }
 
-            return await this.handleDegradedCore(nodeUuid, isConnected, runtimeStatus, message);
+            return await this.handleCoreFailure(nodeUuid, isConnected, runtimeStatus, message);
         } catch (error) {
             this.logger.error(
                 `Error handling "${NODES_JOB_NAMES.NODE_HEALTH_CHECK}" job: ${error}`,
@@ -167,7 +179,8 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             await this.nodesQueuesService.startNode({ nodeUuid });
         }
 
-        return await this.markAgentConnected(nodeUuid, isConnected);
+        await this.markAgentConnected(nodeUuid, isConnected);
+        return;
     }
 
     private async handleConnectedNode(
@@ -212,24 +225,9 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             this.logger.log(`Node ${nodeUuid} has ${reports} reports, collecting reports...`);
         }
 
-        if (!isConnected) {
-            const nodeUpdatedResponse = await this.commandBus.execute(
-                new UpdateNodeCommand({
-                    uuid: nodeUuid,
-                    isConnected: true,
-                }),
-            );
-
-            if (!nodeUpdatedResponse.isOk) {
-                return;
-            }
-
+        const restored = await this.markAgentConnected(nodeUuid, isConnected);
+        if (restored) {
             await this.nodesQueuesService.startNode({ nodeUuid });
-
-            this.eventEmitter.emit(
-                EVENTS.NODE.CONNECTION_RESTORED,
-                new NodeEvent(nodeUpdatedResponse.response, EVENTS.NODE.CONNECTION_RESTORED),
-            );
         }
 
         return;
@@ -265,8 +263,9 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             ]),
         ]);
 
-        await this.markAgentConnected(nodeUuid, isConnected, message);
-        await this.nodesQueuesService.startNode({ nodeUuid });
+        if (await this.shouldScheduleRepair(nodeUuid, 'core')) {
+            await this.nodesQueuesService.startNode({ nodeUuid });
+        }
 
         const logMessage = `Node agent ${nodeUuid} is online but its core is degraded: ${message}`;
         if (isConnected) this.logger.debug(logMessage);
@@ -277,8 +276,22 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
         nodeUuid: string,
         isConnected: boolean,
         message: string | null = null,
-    ): Promise<void> {
-        if (isConnected) return;
+    ): Promise<boolean> {
+        if (isConnected) {
+            await this.rawCacheService.del(CACHE_KEYS.NODE_HEALTH_RECOVERY_SUCCESSES(nodeUuid));
+            return false;
+        }
+
+        const successes = await this.rawCacheService.incrementWithTtl(
+            CACHE_KEYS.NODE_HEALTH_RECOVERY_SUCCESSES(nodeUuid),
+            NODE_HEALTH_STATE_TTL_SECONDS,
+        );
+        if (!shouldRestoreNodeHealth(successes)) {
+            this.logger.debug(
+                `Node ${nodeUuid} recovery check ${successes}; waiting for another successful check.`,
+            );
+            return false;
+        }
 
         const nodeUpdatedResponse = await this.commandBus.execute(
             new UpdateNodeCommand({
@@ -290,12 +303,79 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             }),
         );
 
-        if (!nodeUpdatedResponse.isOk) return;
+        if (!nodeUpdatedResponse.isOk) return false;
+
+        await this.rawCacheService.delMany([
+            CACHE_KEYS.NODE_HEALTH_RECOVERY_SUCCESSES(nodeUuid),
+            CACHE_KEYS.NODE_AGENT_REPAIR_BACKOFF(nodeUuid),
+            CACHE_KEYS.NODE_CORE_REPAIR_BACKOFF(nodeUuid),
+        ]);
 
         this.eventEmitter.emit(
             EVENTS.NODE.CONNECTION_RESTORED,
             new NodeEvent(nodeUpdatedResponse.response, EVENTS.NODE.CONNECTION_RESTORED),
         );
+        return true;
+    }
+
+    private async handleAgentFailure(
+        nodeUuid: string,
+        isConnected: boolean,
+        message: string,
+    ): Promise<void> {
+        await this.rawCacheService.del(CACHE_KEYS.NODE_HEALTH_RECOVERY_SUCCESSES(nodeUuid));
+        const failures = await this.rawCacheService.incrementWithTtl(
+            CACHE_KEYS.NODE_AGENT_HEALTH_FAILURES(nodeUuid),
+            NODE_HEALTH_STATE_TTL_SECONDS,
+        );
+        if (!shouldEscalateNodeHealthFailure(failures)) {
+            this.logger.debug(
+                `Node ${nodeUuid} agent health failure ${failures}; disconnect threshold not reached: ${message}`,
+            );
+            return;
+        }
+        return this.handleDisconnectedNode(nodeUuid, isConnected, message);
+    }
+
+    private async handleCoreFailure(
+        nodeUuid: string,
+        isConnected: boolean,
+        runtimeStatus: ReturnType<typeof resolveNodeRuntimeStatus>,
+        message: string,
+    ): Promise<void> {
+        const failures = await this.rawCacheService.incrementWithTtl(
+            CACHE_KEYS.NODE_CORE_HEALTH_FAILURES(nodeUuid),
+            NODE_HEALTH_STATE_TTL_SECONDS,
+        );
+        if (!shouldEscalateNodeHealthFailure(failures)) {
+            this.logger.debug(
+                `Node ${nodeUuid} core health failure ${failures}; repair threshold not reached: ${message}`,
+            );
+            return;
+        }
+        return this.handleDegradedCore(nodeUuid, isConnected, runtimeStatus, message);
+    }
+
+    private async clearCoreFailureState(nodeUuid: string): Promise<void> {
+        await this.rawCacheService.delMany([
+            CACHE_KEYS.NODE_CORE_HEALTH_FAILURES(nodeUuid),
+            CACHE_KEYS.NODE_CORE_REPAIR_BACKOFF(nodeUuid),
+        ]);
+    }
+
+    private async shouldScheduleRepair(
+        nodeUuid: string,
+        scope: 'agent' | 'core',
+    ): Promise<boolean> {
+        const key =
+            scope === 'agent'
+                ? CACHE_KEYS.NODE_AGENT_REPAIR_BACKOFF(nodeUuid)
+                : CACHE_KEYS.NODE_CORE_REPAIR_BACKOFF(nodeUuid);
+        const previous = await this.rawCacheService.get<NodeRepairBackoff>(key);
+        const next = nextNodeRepairBackoff(previous, Date.now());
+        if (!next) return false;
+        await this.rawCacheService.set(key, next, NODE_REPAIR_BACKOFF_TTL_SECONDS);
+        return true;
     }
 
     private async handleDisconnectedNode(
@@ -310,29 +390,32 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             CACHE_KEYS.NODE_RUNTIME_STATUS(nodeUuid),
         ]);
 
-        const newNodeEntity = await this.commandBus.execute(
-            new UpdateNodeCommand({
-                uuid: nodeUuid,
-                isConnected: false,
-                lastStatusChange: new Date(),
-                lastStatusMessage: message,
-            }),
-        );
-
-        if (!newNodeEntity.isOk) {
-            return;
+        let nodeEntity = null;
+        if (isConnected) {
+            const updated = await this.commandBus.execute(
+                new UpdateNodeCommand({
+                    uuid: nodeUuid,
+                    isConnected: false,
+                    lastStatusChange: new Date(),
+                    lastStatusMessage: message,
+                }),
+            );
+            if (!updated.isOk) return;
+            nodeEntity = updated.response;
         }
 
-        await this.nodesQueuesService.startNode({ nodeUuid });
+        if (await this.shouldScheduleRepair(nodeUuid, 'agent')) {
+            await this.nodesQueuesService.startNode({ nodeUuid });
+        }
 
-        if (isConnected) {
+        if (isConnected && nodeEntity) {
             this.eventEmitter.emit(
                 EVENTS.NODE.CONNECTION_LOST,
-                new NodeEvent(newNodeEntity.response, EVENTS.NODE.CONNECTION_LOST),
+                new NodeEvent(nodeEntity, EVENTS.NODE.CONNECTION_LOST),
             );
         }
 
-        const logMessage = `Lost connection to Node ${nodeUuid}, ${newNodeEntity.response.address}:${newNodeEntity.response.port}, message: ${message}`;
+        const logMessage = `Lost connection to Node ${nodeUuid}, message: ${message}`;
         if (isConnected) this.logger.warn(logMessage);
         else this.logger.debug(logMessage);
 

@@ -17,6 +17,7 @@ export const OPAQUE_JSON_FIELDS = new Set([
     'mapper',
     'hostOverrides',
     'hwidSettings',
+    'ips',
     'metadata',
     'muxParams',
     'oauth2Settings',

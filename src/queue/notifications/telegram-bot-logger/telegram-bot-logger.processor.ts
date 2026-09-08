@@ -6,6 +6,7 @@ import { Logger, OnModuleInit, Optional } from '@nestjs/common';
 
 import { TelegramApiError } from '@integration-modules/notifications/telegram-bot/telegram-api.error';
 import { TelegramApiService } from '@integration-modules/notifications/telegram-bot/telegram-api.service';
+import { TelegramTargetHealthService } from '@integration-modules/notifications/telegram-bot/telegram-target-health.service';
 
 import { QUEUES_NAMES } from '../../queue.enum';
 import { TelegramBotLoggerJobNames } from './enums';
@@ -26,6 +27,8 @@ export class TelegramBotLoggerQueueProcessor extends WorkerHost implements OnMod
     constructor(
         @Optional()
         private readonly telegramApiService: TelegramApiService,
+        @Optional()
+        private readonly telegramTargetHealthService: TelegramTargetHealthService,
         private readonly telegramBotLoggerQueueService: TelegramBotLoggerQueueService,
     ) {
         super();
@@ -39,6 +42,8 @@ export class TelegramBotLoggerQueueProcessor extends WorkerHost implements OnMod
             this.logger.error('Telegram API is not healthy. Worker will not start.');
             return;
         }
+
+        await this.telegramTargetHealthService?.validateConfiguredTargets();
 
         this.worker.run();
     }
@@ -59,18 +64,33 @@ export class TelegramBotLoggerQueueProcessor extends WorkerHost implements OnMod
     }
 
     private async handleSendTelegramMessage(job: Job<IMessageEventPayload>) {
-        const { message, chatId, threadId, keyboard } = job.data;
+        const { message, chatId, threadId, keyboard, target } = job.data;
+
+        if (target && !(await this.telegramTargetHealthService?.canSend(target))) {
+            this.logger.warn(`Telegram target "${target}" circuit is open; skipping job.`);
+            return;
+        }
 
         try {
             await this.telegramApiService.sendMessage(chatId, message, {
                 threadId: threadId ? parseInt(threadId, 10) : undefined,
                 keyboard,
             });
+            if (target) await this.telegramTargetHealthService?.markSuccess(target);
         } catch (error) {
+            if (target && error instanceof TelegramApiError) {
+                await this.telegramTargetHealthService?.markFailure(target, error);
+            }
             if (error instanceof TelegramApiError && error.retryAfter) {
                 await this.telegramBotLoggerQueueService.rateLimit(error.retryAfter);
 
                 throw Worker.RateLimitError();
+            }
+            if (error instanceof TelegramApiError && !error.retryable) {
+                this.logger.warn(
+                    `Telegram rejected job for target "${target ?? 'unknown'}" (${error.statusCode ?? 'unknown'}); retry disabled.`,
+                );
+                return;
             }
             this.logger.error(
                 `Error handling "${TelegramBotLoggerJobNames.sendTelegramMessage}" job: ${error}`,

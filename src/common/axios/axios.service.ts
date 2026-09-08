@@ -40,6 +40,7 @@ import {
 
 import { prettyBytesUtil } from '@common/utils/bytes';
 import { formatExecutionTime, getTime } from '@common/utils/get-elapsed-time';
+import { stableJsonHash } from '@common/utils/stable-json-hash.util';
 
 import { GetNodeJwtCommand } from '@modules/keygen/commands/get-node-jwt';
 
@@ -135,6 +136,11 @@ export type NodeAgentHealthResponse = {
     coreOnline: boolean;
     forwarding: TNodeRuntimeStatus['forwarding'];
     usageSnapshot: TNodeRuntimeStatus['usageSnapshot'];
+    plugin?: {
+        configHash: string;
+        activePlugin: { uuid: string; name: string } | null;
+    };
+    configHashes?: CoreStartRequest['internals']['hashes'];
 };
 
 export type NodeSystemStatsResponse = {
@@ -454,7 +460,10 @@ export class AxiosService {
         config: NodeForwardingConfig,
         opts: INodeConnectionOpts,
     ): Promise<ForwardingAgentResult<NodeForwardingRuntimeStatus>> {
-        return this.forwardingRequest('/node/forwarding/sync', opts, { config });
+        return this.forwardingRequest('/node/forwarding/sync', opts, {
+            config,
+            configHash: stableJsonHash(config),
+        });
     }
 
     public async getNodeForwardingStatus(
@@ -783,7 +792,10 @@ export class AxiosService {
             label: 'SYNC-NODE-PLUGINS',
             path: SyncCommand.url,
             opts,
-            data,
+            data: {
+                ...data,
+                configHash: data.plugin ? stableJsonHash(data.plugin.config) : '',
+            },
             compress: true,
             logAxiosError: false,
             timeout: 10_000,

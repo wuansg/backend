@@ -1,4 +1,4 @@
-import { ERRORS, INTERNAL_CACHE_KEYS } from '@contract/constants';
+import { CACHE_KEYS, ERRORS, INTERNAL_CACHE_KEYS } from '@contract/constants';
 import { encodeURLSafe } from '@stablelib/base64';
 import { generateKeyPair } from '@stablelib/x25519';
 import axios, { AxiosError } from 'axios';
@@ -27,6 +27,8 @@ import {
 } from '@common/utils/get-date-ranges.uti';
 import { resolveCountryEmoji } from '@common/utils/resolve-country-emoji';
 
+import { TelegramTargetStatus } from '@integration-modules/notifications/telegram-bot/telegram-target-health.service';
+
 import { CountDevicesByRangeQuery } from '@modules/hwid-user-devices/queries/count-devices-by-range';
 import { IGet7DaysStats } from '@modules/nodes-usage-history/interfaces';
 import { Get7DaysStatsQuery } from '@modules/nodes-usage-history/queries/get-7days-stats';
@@ -40,6 +42,11 @@ import { ResponseRulesMatcherService } from '@modules/subscription-response-rule
 import { ResponseRulesParserService } from '@modules/subscription-response-rules/services/response-rules-parser.service';
 import { GetUsersDigestQuery } from '@modules/users/queries/get-users-digest';
 import { GetUsersRecapQuery } from '@modules/users/queries/get-users-recap';
+
+import {
+    TELEGRAM_TARGETS,
+    TTelegramTarget,
+} from '@queue/notifications/telegram-bot-logger/interfaces';
 
 import { GetSumByDtRangeQuery } from '../nodes-usage-history/queries/get-sum-by-dt-range';
 import { ShortUserStats } from '../users/interfaces/user-stats.interface';
@@ -109,6 +116,31 @@ export class SystemService implements OnApplicationBootstrap {
     public async getConfiguration(): Promise<TResult<GetConfigurationResponseModel>> {
         try {
             const config = this.configService;
+            const telegramConfigKeys = {
+                users: 'TELEGRAM_NOTIFY_USERS',
+                nodes: 'TELEGRAM_NOTIFY_NODES',
+                crm: 'TELEGRAM_NOTIFY_CRM',
+                service: 'TELEGRAM_NOTIFY_SERVICE',
+                tblocker: 'TELEGRAM_NOTIFY_TBLOCKER',
+            } as const satisfies Record<TTelegramTarget, string>;
+            const telegramTargets = await Promise.all(
+                TELEGRAM_TARGETS.map(async (target) => {
+                    const status = await this.rawCacheService.get<TelegramTargetStatus>(
+                        CACHE_KEYS.TELEGRAM_TARGET_STATUS(target),
+                    );
+                    return {
+                        target,
+                        configured: Boolean(config.get(telegramConfigKeys[target])),
+                        available: status?.available ?? false,
+                        circuitOpen: status?.circuitOpen ?? false,
+                        lastCheckedAt: status?.lastCheckedAt ?? null,
+                        lastSuccessAt: status?.lastSuccessAt ?? null,
+                        lastFailureAt: status?.lastFailureAt ?? null,
+                        lastErrorKind: status?.lastErrorKind ?? ('none' as const),
+                        nextProbeAt: status?.nextProbeAt ?? null,
+                    };
+                }),
+            );
 
             return ok(
                 new GetConfigurationResponseModel({
@@ -126,6 +158,10 @@ export class SystemService implements OnApplicationBootstrap {
                             'EXPIRATION_NOTIFICATIONS_ENABLED',
                             'EXPIRATION_NOTIFICATIONS',
                         ),
+                        telegram: {
+                            enabled: config.getOrThrow('IS_TELEGRAM_NOTIFICATIONS_ENABLED'),
+                            targets: telegramTargets,
+                        },
                     },
                     service: {
                         cleanUsageHistory: config.getOrThrow('SERVICE_CLEAN_USAGE_HISTORY'),

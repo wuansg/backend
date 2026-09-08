@@ -5,7 +5,6 @@ import {
     NodeForwardingIPv4Schema,
     NodeForwardingRuntimeStatus,
 } from '@contract/models';
-import { createHash } from 'node:crypto';
 
 import { Injectable, Logger } from '@nestjs/common';
 
@@ -13,6 +12,8 @@ import { AxiosService, INodeConnectionOpts } from '@common/axios';
 import { fail, ok, TResult } from '@common/types';
 
 import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
+
+import { hashNodeForwardingConfig } from '@queue/_nodes/forwarding-sync.util';
 
 import { NodesEntity } from '../entities';
 import { NodesRepository } from '../repositories/nodes.repository';
@@ -63,9 +64,7 @@ export class NodeForwardingService {
         const previous = this.readConfig(node);
         const capability = await this.capabilityState(node, config);
         if (capability === 'unsupported' && this.requiresDNSCapability(config)) {
-            return fail(
-                ERRORS.FORWARDING_APPLY_ERROR.withMessage(this.unsupportedMessage(config)),
-            );
+            return fail(ERRORS.FORWARDING_APPLY_ERROR.withMessage(this.unsupportedMessage(config)));
         }
         if (capability === 'supported') {
             const validation = await this.axios.validateNodeForwarding(
@@ -202,7 +201,10 @@ export class NodeForwardingService {
         const capabilities = (health.response as unknown as { capabilities?: string[] })
             .capabilities;
         if (!capabilities?.includes(FORWARDING_CAPABILITY)) return 'unsupported';
-        if (this.requiresDNSCapability(config) && !capabilities.includes(FORWARDING_DNS_CAPABILITY)) {
+        if (
+            this.requiresDNSCapability(config) &&
+            !capabilities.includes(FORWARDING_DNS_CAPABILITY)
+        ) {
             return 'unsupported';
         }
         return 'supported';
@@ -295,7 +297,7 @@ export class NodeForwardingService {
         config: NodeForwardingConfig,
         status: NodeForwardingRuntimeStatus,
     ): NodeForwardingRuntimeStatus {
-        const desiredHash = this.hash(config);
+        const desiredHash = hashNodeForwardingConfig(config);
         if (
             status.state !== 'error' &&
             status.state !== 'degraded' &&
@@ -306,10 +308,6 @@ export class NodeForwardingService {
             status = { ...status, state: 'pending' };
         }
         return { ...status, desiredHash };
-    }
-
-    private hash(config: NodeForwardingConfig): string {
-        return createHash('sha256').update(JSON.stringify(config)).digest('hex');
     }
 
     private connectionOptions(node: NodesEntity): INodeConnectionOpts {

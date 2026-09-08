@@ -77,6 +77,7 @@ export class ServiceEvents implements OnApplicationBootstrap {
             keyboard: message.keyboard,
             chatId: this.chatId!,
             threadId: this.threadId,
+            target: 'service',
         });
     }
 
@@ -92,6 +93,7 @@ export class ServiceEvents implements OnApplicationBootstrap {
             message,
             chatId: this.chatId!,
             threadId: this.threadId,
+            target: 'service',
         });
     }
 }

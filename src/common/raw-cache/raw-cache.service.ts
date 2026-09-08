@@ -72,12 +72,36 @@ export class RawCacheService {
         return raw ? Number(raw) : 0;
     }
 
+    async increment(key: string): Promise<number> {
+        return this.redis.incr(key);
+    }
+
     async setNumber(key: string, value: number, ttlSeconds?: number): Promise<void> {
         if (ttlSeconds) {
             await this.redis.set(key, value, 'EX', ttlSeconds);
         } else {
             await this.redis.set(key, value);
         }
+    }
+
+    /** Atomic counter with a sliding window; the TTL is set on first increment. */
+    async incrementWithTtl(key: string, ttlSeconds: number): Promise<number> {
+        const [[, value]] = (await this.redis
+            .multi()
+            .incr(key)
+            .expire(key, ttlSeconds, 'NX')
+            .exec()) as [[Error | null, number], [Error | null, number]];
+
+        return value;
+    }
+
+    async getDelString(key: string): Promise<string | null> {
+        return this.redis.getdel(key);
+    }
+
+    async getDel<T>(key: string): Promise<T | null> {
+        const raw = await this.redis.getdel(key);
+        return raw ? (JSON.parse(raw) as T) : null;
     }
 
     async del(key: string): Promise<void> {

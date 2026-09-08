@@ -38,7 +38,10 @@ export class TelegramBotLoggerQueueService
     }
 
     public async addJobToSendTelegramMessage(payload: IMessageEventPayload) {
-        return this.addJob(TelegramBotLoggerJobNames.sendTelegramMessage, payload);
+        return this.addJob(TelegramBotLoggerJobNames.sendTelegramMessage, payload, {
+            attempts: 4,
+            backoff: { type: 'exponential', delay: 2_000 },
+        });
     }
 
     public async rateLimit(seconds: number) {

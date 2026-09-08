@@ -53,6 +53,13 @@ export const METRIC_NAMES = {
 
     NODE_BASIC_INFO: 'node_basic_info',
     NODE_SYSTEM_INFO: 'node_system_info',
+
+    // Telegram notifications (labels never contain chat IDs or tokens)
+    TELEGRAM_TARGET_CONFIGURED: 'telegram_target_configured',
+    TELEGRAM_TARGET_AVAILABLE: 'telegram_target_available',
+    TELEGRAM_TARGET_CIRCUIT_OPEN: 'telegram_target_circuit_open',
+    TELEGRAM_TARGET_SEND_SUCCESSES: 'telegram_target_send_successes_total',
+    TELEGRAM_TARGET_SEND_FAILURES: 'telegram_target_send_failures_total',
 } as const;
 
 export type TMetricNames = typeof METRIC_NAMES;

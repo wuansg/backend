@@ -61,6 +61,7 @@ export class UsersEvents implements OnApplicationBootstrap {
             message,
             chatId: this.chatId!,
             threadId: this.threadId,
+            target: 'users',
         });
     }
 }

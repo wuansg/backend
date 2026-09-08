@@ -57,6 +57,7 @@ export class NodesEvents implements OnApplicationBootstrap {
             message,
             chatId: this.chatId!,
             threadId: this.threadId,
+            target: 'nodes',
         });
     }
 }

@@ -56,6 +56,14 @@ export class TelegramApiService {
         }
     }
 
+    async validateTarget(chatId: string): Promise<void> {
+        try {
+            await this.http.post('/getChat', { chat_id: chatId });
+        } catch (error) {
+            throw this.toError(error);
+        }
+    }
+
     public async healthcheck(): Promise<boolean> {
         try {
             const { data } = await this.http.get('/getMe');
@@ -75,7 +83,12 @@ export class TelegramApiService {
         }
 
         if (!error.response) {
-            return new TelegramApiError(`Network error: ${error.code ?? error.message}`);
+            return new TelegramApiError(
+                `Network error: ${error.code ?? error.message}`,
+                undefined,
+                undefined,
+                true,
+            );
         }
 
         const body = error.response.data as TelegramErrorBody;
@@ -83,9 +96,23 @@ export class TelegramApiService {
             (body?.parameters?.retry_after ?? Number(error.response.headers['retry-after'])) ||
             undefined;
 
+        const statusCode = error.response.status;
+        const description = body?.description ?? 'request failed';
+        const targetUnavailable = this.isTargetUnavailable(description);
+        const retryable = statusCode === 429 || statusCode >= 500;
+
         return new TelegramApiError(
-            `Telegram API ${error.response.status}: ${body?.description ?? 'request failed'}`,
+            `Telegram API ${statusCode}: ${description}`,
             retryAfter,
+            statusCode,
+            retryable,
+            targetUnavailable,
+        );
+    }
+
+    private isTargetUnavailable(description: string): boolean {
+        return /chat not found|bot was blocked|user is deactivated|not enough rights|message thread not found/i.test(
+            description,
         );
     }
 

@@ -11,7 +11,7 @@ import { QueryBus } from '@nestjs/cqrs';
 
 import { RawCacheService } from '@common/raw-cache';
 import { fail, ok, TResult } from '@common/types';
-import { CACHE_KEYS } from '@libs/contracts/constants';
+import { CACHE_KEYS, CACHE_KEYS_TTL } from '@libs/contracts/constants';
 import { ERRORS } from '@libs/contracts/constants/errors';
 
 import { PasskeyEntity } from '@modules/admin/entities';
@@ -85,10 +85,10 @@ export class PasskeyService {
                 },
             });
 
-            await this.rawCacheService.set(
-                CACHE_KEYS.PASSKEY_REGISTRATION_OPTIONS(uuid),
-                options.challenge,
-                300,
+            await this.rawCacheService.setString(
+                CACHE_KEYS.PASSKEY_REGISTRATION_CHALLENGE(options.challenge),
+                uuid,
+                CACHE_KEYS_TTL.PASSKEY_REGISTRATION_CHALLENGE,
             );
 
             return ok(options);
@@ -117,18 +117,19 @@ export class PasskeyService {
                 return fail(ERRORS.ADMIN_NOT_FOUND);
             }
 
-            const expectedChallenge = await this.rawCacheService.get<string>(
-                CACHE_KEYS.PASSKEY_REGISTRATION_OPTIONS(admin.uuid),
-            );
+            const expectedChallenge = this.readClientDataChallenge(response);
+            const challengeOwner = expectedChallenge
+                ? await this.rawCacheService.getDelString(
+                      CACHE_KEYS.PASSKEY_REGISTRATION_CHALLENGE(expectedChallenge),
+                  )
+                : null;
 
-            if (!expectedChallenge) {
+            if (!expectedChallenge || challengeOwner !== admin.uuid) {
                 return fail({
                     ...ERRORS.FORBIDDEN,
                     message: 'Challenge not found or expired',
                 });
             }
-
-            await this.rawCacheService.del(CACHE_KEYS.PASSKEY_REGISTRATION_OPTIONS(uuid));
 
             const { passkeySettings } = await this.queryBus.execute(
                 new GetCachedRemnawaveSettingsQuery(),
@@ -184,6 +185,18 @@ export class PasskeyService {
         } catch (error) {
             this.logger.error(`Passkey registration verification error: ${error}`);
             return fail(ERRORS.VERIFY_PASSKEY_REGISTRATION_ERROR);
+        }
+    }
+
+    private readClientDataChallenge(response: RegistrationResponseJSON): string | null {
+        try {
+            const clientData = JSON.parse(
+                Buffer.from(response.response.clientDataJSON, 'base64url').toString('utf8'),
+            ) as { challenge?: unknown };
+
+            return typeof clientData.challenge === 'string' ? clientData.challenge : null;
+        } catch {
+            return null;
         }
     }
 

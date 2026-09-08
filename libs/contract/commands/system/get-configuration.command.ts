@@ -30,6 +30,28 @@ export namespace GetConfigurationCommand {
                 expirationNotifications: z.array(z.number()).nullable().meta({
                     description: 'EXPIRATION_NOTIFICATIONS',
                 }),
+                telegram: z.object({
+                    enabled: z.boolean(),
+                    targets: z.array(
+                        z.object({
+                            target: z.enum(['users', 'nodes', 'crm', 'service', 'tblocker']),
+                            configured: z.boolean(),
+                            available: z.boolean(),
+                            circuitOpen: z.boolean(),
+                            lastCheckedAt: z.iso.datetime().nullable(),
+                            lastSuccessAt: z.iso.datetime().nullable(),
+                            lastFailureAt: z.iso.datetime().nullable(),
+                            lastErrorKind: z.enum([
+                                'none',
+                                'target_unavailable',
+                                'rate_limited',
+                                'transient',
+                                'rejected',
+                            ]),
+                            nextProbeAt: z.iso.datetime().nullable(),
+                        }),
+                    ),
+                }),
             }),
             service: z.object({
                 cleanUsageHistory: z.boolean().meta({

@@ -230,6 +230,31 @@ export const METRIC_PROVIDERS = [
         help: 'Duration of the most recent successful usage snapshot ingestion in seconds',
         labelNames: ['node_uuid'],
     }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.TELEGRAM_TARGET_CONFIGURED,
+        help: 'Whether a Telegram notification category has a configured target',
+        labelNames: ['target'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.TELEGRAM_TARGET_AVAILABLE,
+        help: 'Whether the configured Telegram notification target passed its last check',
+        labelNames: ['target'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.TELEGRAM_TARGET_CIRCUIT_OPEN,
+        help: 'Whether delivery to a Telegram notification target is circuit-broken',
+        labelNames: ['target'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.TELEGRAM_TARGET_SEND_SUCCESSES,
+        help: 'Successful Telegram notification deliveries',
+        labelNames: ['target'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.TELEGRAM_TARGET_SEND_FAILURES,
+        help: 'Failed Telegram notification deliveries',
+        labelNames: ['target'],
+    }),
 ];
 
 export interface INodeBaseMetricLabels {

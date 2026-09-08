@@ -54,6 +54,7 @@ export class CrmEvents implements OnApplicationBootstrap {
             message,
             chatId: this.chatId!,
             threadId: this.threadId,
+            target: 'crm',
         });
     }
 }
