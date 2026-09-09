@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
-import { NodeIpsSchema } from '@libs/contracts/models';
+import { GetSharedListCommand } from '@libs/contracts/commands';
+import { NodeIpsSchema, SharedListNameSchema } from '@libs/contracts/models';
 import { SharedListConfigSchema } from '@libs/node-plugins/models';
 
 import { SharedListEntity } from '@modules/node-plugins/entities/shared-list.entity';
@@ -71,6 +72,19 @@ assert.equal(
     SharedListConfigSchema.safeParse({ type: 'portList', items: [0, 65_536] }).success,
     false,
 );
+assert.equal(SharedListNameSchema.safeParse('security/blocked-ips').success, true);
+assert.equal(SharedListNameSchema.safeParse('/security').success, false);
+assert.equal(SharedListNameSchema.safeParse('security//blocked-ips').success, false);
+assert.equal(SharedListNameSchema.safeParse('security/').success, false);
+assert.equal(
+    GetSharedListCommand.url('security/blocked-ips'),
+    '/api/node-plugins/shared-lists/security%2Fblocked-ips',
+);
+assert.equal(
+    GetSharedListCommand.TSQ_url,
+    '/api/node-plugins/shared-lists/:name',
+    'TSQ placeholder must remain replaceable by the frontend',
+);
 
 const nodeIps = Array.from({ length: 64 }, (_, index) => ({
     ip: `192.0.2.${(index % 254) + 1}`,
@@ -79,4 +93,4 @@ const nodeIps = Array.from({ length: 64 }, (_, index) => ({
 assert.equal(NodeIpsSchema.safeParse(nodeIps).success, true);
 assert.equal(NodeIpsSchema.safeParse([...nodeIps, nodeIps[0]]).success, false);
 
-console.log('Node IP and Shared List checks passed.');
+process.stdout.write('Node IP and Shared List checks passed.\n');

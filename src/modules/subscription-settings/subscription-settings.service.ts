@@ -3,9 +3,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { RawCacheService } from '@common/raw-cache';
 import { fail, ok, TResult } from '@common/types';
 import { CACHE_KEYS, ERRORS } from '@libs/contracts/constants';
-import { ResolvedProxyConfigSchema } from '@libs/contracts/models';
 
 import { ResponseRulesParserService } from '@modules/subscription-response-rules/services/response-rules-parser.service';
+import { parseResolvedProxyRemark } from '@modules/subscription-template/resolve-proxy/utils';
 
 import { UpdateSubscriptionSettingsBodyDto } from './dtos';
 import { SubscriptionSettingsEntity } from './entities/subscription-settings.entity';
@@ -61,16 +61,14 @@ export class SubscriptionSettingsService {
             if (dto.customRemarks) {
                 for (const [status, remarks] of Object.entries(dto.customRemarks)) {
                     for (const remark of remarks) {
-                        if (remark.trim().startsWith('{')) {
-                            try {
-                                ResolvedProxyConfigSchema.parse(JSON.parse(remark));
-                            } catch (error) {
-                                return fail(
-                                    ERRORS.CUSTOM_RAW_REMARK_VALIDATION_ERROR.withMessage(
-                                        `${status}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                                    ),
-                                );
-                            }
+                        const parsed = parseResolvedProxyRemark(remark);
+
+                        if (parsed.kind === 'invalid') {
+                            return fail(
+                                ERRORS.CUSTOM_RAW_REMARK_VALIDATION_ERROR.withMessage(
+                                    `${status}: ${parsed.error}`,
+                                ),
+                            );
                         }
                     }
                 }

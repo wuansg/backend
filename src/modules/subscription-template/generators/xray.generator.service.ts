@@ -1,7 +1,26 @@
+import { isIP } from 'node:net';
+
 import { Injectable, Logger } from '@nestjs/common';
+
+import { THostMapperOperation } from '@libs/contracts/models';
 
 import { applyHostMapper } from '../host-mapper';
 import { ResolvedProxyConfig } from '../resolve-proxy/interfaces';
+
+interface ShareLink {
+    address: string;
+    appendSlash?: boolean;
+    method?: string;
+    params: Record<string, unknown>;
+    password: string;
+    port: number;
+    remark: string;
+    scheme: 'anytls' | 'hysteria2' | 'ss' | 'trojan' | 'tuic' | 'vless';
+    username?: string;
+}
+
+const LINK_TARGET_PREFIX = '$link.';
+const LINK_ALLOWED_TARGETS = new Set(['address', 'method', 'password', 'port', 'remark']);
 
 interface Hysteria2FinalMask {
     quicParams?: {
@@ -50,8 +69,10 @@ export class XrayGeneratorService {
         for (const host of hosts) {
             if (host.metadata.excludeFromSubscriptionTypes.includes('XRAY_BASE64')) continue;
 
-            const link = this.generateLink(host);
-            if (!link) continue;
+            const shareLink = this.generateLink(host);
+            if (!shareLink) continue;
+
+            const link = this.serializeLink(this.applyBase64Mapper(shareLink, host));
 
             if (isHapp && host.clientOverrides.serverDescription) {
                 links.push(`${link}?serverDescription=${host.clientOverrides.serverDescription}`);
@@ -63,7 +84,7 @@ export class XrayGeneratorService {
         return links;
     }
 
-    private generateLink(host: ResolvedProxyConfig): string | null {
+    private generateLink(host: ResolvedProxyConfig): ShareLink | null {
         switch (host.protocol) {
             case 'vless':
                 return this.buildVlessLink(host);
@@ -87,7 +108,7 @@ export class XrayGeneratorService {
     // ── VLESS ────────────────────────────────────────
     // vless://$(uuid)@host:port?params#remark
 
-    private buildVlessLink(host: Extract<ResolvedProxyConfig, { protocol: 'vless' }>): string {
+    private buildVlessLink(host: Extract<ResolvedProxyConfig, { protocol: 'vless' }>): ShareLink {
         const params: Record<string, unknown> = {};
 
         // Protocol fields (4.2)
@@ -108,16 +129,20 @@ export class XrayGeneratorService {
             params.fm = JSON.stringify(host.streamOverrides.finalMask);
         }
 
-        const query = this.buildQueryString(params, host);
-        const remark = encodeURIComponent(host.finalRemark);
-
-        return `vless://${host.protocolOptions.id}@${host.address}:${host.port}?${query}#${remark}`;
+        return {
+            scheme: 'vless',
+            password: host.protocolOptions.id,
+            address: host.address,
+            port: host.port,
+            remark: host.finalRemark,
+            params,
+        };
     }
 
     // ── Trojan ───────────────────────────────────────
     // trojan://$(password)@host:port?params#remark
 
-    private buildTrojanLink(host: Extract<ResolvedProxyConfig, { protocol: 'trojan' }>): string {
+    private buildTrojanLink(host: Extract<ResolvedProxyConfig, { protocol: 'trojan' }>): ShareLink {
         const params: Record<string, unknown> = {};
 
         // Transport (4.2.1 + 4.3)
@@ -126,11 +151,14 @@ export class XrayGeneratorService {
         // Security (4.3.1 + 4.4)
         this.applySecurityParams(params, host);
 
-        const query = this.buildQueryString(params, host);
-        const remark = encodeURIComponent(host.finalRemark);
-        const password = encodeURIComponent(host.protocolOptions.password);
-
-        return `trojan://${password}@${host.address}:${host.port}?${query}#${remark}`;
+        return {
+            scheme: 'trojan',
+            password: host.protocolOptions.password,
+            address: host.address,
+            port: host.port,
+            remark: host.finalRemark,
+            params,
+        };
     }
 
     // ── Shadowsocks ──────────────────────────────────
@@ -138,20 +166,22 @@ export class XrayGeneratorService {
 
     private buildShadowsocksLink(
         host: Extract<ResolvedProxyConfig, { protocol: 'shadowsocks' }>,
-    ): string {
-        const credentials = Buffer.from(
-            `${host.protocolOptions.method}:${host.protocolOptions.password}`,
-        ).toString('base64');
-
-        const remark = encodeURIComponent(host.finalRemark);
-
-        return `ss://${credentials}@${host.address}:${host.port}#${remark}`;
+    ): ShareLink {
+        return {
+            scheme: 'ss',
+            method: host.protocolOptions.method,
+            password: host.protocolOptions.password,
+            address: host.address,
+            port: host.port,
+            remark: host.finalRemark,
+            params: {},
+        };
     }
 
     // ── AnyTLS ───────────────────────────────────────
     // anytls://$(password)@host:port
 
-    private buildAnyTlsLink(host: Extract<ResolvedProxyConfig, { protocol: 'anytls' }>): string {
+    private buildAnyTlsLink(host: Extract<ResolvedProxyConfig, { protocol: 'anytls' }>): ShareLink {
         const params: Record<string, unknown> = {};
         const tlsOptions = host.security === 'tls' ? host.securityOptions : undefined;
         const allowInsecure = (tlsOptions as { allowInsecure?: boolean } | undefined)
@@ -182,11 +212,14 @@ export class XrayGeneratorService {
             params.fm = JSON.stringify(host.streamOverrides.finalMask);
         }
 
-        const query = this.buildQueryString(params, host);
-        const remark = encodeURIComponent(host.finalRemark);
-        const password = encodeURIComponent(host.protocolOptions.password);
-
-        return `anytls://${password}@${host.address}:${host.port}${query ? `?${query}` : ''}#${remark}`;
+        return {
+            scheme: 'anytls',
+            password: host.protocolOptions.password,
+            address: host.address,
+            port: host.port,
+            remark: host.finalRemark,
+            params,
+        };
     }
 
     // ── Hysteria 2 ───────────────────────────────────
@@ -194,7 +227,7 @@ export class XrayGeneratorService {
 
     private buildHysteriaLink(
         host: Extract<ResolvedProxyConfig, { protocol: 'hysteria' }>,
-    ): string | null {
+    ): ShareLink | null {
         if (host.transport !== 'hysteria') return null;
 
         const params: Record<string, unknown> = {};
@@ -222,12 +255,15 @@ export class XrayGeneratorService {
             params.fm = JSON.stringify(host.streamOverrides.finalMask);
         }
 
-        const query = this.buildQueryString(params, host);
-        const remark = encodeURIComponent(host.finalRemark);
-        const auth = encodeURIComponent(host.transportOptions.auth);
-        const queryPart = query ? `?${query}` : '';
-
-        return `hysteria2://${auth}@${host.address}:${host.port}/${queryPart}#${remark}`;
+        return {
+            scheme: 'hysteria2',
+            password: host.transportOptions.auth,
+            address: host.address,
+            port: host.port,
+            remark: host.finalRemark,
+            params,
+            appendSlash: true,
+        };
     }
 
     // ── Hysteria2 (sing-box) ─────────────────────────
@@ -235,7 +271,7 @@ export class XrayGeneratorService {
 
     private buildSingBoxHysteria2Link(
         host: Extract<ResolvedProxyConfig, { protocol: 'hysteria2' }>,
-    ): string {
+    ): ShareLink {
         const params: Record<string, unknown> = {};
         const tlsOptions = host.security === 'tls' ? host.securityOptions : undefined;
         const allowInsecure = (tlsOptions as { allowInsecure?: boolean } | undefined)
@@ -257,17 +293,20 @@ export class XrayGeneratorService {
             params.fm = JSON.stringify(host.streamOverrides.finalMask);
         }
 
-        const query = this.buildQueryString(params, host);
-        const remark = encodeURIComponent(host.finalRemark);
-        const password = encodeURIComponent(host.protocolOptions.password);
-
-        return `hysteria2://${password}@${host.address}:${host.port}${query ? `?${query}` : ''}#${remark}`;
+        return {
+            scheme: 'hysteria2',
+            password: host.protocolOptions.password,
+            address: host.address,
+            port: host.port,
+            remark: host.finalRemark,
+            params,
+        };
     }
 
     // ── TUIC ─────────────────────────────────────────
     // tuic://$(uuid):$(password)@host:port?params#remark
 
-    private buildTuicLink(host: Extract<ResolvedProxyConfig, { protocol: 'tuic' }>): string {
+    private buildTuicLink(host: Extract<ResolvedProxyConfig, { protocol: 'tuic' }>): ShareLink {
         const params: Record<string, unknown> = {};
         const tlsOptions = host.security === 'tls' ? host.securityOptions : undefined;
         const allowInsecure = (tlsOptions as { allowInsecure?: boolean } | undefined)
@@ -300,12 +339,15 @@ export class XrayGeneratorService {
             params.fm = JSON.stringify(host.streamOverrides.finalMask);
         }
 
-        const query = this.buildQueryString(params, host);
-        const remark = encodeURIComponent(host.finalRemark);
-        const uuid = encodeURIComponent(host.protocolOptions.uuid);
-        const password = encodeURIComponent(host.protocolOptions.password);
-
-        return `tuic://${uuid}:${password}@${host.address}:${host.port}?${query}#${remark}`;
+        return {
+            scheme: 'tuic',
+            username: host.protocolOptions.uuid,
+            password: host.protocolOptions.password,
+            address: host.address,
+            port: host.port,
+            remark: host.finalRemark,
+            params,
+        };
     }
 
     // ── Transport Params ─────────────────────────────
@@ -521,14 +563,136 @@ export class XrayGeneratorService {
         }
     }
 
-    // ── Query String Builder ─────────────────────────
+    private applyBase64Mapper(link: ShareLink, host: ResolvedProxyConfig): ShareLink {
+        const operations = host.clientOverrides.mapper.base64;
 
-    private buildQueryString(params: Record<string, unknown>, host: ResolvedProxyConfig): string {
+        if (!operations?.length) return link;
+
+        const linkOperations: THostMapperOperation[] = [];
+        const queryOperations: THostMapperOperation[] = [];
+
+        for (const operation of operations) {
+            if (!operation.to.startsWith(LINK_TARGET_PREFIX)) {
+                queryOperations.push(operation);
+                continue;
+            }
+
+            const target = operation.to.slice(LINK_TARGET_PREFIX.length);
+
+            if (!LINK_ALLOWED_TARGETS.has(target)) continue;
+            if (target === 'method' && link.scheme !== 'ss') continue;
+
+            linkOperations.push({ ...operation, to: target });
+        }
+
+        const mapped = applyHostMapper(link, linkOperations, host, true);
+
+        mapped.params = applyHostMapper(link.params, queryOperations, host, true);
+
+        return this.sanitizeLink(mapped, link);
+    }
+
+    private sanitizeLink(mapped: ShareLink, original: ShareLink): ShareLink {
+        const address = this.normalizeLinkAddress(mapped.address);
+        const port = Number(mapped.port);
+        const password = String(mapped.password ?? '');
+        const method = mapped.method === undefined ? undefined : String(mapped.method);
+
+        return {
+            ...mapped,
+            scheme: original.scheme,
+            username: original.username,
+            appendSlash: original.appendSlash,
+            address: address ?? original.address,
+            port: Number.isInteger(port) && port > 0 && port <= 65_535 ? port : original.port,
+            password: password || original.password,
+            method: original.scheme === 'ss' ? method || original.method : original.method,
+            remark:
+                mapped.remark === undefined || mapped.remark === null
+                    ? original.remark
+                    : String(mapped.remark),
+        };
+    }
+
+    private normalizeLinkAddress(value: unknown): string | null {
+        const address = String(value ?? '').trim();
+
+        if (!address || address.length > 253 || /[\s/?#@]/.test(address)) return null;
+
+        if (address.startsWith('[') || address.endsWith(']')) {
+            if (!address.startsWith('[') || !address.endsWith(']')) return null;
+
+            const unwrapped = address.slice(1, -1);
+
+            return isIP(unwrapped) === 6 ? unwrapped : null;
+        }
+
+        if (address.includes(':')) return isIP(address) === 6 ? address : null;
+        if (/^[\d.]+$/.test(address)) return isIP(address) === 4 ? address : null;
+
+        const labels = address.split('.');
+
+        if (
+            labels.some(
+                (label) =>
+                    !label ||
+                    label.length > 63 ||
+                    label.startsWith('-') ||
+                    label.endsWith('-') ||
+                    !/^[A-Za-z0-9_-]+$/.test(label),
+            )
+        ) {
+            return null;
+        }
+
+        return address;
+    }
+
+    private serializeLink(link: ShareLink): string {
+        const query = this.buildQueryString(link.params);
+        const remark = encodeURIComponent(link.remark);
+        const address = this.formatAddress(link.address);
+
+        switch (link.scheme) {
+            case 'ss': {
+                const credentials = Buffer.from(`${link.method}:${link.password}`).toString(
+                    'base64',
+                );
+
+                return `ss://${credentials}@${address}:${link.port}#${remark}`;
+            }
+
+            case 'hysteria2': {
+                const slash = link.appendSlash ? '/' : '';
+                const queryPart = query ? `?${query}` : '';
+
+                return `hysteria2://${encodeURIComponent(link.password)}@${address}:${link.port}${slash}${queryPart}#${remark}`;
+            }
+
+            case 'anytls': {
+                const queryPart = query ? `?${query}` : '';
+
+                return `anytls://${encodeURIComponent(link.password)}@${address}:${link.port}${queryPart}#${remark}`;
+            }
+
+            case 'tuic':
+                return `tuic://${encodeURIComponent(link.username ?? '')}:${encodeURIComponent(link.password)}@${address}:${link.port}?${query}#${remark}`;
+
+            default:
+                return `${link.scheme}://${encodeURIComponent(link.password)}@${address}:${link.port}?${query}#${remark}`;
+        }
+    }
+
+    private formatAddress(address: string): string {
+        if (!address.includes(':') || address.startsWith('[')) return address;
+
+        return `[${address}]`;
+    }
+
+    private buildQueryString(params: Record<string, unknown>): string {
         const parts: string[] = [];
 
-        const mapped = applyHostMapper(params, host.clientOverrides.mapper.base64, host, true);
-
-        for (const [key, value] of Object.entries(mapped)) {
+        for (const [key, value] of Object.entries(params)) {
             if (value === undefined || value === null) continue;
             parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
         }

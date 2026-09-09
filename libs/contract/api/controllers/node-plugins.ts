@@ -4,6 +4,9 @@ const ACTIONS_ROUTE = 'actions' as const;
 const TORRENT_BLOCKER_ROUTE = 'torrent-blocker' as const;
 const SHARED_LISTS_ROUTE = 'shared-lists' as const;
 
+const encodeSharedListName = (name: string): string =>
+    name.startsWith(':') ? name : encodeURIComponent(name);
+
 export const NODE_PLUGINS_ROUTES = {
     GET_ALL: '', // get
     GET: (uuid: string) => `${uuid}`, // get
@@ -26,10 +29,10 @@ export const NODE_PLUGINS_ROUTES = {
     },
     SHARED_LISTS: {
         GET_ALL: `${SHARED_LISTS_ROUTE}`,
-        GET: (name: string) => `${SHARED_LISTS_ROUTE}/${name}`,
+        GET: (name: string) => `${SHARED_LISTS_ROUTE}/${encodeSharedListName(name)}`,
         CREATE: `${SHARED_LISTS_ROUTE}`,
         UPDATE: `${SHARED_LISTS_ROUTE}`,
-        DELETE: (name: string) => `${SHARED_LISTS_ROUTE}/${name}`,
+        DELETE: (name: string) => `${SHARED_LISTS_ROUTE}/${encodeSharedListName(name)}`,
         ACTIONS: {
             SYNC: `${SHARED_LISTS_ROUTE}/${ACTIONS_ROUTE}/sync`,
         },

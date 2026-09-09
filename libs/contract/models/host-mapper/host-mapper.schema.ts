@@ -64,8 +64,17 @@ export const MihomoHostMapperOperationsSchema = buildOperationsSchema(
 );
 
 export const Base64HostMapperOperationsSchema = buildOperationsSchema(
-    'the generated share-link query string',
-    ['fp', 'sni', 'cs'],
+    'the generated share-link query string, or the link itself with a `$link.` prefix',
+    [
+        '$link.address',
+        '$link.port',
+        '$link.password',
+        '$link.remark',
+        '$link.method',
+        'fp',
+        'sni',
+        'cs',
+    ],
 );
 
 export const SingBoxHostMapperOperationsSchema = buildOperationsSchema(
@@ -79,7 +88,11 @@ export const HostMapperSchema = z
     .object({
         xrayJson: z.array(XrayJsonHostMapperOperationsSchema).optional(),
         mihomo: z.array(MihomoHostMapperOperationsSchema).optional(),
-        base64: z.array(Base64HostMapperOperationsSchema).optional(),
+        base64: z.array(Base64HostMapperOperationsSchema).optional().meta({
+            title: 'Base64',
+            markdownDescription:
+                'Plain targets edit query parameters. `$link.address`, `$link.port`, `$link.password`, `$link.remark`, and Shadowsocks `$link.method` rewrite the generated share link. Invalid address, port, password, or method values fall back to the generated value.',
+        }),
         singbox: z.array(SingBoxHostMapperOperationsSchema).optional(),
     })
     .meta({

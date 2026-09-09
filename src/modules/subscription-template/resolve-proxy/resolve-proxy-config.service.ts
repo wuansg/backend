@@ -45,7 +45,7 @@ import {
     WsTransport,
     XHttpTransport,
 } from './interfaces';
-import { override, toNonEmptyRecord } from './utils';
+import { override, parseResolvedProxyRemark, toNonEmptyRecord } from './utils';
 
 export interface IResolveProxyConfigOptions {
     subscriptionSettings: SubscriptionSettingsEntity | null;
@@ -945,15 +945,9 @@ export class ResolveProxyConfigService {
     }
 
     private parseResolvedProxyConfigFromRemark(remark: string): ResolvedProxyConfig | null {
-        if (!remark.startsWith('{')) {
-            return null;
-        }
+        const parsed = parseResolvedProxyRemark(remark);
 
-        try {
-            return JSON.parse(remark) as ResolvedProxyConfig;
-        } catch {
-            return null;
-        }
+        return parsed.kind === 'resolved' ? parsed.config : null;
     }
 
     private createFallbackHosts(remarks: string[]): ResolvedProxyConfig[] {
