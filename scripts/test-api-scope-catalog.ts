@@ -5,7 +5,8 @@ import { EndpointDetails } from '@libs/contracts/constants';
 
 interface EndpointCommand {
     endpointDetails: EndpointDetails;
-    url: string;
+    url: string | ((...args: string[]) => string);
+    TSQ_url?: string;
 }
 
 const endpointScopes = new Map<string, string>();
@@ -17,9 +18,17 @@ for (const [exportName, candidate] of Object.entries(commandExports)) {
     }
 
     const endpoint = candidate as Partial<EndpointCommand>;
-    if (!endpoint.endpointDetails?.SCOPE || typeof endpoint.url !== 'string') continue;
+    if (!endpoint.endpointDetails?.SCOPE) continue;
 
-    const pathSegments = endpoint.url.split('/').filter(Boolean);
+    const endpointUrl =
+        typeof endpoint.TSQ_url === 'string'
+            ? endpoint.TSQ_url
+            : typeof endpoint.url === 'string'
+              ? endpoint.url
+              : undefined;
+    if (!endpointUrl) continue;
+
+    const pathSegments = endpointUrl.split('/').filter(Boolean);
     const controller = pathSegments[0] === 'api' ? pathSegments[1] : pathSegments[0];
 
     assert.ok(controller, `${exportName} does not expose a controller URL.`);
