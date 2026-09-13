@@ -26,6 +26,9 @@ import {
     ReorderNodePluginCommand,
     SyncNodePluginCommand,
     SyncSharedListCommand,
+    PreviewNodePluginCommand,
+    GetNodePluginStatusCommand,
+    GetSharedListReferencesCommand,
     UpdateNodePluginCommand,
     UpdateSharedListCommand,
 } from '@libs/contracts/commands';
@@ -45,6 +48,10 @@ import {
     PluginExecutorBodyDto,
     GetNodePluginParamDto,
     SyncNodePluginBodyDto,
+    PreviewNodePluginBodyDto,
+    PreviewNodePluginResponseDto,
+    GetNodePluginStatusParamDto,
+    GetNodePluginStatusResponseDto,
 } from './dtos/node-plugins.dtos';
 import {
     CreateSharedListBodyDto,
@@ -56,6 +63,8 @@ import {
     SyncSharedListBodyDto,
     UpdateSharedListBodyDto,
     UpdateSharedListResponseDto,
+    GetSharedListReferencesParamDto,
+    GetSharedListReferencesResponseDto,
 } from './dtos/shared-lists.dtos';
 import { NodePluginService } from './node-plugins.service';
 import { SharedListsService } from './shared-lists.service';
@@ -92,6 +101,18 @@ export class NodePluginController {
         @Param() param: GetSharedListParamDto,
     ): Promise<GetSharedListResponseDto> {
         const data = errorHandler(await this.sharedListsService.getSharedListByName(param.name));
+        return { response: data };
+    }
+
+    @Endpoint({
+        type: GetSharedListReferencesResponseDto,
+        command: GetSharedListReferencesCommand,
+        httpCode: HttpStatus.OK,
+    })
+    async getSharedListReferences(
+        @Param() param: GetSharedListReferencesParamDto,
+    ): Promise<GetSharedListReferencesResponseDto> {
+        const data = errorHandler(await this.nodePluginService.getSharedListReferences(param.name));
         return { response: data };
     }
 
@@ -164,6 +185,18 @@ export class NodePluginController {
                 pluginConfig: data.pluginConfig!,
             },
         };
+    }
+
+    @Endpoint({
+        type: GetNodePluginStatusResponseDto,
+        command: GetNodePluginStatusCommand,
+        httpCode: HttpStatus.OK,
+    })
+    async getPluginStatus(
+        @Param() param: GetNodePluginStatusParamDto,
+    ): Promise<GetNodePluginStatusResponseDto> {
+        const data = errorHandler(await this.nodePluginService.getPluginStatus(param.uuid));
+        return { response: data as { deployments: Record<string, unknown>[] } };
     }
 
     @Endpoint({
@@ -251,6 +284,18 @@ export class NodePluginController {
     @Endpoint({ command: SyncNodePluginCommand, httpCode: HttpStatus.ACCEPTED })
     async syncNodePlugin(@Body() body: SyncNodePluginBodyDto) {
         errorHandler(await this.nodePluginService.syncNodePluginByUuid(body.uuid));
+    }
+
+    @Endpoint({
+        type: PreviewNodePluginResponseDto,
+        command: PreviewNodePluginCommand,
+        httpCode: HttpStatus.OK,
+    })
+    async previewNodePlugin(
+        @Body() body: PreviewNodePluginBodyDto,
+    ): Promise<PreviewNodePluginResponseDto> {
+        const data = errorHandler(await this.nodePluginService.previewConfig(body));
+        return { response: data };
     }
 
     @Endpoint({

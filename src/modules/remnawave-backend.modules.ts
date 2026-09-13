@@ -15,7 +15,9 @@ import { HwidUserDevicesModule } from './hwid-user-devices/hwid-user-devices.mod
 import { InfraBillingModule } from './infra-billing/infra-billing.module';
 import { InternalSquadModule } from './internal-squads/internal-squad.module';
 import { KeygenModule } from './keygen/keygen.module';
+import { ManagementModule } from './management/management.module';
 import { MetadataModule } from './metadata/metadata.module';
+import { NodeObservabilityModule } from './node-observability';
 import { NodePluginModule } from './node-plugins';
 import { NodesUsageHistoryModule } from './nodes-usage-history/nodes-usage-history.module';
 import { NodesUserUsageHistoryModule } from './nodes-user-usage-history/nodes-user-usage-history.module';
@@ -46,6 +48,7 @@ import { UsersModule } from './users/users.module';
         ExternalSquadModule,
         KeygenModule,
         NodesModule,
+        NodeObservabilityModule,
         NodePluginModule,
         HostsModule,
         NodesUserUsageHistoryModule,
@@ -60,6 +63,7 @@ import { UsersModule } from './users/users.module';
         ConditionalModule.registerWhen(RemnawaveServiceModule, () => isScheduler()),
         ConditionalModule.registerWhen(ConnectionsModule, () => isRestApi()),
         ConditionalModule.registerWhen(MetadataModule, () => isRestApi()),
+        ConditionalModule.registerWhen(ManagementModule, () => isRestApi()),
     ],
 })
 export class RemnawaveModules {}

@@ -66,9 +66,10 @@ export class SubscriptionTemplateRepository implements ICrud<SubscriptionTemplat
         dto: Partial<SubscriptionTemplateEntity>,
     ): Promise<SubscriptionTemplateEntity[]> {
         const model = this.converter.fromEntityToPrismaModel(dto as SubscriptionTemplateEntity);
+        const { tags: _tags, ...criteria } = model;
         const list = await this.prisma.tx.subscriptionTemplate.findMany({
             where: {
-                ...model,
+                ...criteria,
                 templateJson: model.templateJson
                     ? { equals: model.templateJson as Prisma.InputJsonValue }
                     : undefined,

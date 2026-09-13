@@ -7,6 +7,7 @@ import {
     GetSharedListsCommand,
     SyncSharedListCommand,
     UpdateSharedListCommand,
+    GetSharedListReferencesCommand,
 } from '@libs/contracts/commands';
 
 export class GetSharedListsResponseDto extends createZodDto(GetSharedListsCommand.ResponseSchema) {} // GET_ALL
@@ -33,3 +34,10 @@ export class DeleteSharedListParamDto extends createZodDto(
 ) {} // DELETE
 
 export class SyncSharedListBodyDto extends createZodDto(SyncSharedListCommand.RequestBodySchema) {} // SYNC
+
+export class GetSharedListReferencesParamDto extends createZodDto(
+    GetSharedListReferencesCommand.RequestParamSchema,
+) {}
+export class GetSharedListReferencesResponseDto extends createZodDto(
+    GetSharedListReferencesCommand.ResponseSchema,
+) {}

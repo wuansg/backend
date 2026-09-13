@@ -31,6 +31,10 @@ export class NodesEntity implements Nodes {
     public countryCode: string;
     public tags: string[];
     public ips: TNodeIps;
+    public geocheckIntervalMinutes: number | null;
+    public geocheckSource: Prisma.JsonValue | null;
+    public geocheckCooldownMinutes: number;
+    public lastGeocheckScheduledAt: Date | null;
     public consumptionMultiplier: bigint;
     public nodeConsumptionMultiplier: bigint;
     public createdAt: Date;

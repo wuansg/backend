@@ -78,8 +78,9 @@ export class ConfigProfileRepository {
     }
 
     public async findByCriteria(dto: Partial<ConfigProfileEntity>): Promise<ConfigProfileEntity[]> {
+        const { tags: _tags, ...where } = dto;
         const configProfileList = await this.prisma.tx.configProfiles.findMany({
-            where: dto,
+            where,
         });
         return this.configProfileConverter.fromPrismaModelsToEntities(configProfileList);
     }
@@ -87,8 +88,9 @@ export class ConfigProfileRepository {
     public async findFirstByCriteria(
         dto: Partial<ConfigProfileEntity>,
     ): Promise<ConfigProfileEntity | null> {
+        const { tags: _tags, ...where } = dto;
         const result = await this.prisma.tx.configProfiles.findFirst({
-            where: dto,
+            where,
         });
 
         if (!result) {

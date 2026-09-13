@@ -7,6 +7,7 @@ export class ConfigProfileWithInboundsAndNodesEntity implements ConfigProfiles {
     public uuid: string;
     public viewPosition: number;
     public name: string;
+    public tags: string[];
     public coreType: string;
     public config: string | number | boolean | JsonObject | JsonArray | null | object;
 
@@ -23,6 +24,7 @@ export class ConfigProfileWithInboundsAndNodesEntity implements ConfigProfiles {
     constructor(
         configProfileWithInboundsAndNodes: Partial<ConfigProfileWithInboundsAndNodesEntity>,
     ) {
+        this.tags = [];
         Object.assign(this, configProfileWithInboundsAndNodes);
         return this;
     }

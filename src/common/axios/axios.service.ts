@@ -139,8 +139,37 @@ export type NodeAgentHealthResponse = {
     plugin?: {
         configHash: string;
         activePlugin: { uuid: string; name: string } | null;
+        appliedAt?: string;
+        lastAttemptAt?: string;
+        lastError?: string;
+        domainResolutions?: Record<string, unknown>;
     };
+    networkInterfaces?: Array<{
+        name: string;
+        index: number;
+        mtu: number;
+        flags: string[];
+        addresses: Array<{
+            address: string;
+            prefix: number;
+            family: 'IPv4' | 'IPv6';
+        }>;
+        defaultRoute: boolean;
+    }>;
     configHashes?: CoreStartRequest['internals']['hashes'];
+};
+
+export type PluginAgentApplyResponse = {
+    accepted: boolean;
+    configHash?: string;
+    appliedAt?: string;
+    error?: string;
+    rolledBack?: boolean;
+};
+
+export type PluginAgentCompileResponse = PluginAgentApplyResponse & {
+    summary?: Record<string, number | boolean>;
+    domainResolutions?: Record<string, unknown>;
 };
 
 export type NodeSystemStatsResponse = {
@@ -787,8 +816,8 @@ export class AxiosService {
     public async syncNodePlugins(
         data: SyncCommand.Request,
         opts: INodeConnectionOpts,
-    ): Promise<TResult<SyncCommand.Response['response']>> {
-        return this.request<SyncCommand.Response>({
+    ): Promise<TResult<PluginAgentApplyResponse>> {
+        return this.request<{ response: PluginAgentApplyResponse }>({
             label: 'SYNC-NODE-PLUGINS',
             path: SyncCommand.url,
             opts,
@@ -799,6 +828,24 @@ export class AxiosService {
             compress: true,
             logAxiosError: false,
             timeout: 10_000,
+        });
+    }
+
+    public async compileNodePlugin(
+        data: SyncCommand.Request,
+        opts: INodeConnectionOpts,
+    ): Promise<TResult<PluginAgentCompileResponse>> {
+        return this.request<{ response: PluginAgentCompileResponse }>({
+            label: 'COMPILE-NODE-PLUGIN',
+            path: '/node/plugin/compile',
+            opts,
+            data: {
+                ...data,
+                configHash: data.plugin ? stableJsonHash(data.plugin.config) : '',
+            },
+            compress: true,
+            logAxiosError: false,
+            timeout: 15_000,
         });
     }
 

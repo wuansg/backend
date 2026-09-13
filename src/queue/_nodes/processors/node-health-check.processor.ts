@@ -17,6 +17,7 @@ import { CACHE_KEYS, CACHE_KEYS_TTL, EVENTS } from '@libs/contracts/constants';
 
 import { NodeEvent } from '@integration-modules/notifications/interfaces';
 
+import { NodeObservabilityRepository } from '@modules/node-observability';
 import { UpdateNodeCommand } from '@modules/nodes/commands/update-node';
 
 import { NodesQueuesService } from '@queue/_nodes';
@@ -50,6 +51,7 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
         private readonly axios: AxiosService,
         private readonly nodesQueuesService: NodesQueuesService,
         private readonly rawCacheService: RawCacheService,
+        private readonly nodeObservabilityRepository: NodeObservabilityRepository,
     ) {
         super();
     }
@@ -93,6 +95,10 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
                     CACHE_KEYS.NODE_VERSIONS(nodeUuid),
                     resolveNodeVersions(healthResult.response),
                 ),
+                this.nodeObservabilityRepository.recordNodeHealth(nodeUuid, {
+                    plugin: healthResult.response.plugin,
+                    networkInterfaces: healthResult.response.networkInterfaces,
+                }),
             ]);
 
             if (!expectsCore) {

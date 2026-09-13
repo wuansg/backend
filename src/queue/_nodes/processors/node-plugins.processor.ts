@@ -6,8 +6,10 @@ import { QueryBus } from '@nestjs/cqrs';
 
 import { INodeConnectionOpts } from '@common/axios';
 import { AxiosService } from '@common/axios/axios.service';
+import { stableJsonHash } from '@common/utils/stable-json-hash.util';
 import { EVENTS } from '@libs/contracts/constants/events/events';
 
+import { NodeObservabilityRepository } from '@modules/node-observability';
 import { GetPluginByUuidQuery } from '@modules/node-plugins/queries/get-plugin-by-uuid';
 import { GetNodeByUuidQuery } from '@modules/nodes/queries/get-node-by-uuid';
 
@@ -27,6 +29,7 @@ export class NodePluginsProcessor extends WorkerHost {
         private readonly axios: AxiosService,
         private readonly queryBus: QueryBus,
         private readonly usersQueuesService: UsersQueuesService,
+        private readonly nodeObservabilityRepository: NodeObservabilityRepository,
     ) {
         super();
         this.CONCURRENCY = 20;
@@ -64,6 +67,7 @@ export class NodePluginsProcessor extends WorkerHost {
             const pluginUuid = node.activePluginUuid;
 
             if (!pluginUuid) {
+                await this.nodeObservabilityRepository.markPluginPending(nodeUuid, null, '');
                 const response = await this.axios.syncNodePlugins(
                     {
                         plugin: null,
@@ -76,6 +80,10 @@ export class NodePluginsProcessor extends WorkerHost {
                 );
 
                 if (!response.isOk) {
+                    await this.nodeObservabilityRepository.markPluginFailure(
+                        nodeUuid,
+                        response.message ?? 'Plugin sync request failed',
+                    );
                     this.logger.error(`Failed to sync node plugins: ${response.message}`);
                     return {
                         success: false,
@@ -83,6 +91,11 @@ export class NodePluginsProcessor extends WorkerHost {
                         error: response.message,
                     };
                 }
+
+                await this.nodeObservabilityRepository.markPluginResult(
+                    nodeUuid,
+                    response.response,
+                );
 
                 return;
             }
@@ -93,10 +106,20 @@ export class NodePluginsProcessor extends WorkerHost {
 
             if (!getNodePluginResult.isOk) {
                 this.logger.error(`Failed to get node plugin: ${getNodePluginResult.message}`);
+                await this.nodeObservabilityRepository.markPluginFailure(
+                    nodeUuid,
+                    getNodePluginResult.message ?? 'Node Plugin not found',
+                );
                 return;
             }
 
             const { response: nodePlugin } = getNodePluginResult;
+            const desiredHash = stableJsonHash(nodePlugin.pluginConfig);
+            await this.nodeObservabilityRepository.markPluginPending(
+                nodeUuid,
+                pluginUuid,
+                desiredHash,
+            );
 
             const syncNodePluginsResponse = await this.axios.syncNodePlugins(
                 {
@@ -114,10 +137,30 @@ export class NodePluginsProcessor extends WorkerHost {
             );
 
             if (!syncNodePluginsResponse.isOk) {
+                await this.nodeObservabilityRepository.markPluginFailure(
+                    nodeUuid,
+                    syncNodePluginsResponse.message ?? 'Plugin sync request failed',
+                );
                 this.logger.error(
                     `Failed to sync node plugins: ${syncNodePluginsResponse.message}`,
                 );
                 return;
+            }
+
+            await this.nodeObservabilityRepository.markPluginResult(
+                nodeUuid,
+                syncNodePluginsResponse.response,
+            );
+
+            if (!syncNodePluginsResponse.response.accepted) {
+                this.logger.error(
+                    `Node ${nodeUuid} rejected plugin: ${syncNodePluginsResponse.response.error ?? 'unknown error'}`,
+                );
+                return {
+                    success: false,
+                    nodeUuid,
+                    error: syncNodePluginsResponse.response.error ?? 'Node rejected plugin',
+                };
             }
 
             this.logger.log(`Node plugins synced successfully: ${nodeUuid}`);

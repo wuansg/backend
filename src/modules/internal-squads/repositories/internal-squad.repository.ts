@@ -73,8 +73,9 @@ export class InternalSquadRepository implements ICrud<InternalSquadEntity> {
     }
 
     public async findByCriteria(dto: Partial<InternalSquadEntity>): Promise<InternalSquadEntity[]> {
+        const { tags: _tags, ...where } = dto;
         const internalSquadList = await this.prisma.tx.internalSquads.findMany({
-            where: dto,
+            where,
         });
         return this.internalSquadConverter.fromPrismaModelsToEntities(internalSquadList);
     }
@@ -82,8 +83,9 @@ export class InternalSquadRepository implements ICrud<InternalSquadEntity> {
     public async findFirstByCriteria(
         dto: Partial<InternalSquadEntity>,
     ): Promise<InternalSquadEntity | null> {
+        const { tags: _tags, ...where } = dto;
         const result = await this.prisma.tx.internalSquads.findFirst({
-            where: dto,
+            where,
         });
 
         if (!result) {

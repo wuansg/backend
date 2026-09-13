@@ -8,9 +8,11 @@ import { CommandBus, QueryBus } from '@nestjs/cqrs';
 
 import { AxiosService } from '@common/axios/axios.service';
 import { RawCacheService } from '@common/raw-cache';
+import { stableJsonHash } from '@common/utils/stable-json-hash.util';
 import { CACHE_KEYS, CACHE_KEYS_TTL } from '@libs/contracts/constants';
 
 import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
+import { NodeObservabilityRepository } from '@modules/node-observability';
 import { NodePluginEntity } from '@modules/node-plugins/entities';
 import { GetAllPluginsQuery } from '@modules/node-plugins/queries/get-all-plugins';
 import { NodesEntity } from '@modules/nodes';
@@ -44,6 +46,7 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
         private readonly queryBus: QueryBus,
         private readonly commandBus: CommandBus,
         private readonly rawCacheService: RawCacheService,
+        private readonly nodeObservabilityRepository: NodeObservabilityRepository,
     ) {
         super();
         this.CONCURRENCY = 20;
@@ -250,6 +253,11 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                     };
                 }
 
+                await this.nodeObservabilityRepository.markPluginPending(
+                    node.uuid,
+                    plugin?.uuid ?? null,
+                    plugin ? stableJsonHash(plugin.config) : '',
+                );
                 const syncNodePluginsResponse = await this.axios.syncNodePlugins(
                     {
                         plugin,
@@ -262,6 +270,10 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                 );
 
                 if (!syncNodePluginsResponse.isOk) {
+                    await this.nodeObservabilityRepository.markPluginFailure(
+                        node.uuid,
+                        syncNodePluginsResponse.message ?? 'Plugin sync request failed',
+                    );
                     await this.commandBus.execute(
                         new UpdateNodeCommand({
                             uuid: node.uuid,
@@ -277,6 +289,14 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                     );
                     return;
                 }
+                await this.nodeObservabilityRepository.markPluginResult(
+                    node.uuid,
+                    syncNodePluginsResponse.response,
+                );
+                const pluginError = syncNodePluginsResponse.response.accepted
+                    ? null
+                    : `Node rejected plugin: ${syncNodePluginsResponse.response.error ?? 'unknown error'}`;
+                if (pluginError) this.logger.warn(pluginError);
 
                 const filteredInboundsHashes = config.response.hashesPayload.inbounds.filter(
                     (inbound) => activeNodeInboundsTags.has(inbound.tag),
@@ -372,7 +392,8 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                             new UpdateNodeCommand({
                                 uuid: node.uuid,
                                 isConnected: nodeResponse.isStarted,
-                                lastStatusMessage: nodeResponse.error ?? null,
+                                lastStatusMessage:
+                                    nodeResponse.error ?? pluginError ?? forwardingError,
                                 lastStatusChange: new Date(),
                                 isConnecting: false,
                             }),

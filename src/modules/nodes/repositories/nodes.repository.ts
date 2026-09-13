@@ -239,7 +239,7 @@ export class NodesRepository implements ICrud<NodesEntity> {
 
     public async findByCriteria(dto: Partial<NodesEntity>): Promise<NodesEntity[]> {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { tags, ips, forwardingConfig, ...rest } = dto;
+        const { tags, ips, forwardingConfig, geocheckSource, ...rest } = dto;
         const nodesList = await this.prisma.tx.nodes.findMany({
             where: rest,
             orderBy: {
@@ -263,7 +263,7 @@ export class NodesRepository implements ICrud<NodesEntity> {
 
     public async findFirstByCriteria(dto: Partial<NodesEntity>): Promise<NodesEntity | null> {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { tags, ips, forwardingConfig, ...rest } = dto;
+        const { tags, ips, forwardingConfig, geocheckSource, ...rest } = dto;
         const result = await this.prisma.tx.nodes.findFirst({
             where: rest,
             include: INCLUDE_RESOLVED_INBOUNDS,

@@ -231,6 +231,51 @@ export const METRIC_PROVIDERS = [
         labelNames: ['node_uuid'],
     }),
     makeGaugeProvider({
+        name: METRIC_NAMES.NODE_PLUGIN_DEPLOYMENT_INFO,
+        help: 'Current Node Plugin deployment state',
+        labelNames: ['node_uuid', 'plugin_uuid', 'state'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_PLUGIN_DESIRED_MATCH,
+        help: 'Whether the applied Node Plugin hash matches the desired hash',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_PLUGIN_DNS_STALE_DOMAINS,
+        help: 'Number of stale Node Plugin domain resolutions using last-known-good addresses',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_PLUGIN_DNS_RESOLUTION_FAILURES,
+        help: 'Current summed Node Plugin domain resolution failure count',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_FORWARDING_DNS_STALE,
+        help: 'Whether forwarding is using last-known-good DNS results after a resolution failure',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_FORWARDING_DNS_FAILURES,
+        help: 'Current forwarding DNS resolution failure count reported by the node',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_FORWARDING_DNS_LAST_SUCCESS_TIMESTAMP_SECONDS,
+        help: 'Unix timestamp of the most recent successful forwarding DNS resolution',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_GEOCHECK_UNACKNOWLEDGED_DRIFTS,
+        help: 'Number of unacknowledged Geocheck drift events',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
+        name: METRIC_NAMES.NODE_GEOCHECK_LAST_SUCCESS_TIMESTAMP_SECONDS,
+        help: 'Unix timestamp of the most recent successful Geocheck',
+        labelNames: ['node_uuid'],
+    }),
+    makeGaugeProvider({
         name: METRIC_NAMES.TELEGRAM_TARGET_CONFIGURED,
         help: 'Whether a Telegram notification category has a configured target',
         labelNames: ['target'],

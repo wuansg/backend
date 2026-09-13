@@ -62,7 +62,7 @@ export class NodePluginRepository implements ICrud<NodePluginEntity> {
     ): Promise<NodePluginEntity[]> {
         const model = this.converter.fromEntityToPrismaModel(dto as NodePluginEntity);
         /* eslint-disable @typescript-eslint/no-unused-vars */
-        const { pluginConfig, ...rest } = model;
+        const { pluginConfig, tags: _tags, ...rest } = model;
         const list = await this.prisma.tx.nodePlugin.findMany({
             where: {
                 ...rest,
@@ -102,6 +102,7 @@ export class NodePluginRepository implements ICrud<NodePluginEntity> {
                 viewPosition: true,
                 name: true,
                 uuid: true,
+                tags: true,
                 ...(withContent
                     ? {
                           pluginConfig: true,

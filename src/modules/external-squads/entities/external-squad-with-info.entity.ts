@@ -14,6 +14,7 @@ export class ExternalSquadWithInfoEntity implements ExternalSquads {
     public uuid: string;
     public viewPosition: number;
     public name: string;
+    public tags: string[];
 
     public membersCount: number | string | bigint | null;
 
@@ -34,6 +35,7 @@ export class ExternalSquadWithInfoEntity implements ExternalSquads {
     public updatedAt: Date;
 
     constructor(externalSquad: Partial<ExternalSquads>) {
+        this.tags = [];
         Object.assign(this, externalSquad);
 
         this.membersCount = Number(this.membersCount) || 0;

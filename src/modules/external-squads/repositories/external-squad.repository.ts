@@ -85,10 +85,9 @@ export class ExternalSquadRepository implements ICrud<ExternalSquadEntity> {
             >
         >,
     ): Promise<ExternalSquadEntity[]> {
+        const { tags: _tags, ...where } = dto;
         const externalSquadList = await this.prisma.tx.externalSquads.findMany({
-            where: {
-                ...dto,
-            },
+            where,
         });
         return this.externalSquadConverter.fromPrismaModelsToEntities(externalSquadList);
     }
@@ -106,10 +105,9 @@ export class ExternalSquadRepository implements ICrud<ExternalSquadEntity> {
             >
         >,
     ): Promise<ExternalSquadEntity | null> {
+        const { tags: _tags, ...where } = dto;
         const result = await this.prisma.tx.externalSquads.findFirst({
-            where: {
-                ...dto,
-            },
+            where,
         });
 
         if (!result) {

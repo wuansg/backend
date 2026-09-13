@@ -163,13 +163,13 @@ model Keygen {
 }
 
 model Nodes {
-  id       BigInt  @unique @default(autoincrement()) @map("id")
-  uuid     String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name     String  @unique @map("name")
-  address  String  @unique @map("address")
-  port     Int?    @map("port")
-  proxyUrl String? @map("proxy_url")
-  forwardingConfig Json @default("{\"enabled\":false,\"listenInterface\":\"auto\",\"rules\":[]}") @map("forwarding_config")
+  id               BigInt  @unique @default(autoincrement()) @map("id")
+  uuid             String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name             String  @unique @map("name")
+  address          String  @unique @map("address")
+  port             Int?    @map("port")
+  proxyUrl         String? @map("proxy_url")
+  forwardingConfig Json    @default("{\"enabled\":false,\"listenInterface\":\"auto\",\"rules\":[]}") @map("forwarding_config")
 
   activeConfigProfileUuid String? @map("active_config_profile_uuid") @db.Uuid
   activePluginUuid        String? @map("active_plugin_uuid") @db.Uuid
@@ -193,6 +193,11 @@ model Nodes {
   /// [NodeIps]
   ips                     Json    @default("[]") @map("ips")
 
+  geocheckIntervalMinutes Int?      @map("geocheck_interval_minutes")
+  geocheckSource          Json?     @map("geocheck_source")
+  geocheckCooldownMinutes Int       @default(60) @map("geocheck_cooldown_minutes")
+  lastGeocheckScheduledAt DateTime? @map("last_geocheck_scheduled_at")
+
   providerUuid String? @map("provider_uuid") @db.Uuid
 
   viewPosition Int      @default(autoincrement()) @map("view_position")
@@ -213,31 +218,36 @@ model Nodes {
   torrentBlockerReports        TorrentBlockerReports[]
   usageSnapshotState           NodeUsageSnapshotState?
   usageSnapshotInbox           NodeUsageSnapshotInbox[]
+  pluginDeployment             NodePluginDeployment?
+  networkInventory             NodeNetworkInventory?
+  geocheckHistory              NodeGeocheckHistory[]
+  geocheckDriftEvents          NodeGeocheckDriftEvent[]
 
   activeConfigProfile ConfigProfiles? @relation(fields: [activeConfigProfileUuid], references: [uuid], onDelete: SetNull)
   provider            InfraProviders? @relation(fields: [providerUuid], references: [uuid], onDelete: SetNull)
   activePlugin        NodePlugin?     @relation(fields: [activePluginUuid], references: [uuid], onDelete: SetNull)
 
   @@index([id])
+  @@index([tags], type: Gin)
   @@map("nodes")
 }
 
 model NodeUsageSnapshotState {
-  nodeUuid        String   @id @map("node_uuid") @db.Uuid
-  generation      String   @map("generation")
-  receivedThrough BigInt   @default(0) @map("received_through")
-  appliedThrough  BigInt   @default(0) @map("applied_through")
-  pending         Int      @default(0) @map("pending")
-  nodeQueueBytes  BigInt   @default(0) @map("node_queue_bytes")
-  capturing       Boolean  @default(false) @map("capturing")
-  ingestSuccesses BigInt   @default(0) @map("ingest_successes")
-  ingestFailures  BigInt   @default(0) @map("ingest_failures")
-  databaseRetries BigInt   @default(0) @map("database_retries")
+  nodeUuid        String    @id @map("node_uuid") @db.Uuid
+  generation      String    @map("generation")
+  receivedThrough BigInt    @default(0) @map("received_through")
+  appliedThrough  BigInt    @default(0) @map("applied_through")
+  pending         Int       @default(0) @map("pending")
+  nodeQueueBytes  BigInt    @default(0) @map("node_queue_bytes")
+  capturing       Boolean   @default(false) @map("capturing")
+  ingestSuccesses BigInt    @default(0) @map("ingest_successes")
+  ingestFailures  BigInt    @default(0) @map("ingest_failures")
+  databaseRetries BigInt    @default(0) @map("database_retries")
   lastCapturedAt  DateTime? @map("last_captured_at")
   lastSuccessAt   DateTime? @map("last_success_at")
-  lastDurationMs  Int?     @map("last_duration_ms")
-  lastError       String?  @map("last_error")
-  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+  lastDurationMs  Int?      @map("last_duration_ms")
+  lastError       String?   @map("last_error")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
 
   node Nodes @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
 
@@ -245,14 +255,14 @@ model NodeUsageSnapshotState {
 }
 
 model NodeUsageSnapshotInbox {
-  nodeUuid    String   @map("node_uuid") @db.Uuid
-  generation  String   @map("generation")
-  sequence    BigInt   @map("sequence")
-  capturedAt  DateTime @map("captured_at")
-  core        String   @map("core")
-  payload     Json     @map("payload")
-  appliedAt   DateTime? @map("applied_at")
-  receivedAt  DateTime @default(now()) @map("received_at")
+  nodeUuid   String    @map("node_uuid") @db.Uuid
+  generation String    @map("generation")
+  sequence   BigInt    @map("sequence")
+  capturedAt DateTime  @map("captured_at")
+  core       String    @map("core")
+  payload    Json      @map("payload")
+  appliedAt  DateTime? @map("applied_at")
+  receivedAt DateTime  @default(now()) @map("received_at")
 
   node Nodes @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
 
@@ -261,6 +271,7 @@ model NodeUsageSnapshotInbox {
   @@index([appliedAt])
   @@map("node_usage_snapshot_inbox")
 }
+
 model NodesUserUsageHistory {
   nodeId BigInt @map("node_id")
   userId BigInt @map("user_id")
@@ -380,6 +391,7 @@ model Hosts {
   hostsUsageHistory      HostsUsageHistory[]
   excludedInternalSquads InternalSquadHostExclusions[]
 
+  @@index([tags], type: Gin)
   @@map("hosts")
 }
 
@@ -395,12 +407,13 @@ model InternalSquadHostExclusions {
 }
 
 model SubscriptionTemplate {
-  uuid         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  viewPosition Int     @default(autoincrement()) @map("view_position")
-  name         String  @default("Default") @map("name") @db.VarChar(255)
-  templateType String  @map("template_type")
-  templateYaml String? @map("template_yaml")
-  templateJson Json?   @map("template_json")
+  uuid         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  viewPosition Int      @default(autoincrement()) @map("view_position")
+  name         String   @default("Default") @map("name") @db.VarChar(255)
+  templateType String   @map("template_type")
+  templateYaml String?  @map("template_yaml")
+  templateJson Json?    @map("template_json")
+  tags         String[] @default([]) @map("tags")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
@@ -409,6 +422,7 @@ model SubscriptionTemplate {
   hosts                   Hosts[]
 
   @@unique([templateType, name])
+  @@index([tags], type: Gin)
   @@map("subscription_templates")
 }
 
@@ -448,9 +462,10 @@ model HwidUserDevices {
 }
 
 model InternalSquads {
-  uuid         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  viewPosition Int    @default(autoincrement()) @map("view_position")
-  name         String @unique @map("name")
+  uuid         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  viewPosition Int      @default(autoincrement()) @map("view_position")
+  name         String   @unique @map("name")
+  tags         String[] @default([]) @map("tags")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
@@ -459,6 +474,7 @@ model InternalSquads {
   internalSquadInbounds InternalSquadInbounds[]
   excludedHosts         InternalSquadHostExclusions[]
 
+  @@index([tags], type: Gin)
   @@map("internal_squads")
 }
 
@@ -487,12 +503,13 @@ model InternalSquadInbounds {
 }
 
 model ConfigProfiles {
-  uuid         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  viewPosition Int    @default(autoincrement()) @map("view_position")
-  name         String @unique @map("name")
+  uuid         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  viewPosition Int      @default(autoincrement()) @map("view_position")
+  name         String   @unique @map("name")
   /// @kyselyType('SING_BOX')
-  coreType     String @default("SING_BOX") @map("core_type") @db.VarChar(16)
-  config       Json   @map("config")
+  coreType     String   @default("SING_BOX") @map("core_type") @db.VarChar(16)
+  config       Json     @map("config")
+  tags         String[] @default([]) @map("tags")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
@@ -501,6 +518,7 @@ model ConfigProfiles {
   configProfileInbounds ConfigProfileInbounds[]
   hosts                 Hosts[]
 
+  @@index([tags], type: Gin)
   @@map("config_profiles")
 }
 
@@ -632,8 +650,9 @@ model ExternalSquads {
   responseHeadersAdd    Json     @default("{}") @map("response_headers_add")
   responseHeadersRemove String[] @default([]) @map("response_headers_remove")
 
-  hwidSettings  Json? @map("hwid_settings")
-  customRemarks Json? @map("custom_remarks")
+  hwidSettings  Json?    @map("hwid_settings")
+  customRemarks Json?    @map("custom_remarks")
+  tags          String[] @default([]) @map("tags")
 
   subpageConfigUuid String? @map("subpage_config_uuid") @db.Uuid
 
@@ -644,6 +663,7 @@ model ExternalSquads {
   users                   Users[]
   subpageConfig           SubscriptionPageConfig?   @relation(fields: [subpageConfigUuid], references: [uuid], onDelete: SetNull)
 
+  @@index([tags], type: Gin)
   @@map("external_squads")
 }
 
@@ -660,16 +680,18 @@ model ExternalSquadsTemplates {
 }
 
 model SubscriptionPageConfig {
-  uuid         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  viewPosition Int    @default(autoincrement()) @map("view_position")
-  name         String @unique @map("name") @db.VarChar(30)
-  config       Json   @map("config")
+  uuid         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  viewPosition Int      @default(autoincrement()) @map("view_position")
+  name         String   @unique @map("name") @db.VarChar(30)
+  config       Json     @map("config")
+  tags         String[] @default([]) @map("tags")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
   externalSquads ExternalSquads[]
 
+  @@index([tags], type: Gin)
   @@map("subscription_page_config")
 }
 
@@ -684,17 +706,86 @@ model SharedLists {
 }
 
 model NodePlugin {
-  uuid         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  viewPosition Int    @default(autoincrement()) @map("view_position")
-  name         String @map("name") @db.VarChar(255)
-  pluginConfig Json   @map("plugin_config")
+  uuid         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  viewPosition Int      @default(autoincrement()) @map("view_position")
+  name         String   @map("name") @db.VarChar(255)
+  pluginConfig Json     @map("plugin_config")
+  tags         String[] @default([]) @map("tags")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
-  nodes Nodes[]
+  nodes       Nodes[]
+  deployments NodePluginDeployment[]
 
+  @@index([tags], type: Gin)
   @@map("node_plugin")
+}
+
+model NodePluginDeployment {
+  nodeUuid        String    @id @map("node_uuid") @db.Uuid
+  pluginUuid      String?   @map("plugin_uuid") @db.Uuid
+  desiredHash     String    @default("") @map("desired_hash") @db.VarChar(64)
+  appliedHash     String    @default("") @map("applied_hash") @db.VarChar(64)
+  state           String    @default("PENDING") @map("state") @db.VarChar(16)
+  lastError       String?   @map("last_error") @db.VarChar(2000)
+  resolutionState Json      @default("{}") @map("resolution_state")
+  lastAttemptAt   DateTime? @map("last_attempt_at")
+  appliedAt       DateTime? @map("applied_at")
+  checkedAt       DateTime  @default(now()) @map("checked_at")
+  rolledBack      Boolean   @default(false) @map("rolled_back")
+
+  node   Nodes       @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+  plugin NodePlugin? @relation(fields: [pluginUuid], references: [uuid], onDelete: SetNull)
+
+  @@index([pluginUuid])
+  @@index([state])
+  @@map("node_plugin_deployments")
+}
+
+model NodeNetworkInventory {
+  nodeUuid   String   @id @map("node_uuid") @db.Uuid
+  interfaces Json     @default("[]") @map("interfaces")
+  reportedAt DateTime @map("reported_at")
+
+  node Nodes @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+
+  @@map("node_network_inventory")
+}
+
+model NodeGeocheckHistory {
+  id          BigInt   @id @default(autoincrement())
+  nodeUuid    String   @map("node_uuid") @db.Uuid
+  sourceType  String   @map("source_type") @db.VarChar(16)
+  sourceValue String?  @map("source_value") @db.VarChar(255)
+  success     Boolean  @map("success")
+  report      Json?    @map("report")
+  snapshot    Json?    @map("snapshot")
+  changes     Json     @default("[]") @map("changes")
+  message     String?  @map("message") @db.VarChar(2000)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  node Nodes @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+
+  @@index([nodeUuid, createdAt(sort: Desc)])
+  @@map("node_geocheck_history")
+}
+
+model NodeGeocheckDriftEvent {
+  id              BigInt    @id @default(autoincrement())
+  nodeUuid        String    @map("node_uuid") @db.Uuid
+  kind            String    @map("kind") @db.VarChar(32)
+  previousValue   String?   @map("previous_value") @db.VarChar(255)
+  currentValue    String?   @map("current_value") @db.VarChar(255)
+  acknowledgedAt  DateTime? @map("acknowledged_at")
+  notificationDue Boolean   @default(true) @map("notification_due")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  node Nodes @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+
+  @@index([nodeUuid, createdAt(sort: Desc)])
+  @@index([acknowledgedAt])
+  @@map("node_geocheck_drift_events")
 }
 
 model UserMeta {

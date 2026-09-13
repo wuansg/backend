@@ -9,10 +9,12 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AxiosService } from '@common/axios/axios.service';
 import { RawCacheService } from '@common/raw-cache';
 import { formatExecutionTime, getTime } from '@common/utils/get-elapsed-time';
+import { stableJsonHash } from '@common/utils/stable-json-hash.util';
 import { CACHE_KEYS, CACHE_KEYS_TTL, EVENTS } from '@libs/contracts/constants';
 
 import { NodeEvent } from '@integration-modules/notifications/interfaces';
 
+import { NodeObservabilityRepository } from '@modules/node-observability';
 import { GetPluginByUuidQuery } from '@modules/node-plugins/queries/get-plugin-by-uuid';
 import { UpdateNodeCommand } from '@modules/nodes/commands/update-node';
 import { GetNodeByUuidQuery } from '@modules/nodes/queries/get-node-by-uuid';
@@ -42,6 +44,7 @@ export class StartNodeProcessor extends WorkerHost {
         private readonly eventEmitter: EventEmitter2,
         private readonly commandBus: CommandBus,
         private readonly rawCacheService: RawCacheService,
+        private readonly nodeObservabilityRepository: NodeObservabilityRepository,
     ) {
         super();
     }
@@ -143,6 +146,11 @@ export class StartNodeProcessor extends WorkerHost {
 
             let pluginError: string | null = null;
             if (force || !isNodePluginInSync(healthResponse.response, plugin)) {
+                await this.nodeObservabilityRepository.markPluginPending(
+                    node.uuid,
+                    plugin?.uuid ?? null,
+                    plugin ? stableJsonHash(plugin.config) : '',
+                );
                 const syncNodePluginsResponse = await this.axios.syncNodePlugins(
                     { plugin },
                     {
@@ -153,8 +161,21 @@ export class StartNodeProcessor extends WorkerHost {
                 );
 
                 if (!syncNodePluginsResponse.isOk) {
+                    await this.nodeObservabilityRepository.markPluginFailure(
+                        node.uuid,
+                        syncNodePluginsResponse.message ?? 'Plugin sync request failed',
+                    );
                     pluginError = `Failed to sync node plugins: ${syncNodePluginsResponse.message}`;
                     this.logger.warn(pluginError);
+                } else {
+                    await this.nodeObservabilityRepository.markPluginResult(
+                        node.uuid,
+                        syncNodePluginsResponse.response,
+                    );
+                    if (!syncNodePluginsResponse.response.accepted) {
+                        pluginError = `Node rejected plugin: ${syncNodePluginsResponse.response.error ?? 'unknown error'}`;
+                        this.logger.warn(pluginError);
+                    }
                 }
             }
 

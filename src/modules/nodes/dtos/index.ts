@@ -15,3 +15,4 @@ export * from './restart-node.request.dto';
 export * from './update-node.dto';
 export * from './node.response.dto';
 export * from './node-forwarding.dto';
+export * from './node-observability.dto';

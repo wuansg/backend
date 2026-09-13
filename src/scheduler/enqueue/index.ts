@@ -1,4 +1,5 @@
 import { ExportNodeConnectionsTask } from './export-node-connections/export-node-connections.task';
+import { ScheduledGeocheckTask } from './geocheck/geocheck.task';
 import { NodeHealthCheckTask } from './node-health-check/node-health-check.task';
 import { RecordNodesUsageTask } from './record-nodes-usage/record-nodes-usage.task';
 import { RecordUserUsageTask } from './record-user-usage/record-user-usage.task';
@@ -11,6 +12,7 @@ export const ENQUEUE_SERVICES = [
     RecordNodesUsageTask,
     NodeHealthCheckTask,
     ExportNodeConnectionsTask,
+    ScheduledGeocheckTask,
     ...RESET_USER_TRAFFIC_TASKS,
     ...USERS_JOBS_TASKS,
     ...SERVICE_JOBS_TASKS,

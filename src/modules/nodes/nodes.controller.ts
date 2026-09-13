@@ -31,7 +31,12 @@ import {
     GetNodeForwardingCommand,
     SyncNodeForwardingCommand,
     UpdateNodeForwardingCommand,
+    GetNodeObservabilityCommand,
+    UpdateNodeGeocheckCommand,
+    AcknowledgeNodeGeocheckDriftCommand,
 } from '@libs/contracts/commands';
+
+import { NodeObservabilityService } from '@modules/node-observability';
 
 import {
     BulkNodesActionsBodyDto,
@@ -57,6 +62,13 @@ import {
     UpdateNodeForwardingParamDto,
     UpdateNodeForwardingBodyDto,
     SyncNodeForwardingParamDto,
+    GetNodeObservabilityParamDto,
+    GetNodeObservabilityResponseDto,
+    UpdateNodeGeocheckParamDto,
+    UpdateNodeGeocheckBodyDto,
+    UpdateNodeGeocheckResponseDto,
+    AcknowledgeNodeGeocheckDriftParamDto,
+    AcknowledgeNodeGeocheckDriftResponseDto,
 } from './dtos';
 import { NodeForwardingService } from './forwarding';
 import { GetAllNodesTagsResponseModel } from './models';
@@ -73,6 +85,7 @@ export class NodesController {
     constructor(
         private readonly nodesService: NodesService,
         private readonly nodeForwardingService: NodeForwardingService,
+        private readonly nodeObservabilityService: NodeObservabilityService,
     ) {}
 
     @Endpoint({
@@ -109,6 +122,48 @@ export class NodesController {
         @Param() param: SyncNodeForwardingParamDto,
     ): Promise<GetNodeForwardingResponseDto> {
         return { response: errorHandler(await this.nodeForwardingService.sync(param.uuid)) };
+    }
+
+    @Endpoint({
+        type: GetNodeObservabilityResponseDto,
+        command: GetNodeObservabilityCommand,
+        httpCode: HttpStatus.OK,
+    })
+    async getNodeObservability(
+        @Param() param: GetNodeObservabilityParamDto,
+    ): Promise<GetNodeObservabilityResponseDto> {
+        return { response: errorHandler(await this.nodeObservabilityService.get(param.uuid)) };
+    }
+
+    @Endpoint({
+        type: UpdateNodeGeocheckResponseDto,
+        command: UpdateNodeGeocheckCommand,
+        httpCode: HttpStatus.OK,
+    })
+    async updateNodeGeocheck(
+        @Param() param: UpdateNodeGeocheckParamDto,
+        @Body() body: UpdateNodeGeocheckBodyDto,
+    ): Promise<UpdateNodeGeocheckResponseDto> {
+        return {
+            response: errorHandler(
+                await this.nodeObservabilityService.updateGeocheck(param.uuid, body),
+            ),
+        };
+    }
+
+    @Endpoint({
+        type: AcknowledgeNodeGeocheckDriftResponseDto,
+        command: AcknowledgeNodeGeocheckDriftCommand,
+        httpCode: HttpStatus.OK,
+    })
+    async acknowledgeNodeGeocheckDrift(
+        @Param() param: AcknowledgeNodeGeocheckDriftParamDto,
+    ): Promise<AcknowledgeNodeGeocheckDriftResponseDto> {
+        return {
+            response: errorHandler(
+                await this.nodeObservabilityService.acknowledgeDrift(param.uuid, param.eventId),
+            ),
+        };
     }
 
     @Endpoint({

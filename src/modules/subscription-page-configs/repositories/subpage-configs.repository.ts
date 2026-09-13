@@ -65,7 +65,7 @@ export class SubscriptionPageConfigRepository implements ICrud<SubscriptionPageC
     ): Promise<SubscriptionPageConfigEntity[]> {
         const model = this.converter.fromEntityToPrismaModel(dto as SubscriptionPageConfigEntity);
         /* eslint-disable @typescript-eslint/no-unused-vars */
-        const { config, ...rest } = model;
+        const { config, tags: _tags, ...rest } = model;
         const list = await this.prisma.tx.subscriptionPageConfig.findMany({
             where: {
                 ...rest,

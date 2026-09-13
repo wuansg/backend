@@ -6,6 +6,7 @@ export class SubscriptionTemplateEntity implements SubscriptionTemplate {
     uuid: string;
     viewPosition: number;
     name: string;
+    tags: string[];
     templateType: TSubscriptionTemplateType;
     templateYaml: string | null;
     templateJson: object | null;
@@ -13,6 +14,7 @@ export class SubscriptionTemplateEntity implements SubscriptionTemplate {
     createdAt: Date;
     updatedAt: Date;
     constructor(config: Partial<SubscriptionTemplate>) {
+        this.tags = [];
         Object.assign(this, config);
         return this;
     }

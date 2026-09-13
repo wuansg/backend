@@ -11,6 +11,7 @@ import { RawCacheService } from '@common/raw-cache';
 import { EXPORT_TO_STREAM_KEYS } from '@libs/contracts/constants';
 import { NODE_CONNECTIONS_STREAM_MESSAGE_VERSION } from '@libs/contracts/models';
 
+import { NodeObservabilityRepository } from '@modules/node-observability';
 import { NodesEntity } from '@modules/nodes';
 import { FindNodesByCriteriaQuery } from '@modules/nodes/queries/find-nodes-by-criteria';
 import { GetNodeByUuidQuery } from '@modules/nodes/queries/get-node-by-uuid';
@@ -33,12 +34,15 @@ export class QueryNodesQueueProcessor extends WorkerHost implements OnApplicatio
     private readonly logger = new Logger(QueryNodesQueueProcessor.name);
     private readonly CONCURRENCY: number;
     private readonly exportToStreamEnabled: boolean;
+    private geocheckActive = 0;
+    private readonly geocheckWaiters: Array<() => void> = [];
 
     constructor(
         private readonly axios: AxiosService,
         private readonly queryBus: QueryBus,
         private readonly rawCacheService: RawCacheService,
         private readonly configService: TypedConfigService,
+        private readonly nodeObservabilityRepository: NodeObservabilityRepository,
     ) {
         super();
         this.CONCURRENCY = 20;
@@ -61,12 +65,25 @@ export class QueryNodesQueueProcessor extends WorkerHost implements OnApplicatio
             case NODES_JOB_NAMES.CONNECTIONS_BY_NODE:
                 return await this.handleConnectionsByNode(job);
             case NODES_JOB_NAMES.GEOCHECK_BY_NODE:
-                return await this.handleGeocheckByNode(job);
+                return await this.withGeocheckPermit(() => this.handleGeocheckByNode(job));
             case NODES_JOB_NAMES.EXPORT_NODE_CONNECTIONS:
                 return await this.handleExportNodeConnectionsJob(job);
             default:
                 this.logger.warn(`Job "${job.name}" is not handled.`);
                 break;
+        }
+    }
+
+    private async withGeocheckPermit<T>(operation: () => Promise<T>): Promise<T> {
+        if (this.geocheckActive >= 3) {
+            await new Promise<void>((resolve) => this.geocheckWaiters.push(resolve));
+        }
+        this.geocheckActive++;
+        try {
+            return await operation();
+        } finally {
+            this.geocheckActive--;
+            this.geocheckWaiters.shift()?.();
         }
     }
 
@@ -224,17 +241,29 @@ export class QueryNodesQueueProcessor extends WorkerHost implements OnApplicatio
 
     private async handleGeocheckByNode(job: Job<IGeocheckPayload>): Promise<IGeocheckJobResult> {
         const { nodeUuid, ip, interface: networkInterface } = job.data;
-        const failed = (message: string): IGeocheckJobResult => ({
-            success: false,
-            nodeUuid,
-            image: null,
-            rawReport: null,
-            message,
-        });
+        const failed = async (message: string): Promise<IGeocheckJobResult> => {
+            const result = {
+                success: false,
+                nodeUuid,
+                image: null,
+                rawReport: null,
+                message,
+            };
+            try {
+                await this.nodeObservabilityRepository.recordGeocheck(
+                    nodeUuid,
+                    { ip, interface: networkInterface },
+                    result,
+                );
+            } catch (error) {
+                this.logger.warn(`Failed to persist geocheck failure for ${nodeUuid}: ${error}`);
+            }
+            return result;
+        };
 
         try {
             const nodeResult = await this.queryBus.execute(new GetNodeByUuidQuery(nodeUuid));
-            if (!nodeResult.isOk) return failed('Node not found.');
+            if (!nodeResult.isOk) return await failed('Node not found.');
             const result = await this.axios.getGeocheck(
                 { ip, interface: networkInterface },
                 {
@@ -243,12 +272,23 @@ export class QueryNodesQueueProcessor extends WorkerHost implements OnApplicatio
                     proxyUrl: nodeResult.response.proxyUrl,
                 },
             );
-            if (!result.isOk) return failed(result.message ?? 'Node did not return a geocheck.');
+            if (!result.isOk)
+                return await failed(result.message ?? 'Node did not return a geocheck.');
             const { image, ...rawReport } = result.response;
-            return { success: true, nodeUuid, image, rawReport, message: null };
+            const response = { success: true, nodeUuid, image, rawReport, message: null };
+            try {
+                await this.nodeObservabilityRepository.recordGeocheck(
+                    nodeUuid,
+                    { ip, interface: networkInterface },
+                    response,
+                );
+            } catch (error) {
+                this.logger.warn(`Failed to persist geocheck result for ${nodeUuid}: ${error}`);
+            }
+            return response;
         } catch (error) {
             this.logger.error(`Failed to fetch geocheck for node ${nodeUuid}: ${error}`);
-            return failed(error instanceof Error ? error.message : String(error));
+            return await failed(error instanceof Error ? error.message : String(error));
         }
     }
 

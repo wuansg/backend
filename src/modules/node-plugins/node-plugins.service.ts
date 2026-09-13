@@ -4,13 +4,17 @@ import { nanoid } from 'nanoid';
 import { Injectable, Logger } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 
+import { AxiosService } from '@common/axios';
 import { fail, ok, TResult } from '@common/types';
+import { stableJsonHash } from '@common/utils/stable-json-hash.util';
 import { GetTorrentBlockerReportsCommand } from '@libs/contracts/commands';
 import { ERRORS } from '@libs/contracts/constants';
 import { NodePluginEditorSchema } from '@libs/node-plugins/models';
 
+import { NodeObservabilityRepository } from '@modules/node-observability';
 import { NodesEntity } from '@modules/nodes/entities/nodes.entity';
 import { FindNodesByCriteriaQuery } from '@modules/nodes/queries/find-nodes-by-criteria';
+import { GetNodeByUuidQuery } from '@modules/nodes/queries/get-node-by-uuid';
 import { GetNodesByPluginUuidQuery } from '@modules/nodes/queries/get-nodes-by-plugin-uuid';
 
 import { NodesQueuesService } from '@queue/_nodes';
@@ -28,7 +32,11 @@ import {} from './models/base-node-plugin.response.model';
 import { NodePluginRepository } from './repositories/node-plugins.repository';
 import { SharedListsRepository } from './repositories/shared-lists.repository';
 import { TorrentBlockerReportsRepository } from './repositories/torrent-blocker-report.repository';
-import { validateSharedListReferences } from './utils';
+import {
+    collectSharedListReferences,
+    injectSharedLists,
+    validateSharedListReferences,
+} from './utils';
 
 @Injectable()
 export class NodePluginService {
@@ -40,6 +48,8 @@ export class NodePluginService {
         private readonly nodeQueuesService: NodesQueuesService,
         private readonly torrentBlockerReportsRepository: TorrentBlockerReportsRepository,
         private readonly queryBus: QueryBus,
+        private readonly axios: AxiosService,
+        private readonly nodeObservabilityRepository: NodeObservabilityRepository,
     ) {}
 
     public async getAllConfigs(): Promise<TResult<GetNodePluginsResponseModel>> {
@@ -241,6 +251,161 @@ export class NodePluginService {
         return ok(true);
     }
 
+    public async previewConfig(input: {
+        uuid?: string;
+        nodeUuid?: string;
+        pluginConfig: Record<string, unknown>;
+    }): Promise<TResult<Record<string, unknown>>> {
+        try {
+            const validated = await NodePluginEditorSchema.safeParseAsync(input.pluginConfig);
+            if (!validated.success) {
+                const message = validated.error.issues
+                    .map((issue) => `${issue.path.join('.') || 'config'}: ${issue.message}`)
+                    .join(', ');
+                return fail(ERRORS.INVALID_NODE_PLUGIN_CONFIG.withMessage(message));
+            }
+
+            const sharedLists = await this.sharedListsRepository.getAllSharedLists();
+            const referenceErrors = validateSharedListReferences(validated.data, sharedLists);
+            if (referenceErrors.length > 0) {
+                return fail(
+                    ERRORS.INVALID_NODE_PLUGIN_CONFIG.withMessage(
+                        `Invalid shared list reference(s): ${referenceErrors.join(', ')}`,
+                    ),
+                );
+            }
+
+            const generatedConfig = injectSharedLists(validated.data, sharedLists);
+            const references = collectSharedListReferences(validated.data);
+            const referencedLists = sharedLists
+                .filter((list) => references.has(list.name))
+                .map((list) => {
+                    const config = list.config as Record<string, unknown>;
+                    return {
+                        name: list.name,
+                        type: config.type,
+                        itemsCount: Array.isArray(config.items) ? config.items.length : 0,
+                    };
+                });
+            const desiredHash = stableJsonHash(generatedConfig);
+            const current = input.uuid
+                ? await this.nodePluginRepository.findByUUID(input.uuid)
+                : null;
+            const currentConfig = current?.pluginConfig ?? {};
+            const affectedNodeUuids = input.uuid
+                ? await this.queryBus.execute(new GetNodesByPluginUuidQuery(input.uuid))
+                : null;
+            const affectedNodes = await Promise.all(
+                (affectedNodeUuids?.isOk ? affectedNodeUuids.response : []).map(async (uuid) => {
+                    const node = await this.queryBus.execute(new GetNodeByUuidQuery(uuid));
+                    return node.isOk
+                        ? {
+                              uuid,
+                              name: node.response.name,
+                              connected: node.response.isConnected,
+                          }
+                        : { uuid, name: uuid, connected: false };
+                }),
+            );
+
+            let compile: Record<string, unknown> | null = null;
+            const compileNodeUuid =
+                input.nodeUuid ?? affectedNodes.find((node) => node.connected)?.uuid;
+            if (compileNodeUuid) {
+                const node = await this.queryBus.execute(new GetNodeByUuidQuery(compileNodeUuid));
+                if (!node.isOk) return fail(ERRORS.NODE_NOT_FOUND);
+                const result = await this.axios.compileNodePlugin(
+                    {
+                        plugin: {
+                            uuid: input.uuid ?? '00000000-0000-0000-0000-000000000000',
+                            name: current?.name ?? 'Unsaved preview',
+                            config: generatedConfig,
+                        },
+                    },
+                    {
+                        address: node.response.address,
+                        port: node.response.port,
+                        proxyUrl: node.response.proxyUrl,
+                    },
+                );
+                compile = result.isOk
+                    ? { supported: true, nodeUuid: compileNodeUuid, ...result.response }
+                    : { supported: false, nodeUuid: compileNodeUuid, error: result.message };
+            }
+
+            const deployments = input.uuid
+                ? await this.nodeObservabilityRepository.getPluginStatus(input.uuid)
+                : [];
+
+            return ok({
+                valid: true,
+                desiredHash,
+                currentSavedHash: current
+                    ? stableJsonHash(injectSharedLists(currentConfig, sharedLists))
+                    : null,
+                diff: diffJson(currentConfig, validated.data),
+                referencedLists,
+                affectedNodes,
+                domainsToResolve: collectEgressDomains(validated.data, sharedLists),
+                deployments: deployments.map(serializeDeployment),
+                compile,
+            });
+        } catch (error) {
+            this.logger.error(error);
+            return fail(ERRORS.INVALID_NODE_PLUGIN_CONFIG.withMessage(String(error)));
+        }
+    }
+
+    public async getPluginStatus(uuid: string): Promise<TResult<Record<string, unknown>>> {
+        try {
+            const plugin = await this.nodePluginRepository.findByUUID(uuid);
+            if (!plugin) return fail(ERRORS.NODE_PLUGIN_NOT_FOUND);
+            const deployments = await this.nodeObservabilityRepository.getPluginStatus(uuid);
+            const referencedLists = [
+                ...collectSharedListReferences(plugin.pluginConfig as Record<string, unknown>),
+            ];
+            return ok({
+                deployments: deployments.map(serializeDeployment),
+                referencedLists,
+            });
+        } catch (error) {
+            this.logger.error(error);
+            return fail(ERRORS.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    public async getSharedListReferences(name: string): Promise<TResult<Record<string, unknown>>> {
+        try {
+            const list = await this.sharedListsRepository.findByName(name);
+            if (!list) return fail(ERRORS.SHARED_LIST_NOT_FOUND);
+            const pluginUuids = await this.nodePluginRepository.getUuidsBySharedListName(name);
+            const plugins = await Promise.all(
+                pluginUuids.map(async (uuid) => {
+                    const [plugin, nodes] = await Promise.all([
+                        this.nodePluginRepository.findByUUID(uuid),
+                        this.queryBus.execute(new GetNodesByPluginUuidQuery(uuid)),
+                    ]);
+                    return {
+                        uuid,
+                        name: plugin?.name ?? uuid,
+                        nodes: nodes.isOk ? nodes.response : [],
+                    };
+                }),
+            );
+            return ok({
+                list: {
+                    name: list.name,
+                    type: (list.config as Record<string, unknown>).type,
+                },
+                plugins,
+                affectedNodeCount: new Set(plugins.flatMap((plugin) => plugin.nodes)).size,
+            });
+        } catch (error) {
+            this.logger.error(error);
+            return fail(ERRORS.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     private async syncNodePlugins(pluginUuid: string): Promise<void> {
         const nodeUuids = await this.queryBus.execute(new GetNodesByPluginUuidQuery(pluginUuid));
 
@@ -376,4 +541,82 @@ export class NodePluginService {
             return fail(ERRORS.INTERNAL_SERVER_ERROR);
         }
     }
+}
+
+function serializeDeployment(deployment: {
+    nodeUuid: string;
+    pluginUuid: string | null;
+    desiredHash: string;
+    appliedHash: string;
+    state: string;
+    lastError: string | null;
+    resolutionState: unknown;
+    lastAttemptAt: Date | null;
+    appliedAt: Date | null;
+    checkedAt: Date;
+    rolledBack: boolean;
+    node: { uuid: string; name: string; isConnected: boolean; countryCode: string };
+}): Record<string, unknown> {
+    return {
+        ...deployment,
+        lastAttemptAt: deployment.lastAttemptAt?.toISOString() ?? null,
+        appliedAt: deployment.appliedAt?.toISOString() ?? null,
+        checkedAt: deployment.checkedAt.toISOString(),
+    };
+}
+
+function diffJson(
+    previous: unknown,
+    current: unknown,
+    path = '$',
+    output: Array<{ path: string; before: unknown; after: unknown }> = [],
+): Array<{ path: string; before: unknown; after: unknown }> {
+    if (output.length >= 200 || Object.is(previous, current)) return output;
+    if (
+        previous &&
+        current &&
+        typeof previous === 'object' &&
+        typeof current === 'object' &&
+        !Array.isArray(previous) &&
+        !Array.isArray(current)
+    ) {
+        const before = previous as Record<string, unknown>;
+        const after = current as Record<string, unknown>;
+        const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+        for (const key of [...keys].sort()) {
+            diffJson(before[key], after[key], `${path}.${key}`, output);
+        }
+        return output;
+    }
+    if (JSON.stringify(previous) !== JSON.stringify(current)) {
+        output.push({ path, before: previous ?? null, after: current ?? null });
+    }
+    return output;
+}
+
+function collectEgressDomains(
+    config: Record<string, unknown>,
+    sharedLists: Array<{ name: string; config: unknown }>,
+): string[] {
+    const egress = isRecord(config.egressFilter) ? config.egressFilter : {};
+    const values = Array.isArray(egress.blockedDomains) ? egress.blockedDomains : [];
+    const lists = new Map(
+        sharedLists.map((list) => [list.name, isRecord(list.config) ? list.config : {}]),
+    );
+    const domains: string[] = [];
+    for (const value of values) {
+        if (typeof value !== 'string') continue;
+        if (!value.startsWith('ext:')) {
+            domains.push(value);
+            continue;
+        }
+        const external = lists.get(value.slice(4));
+        if (external?.type !== 'domainList' || !Array.isArray(external.items)) continue;
+        domains.push(...external.items.filter((item): item is string => typeof item === 'string'));
+    }
+    return [...new Set(domains)].sort();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
 }

@@ -116,6 +116,24 @@ export class ExportMetricsTask {
         public nodeUsageSnapshotLastSuccessTimestampSeconds: Gauge<string>,
         @InjectMetric(METRIC_NAMES.NODE_USAGE_SNAPSHOT_LAST_DURATION_SECONDS)
         public nodeUsageSnapshotLastDurationSeconds: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_PLUGIN_DEPLOYMENT_INFO)
+        public nodePluginDeploymentInfo: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_PLUGIN_DESIRED_MATCH)
+        public nodePluginDesiredMatch: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_PLUGIN_DNS_STALE_DOMAINS)
+        public nodePluginDnsStaleDomains: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_PLUGIN_DNS_RESOLUTION_FAILURES)
+        public nodePluginDnsResolutionFailures: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_FORWARDING_DNS_STALE)
+        public nodeForwardingDnsStale: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_FORWARDING_DNS_FAILURES)
+        public nodeForwardingDnsFailures: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_FORWARDING_DNS_LAST_SUCCESS_TIMESTAMP_SECONDS)
+        public nodeForwardingDnsLastSuccessTimestampSeconds: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_GEOCHECK_UNACKNOWLEDGED_DRIFTS)
+        public nodeGeocheckUnacknowledgedDrifts: Gauge<string>,
+        @InjectMetric(METRIC_NAMES.NODE_GEOCHECK_LAST_SUCCESS_TIMESTAMP_SECONDS)
+        public nodeGeocheckLastSuccessTimestampSeconds: Gauge<string>,
         @InjectMetric(METRIC_NAMES.TELEGRAM_TARGET_CONFIGURED)
         public telegramTargetConfigured: Gauge<string>,
         @InjectMetric(METRIC_NAMES.TELEGRAM_TARGET_AVAILABLE)
@@ -145,6 +163,7 @@ export class ExportMetricsTask {
             await this.reportNodesStats();
             await this.reportRuntimeMetrics();
             await this.reportUsageSnapshotStats();
+            await this.reportNodeObservabilityStats();
             await this.reportTelegramTargetStats();
         } catch (error) {
             this.logger.error(`Error in ExportMetricsTask: ${error}`);
@@ -209,6 +228,9 @@ export class ExportMetricsTask {
 
             this.nodeBasicInfo.reset();
             this.nodeSystemInfo.reset();
+            this.nodeForwardingDnsStale.reset();
+            this.nodeForwardingDnsFailures.reset();
+            this.nodeForwardingDnsLastSuccessTimestampSeconds.reset();
 
             const nodesSystemStats = await this.queryBus.execute(
                 new GetNodesSystemStatsQuery(nodes.map((node) => ({ uuid: node.uuid }))),
@@ -299,6 +321,27 @@ export class ExportMetricsTask {
                             );
                         } else {
                             this.removeNodeSystemMetrics(baseNodeLabels);
+                        }
+
+                        const forwarding = nodeSystemStats.runtimeStatus?.forwarding;
+                        if (forwarding) {
+                            this.nodeForwardingDnsStale.set(
+                                baseNodeLabels,
+                                forwarding.dnsStale ? 1 : 0,
+                            );
+                            this.nodeForwardingDnsFailures.set(
+                                baseNodeLabels,
+                                forwarding.dnsFailureCount ?? 0,
+                            );
+                            if (forwarding.dnsLastResolvedAt) {
+                                const timestamp = Date.parse(forwarding.dnsLastResolvedAt);
+                                if (Number.isFinite(timestamp)) {
+                                    this.nodeForwardingDnsLastSuccessTimestampSeconds.set(
+                                        baseNodeLabels,
+                                        timestamp / 1_000,
+                                    );
+                                }
+                            }
                         }
                     } else {
                         this.removeNodeSystemMetrics(baseNodeLabels);
@@ -450,6 +493,68 @@ export class ExportMetricsTask {
         });
     }
 
+    private async reportNodeObservabilityStats() {
+        const [deployments, driftGroups, latestGeochecks] = await Promise.all([
+            this.prisma.nodePluginDeployment.findMany(),
+            this.prisma.nodeGeocheckDriftEvent.groupBy({
+                by: ['nodeUuid'],
+                where: { acknowledgedAt: null },
+                _count: { _all: true },
+            }),
+            this.prisma.nodeGeocheckHistory.findMany({
+                where: { success: true },
+                distinct: ['nodeUuid'],
+                orderBy: [{ nodeUuid: 'asc' }, { createdAt: 'desc' }],
+                select: { nodeUuid: true, createdAt: true },
+            }),
+        ]);
+
+        this.nodePluginDeploymentInfo.reset();
+        this.nodePluginDesiredMatch.reset();
+        this.nodePluginDnsStaleDomains.reset();
+        this.nodePluginDnsResolutionFailures.reset();
+        this.nodeGeocheckUnacknowledgedDrifts.reset();
+        this.nodeGeocheckLastSuccessTimestampSeconds.reset();
+
+        for (const deployment of deployments) {
+            const labels = { node_uuid: deployment.nodeUuid };
+            this.nodePluginDeploymentInfo.set(
+                {
+                    ...labels,
+                    plugin_uuid: deployment.pluginUuid ?? '',
+                    state: deployment.state,
+                },
+                1,
+            );
+            this.nodePluginDesiredMatch.set(
+                labels,
+                deployment.desiredHash === deployment.appliedHash ? 1 : 0,
+            );
+            const resolutions = readResolutionState(deployment.resolutionState);
+            this.nodePluginDnsStaleDomains.set(
+                labels,
+                resolutions.filter((entry) => entry.stale).length,
+            );
+            this.nodePluginDnsResolutionFailures.set(
+                labels,
+                resolutions.reduce((sum, entry) => sum + entry.failureCount, 0),
+            );
+        }
+
+        for (const group of driftGroups) {
+            this.nodeGeocheckUnacknowledgedDrifts.set(
+                { node_uuid: group.nodeUuid },
+                group._count._all,
+            );
+        }
+        for (const item of latestGeochecks) {
+            this.nodeGeocheckLastSuccessTimestampSeconds.set(
+                { node_uuid: item.nodeUuid },
+                item.createdAt.getTime() / 1_000,
+            );
+        }
+    }
+
     private removeNodeSystemMetrics(baseNodeLabels: INodeMetricLabel) {
         this.nodeMemoryTotalBytes.remove({ node_uuid: baseNodeLabels.node_uuid });
         this.nodeMemoryFreeBytes.remove({ node_uuid: baseNodeLabels.node_uuid });
@@ -463,4 +568,21 @@ export class ExportMetricsTask {
         this.nodeCpuLoadAvg5m.remove({ node_uuid: baseNodeLabels.node_uuid });
         this.nodeCpuLoadAvg15m.remove({ node_uuid: baseNodeLabels.node_uuid });
     }
+}
+
+function readResolutionState(value: unknown): Array<{ stale: boolean; failureCount: number }> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+    return Object.values(value as Record<string, unknown>).map((entry) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+            return { stale: false, failureCount: 0 };
+        }
+        const record = entry as Record<string, unknown>;
+        return {
+            stale: record.stale === true,
+            failureCount:
+                typeof record.failureCount === 'number' && Number.isFinite(record.failureCount)
+                    ? record.failureCount
+                    : 0,
+        };
+    });
 }
