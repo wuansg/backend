@@ -17,6 +17,9 @@ export const NodeRuntimeStatusSchema = z.object({
             configuredRules: z.number().int().nonnegative(),
             enabledRules: z.number().int().nonnegative(),
             dnsResults: z.record(z.string(), z.string()),
+            dnsStale: z.boolean().optional(),
+            dnsLastResolvedAt: z.iso.datetime().nullable().optional(),
+            dnsFailureCount: z.number().int().nonnegative().optional(),
         })
         .nullable(),
     usageSnapshot: z

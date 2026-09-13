@@ -7,3 +7,6 @@ export * from './get-node.command';
 export * from './forwarding';
 export * from './tags';
 export * from './update.command';
+export * from './get-node-observability.command';
+export * from './update-node-geocheck.command';
+export * from './acknowledge-node-geocheck-drift.command';

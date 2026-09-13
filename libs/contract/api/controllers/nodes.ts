@@ -16,6 +16,13 @@ export const NODES_ROUTES = {
         SYNC: (uuid: string) => `${uuid}/forwarding/${NODE_ACTIONS_ROUTE}/sync`,
     },
 
+    OBSERVABILITY: {
+        GET: (uuid: string) => `${uuid}/observability`,
+        UPDATE_GEOCHECK: (uuid: string) => `${uuid}/observability/geocheck`,
+        ACK_DRIFT: (uuid: string, eventId: string) =>
+            `${uuid}/observability/geocheck/drift/${eventId}/ack`,
+    },
+
     ACTIONS: {
         ENABLE: (uuid: string) => `${uuid}/${NODE_ACTIONS_ROUTE}/enable`,
         DISABLE: (uuid: string) => `${uuid}/${NODE_ACTIONS_ROUTE}/disable`,

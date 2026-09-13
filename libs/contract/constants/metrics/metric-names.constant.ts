@@ -42,6 +42,16 @@ export const METRIC_NAMES = {
     NODE_USAGE_SNAPSHOT_LAST_SUCCESS_TIMESTAMP_SECONDS:
         'node_usage_snapshot_last_success_timestamp_seconds',
     NODE_USAGE_SNAPSHOT_LAST_DURATION_SECONDS: 'node_usage_snapshot_last_duration_seconds',
+    NODE_PLUGIN_DEPLOYMENT_INFO: 'node_plugin_deployment_info',
+    NODE_PLUGIN_DESIRED_MATCH: 'node_plugin_desired_hash_match',
+    NODE_PLUGIN_DNS_STALE_DOMAINS: 'node_plugin_dns_stale_domains',
+    NODE_PLUGIN_DNS_RESOLUTION_FAILURES: 'node_plugin_dns_resolution_failures',
+    NODE_FORWARDING_DNS_STALE: 'node_forwarding_dns_stale',
+    NODE_FORWARDING_DNS_FAILURES: 'node_forwarding_dns_failures',
+    NODE_FORWARDING_DNS_LAST_SUCCESS_TIMESTAMP_SECONDS:
+        'node_forwarding_dns_last_success_timestamp_seconds',
+    NODE_GEOCHECK_UNACKNOWLEDGED_DRIFTS: 'node_geocheck_unacknowledged_drifts',
+    NODE_GEOCHECK_LAST_SUCCESS_TIMESTAMP_SECONDS: 'node_geocheck_last_success_timestamp_seconds',
     NODE_NETWORK_TX_BYTES_TOTAL: 'node_network_tx_bytes_total',
     NODE_MEMORY_TOTAL_BYTES: 'node_memory_total_bytes',
     NODE_MEMORY_FREE_BYTES: 'node_memory_free_bytes',

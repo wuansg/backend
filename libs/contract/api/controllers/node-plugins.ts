@@ -18,7 +18,9 @@ export const NODE_PLUGINS_ROUTES = {
         REORDER: `${ACTIONS_ROUTE}/reorder`,
         CLONE: `${ACTIONS_ROUTE}/clone`,
         SYNC: `${ACTIONS_ROUTE}/sync`,
+        PREVIEW: `${ACTIONS_ROUTE}/preview`,
     },
+    STATUS: (uuid: string) => `${uuid}/status`,
 
     EXECUTOR: 'executor',
 
@@ -36,5 +38,7 @@ export const NODE_PLUGINS_ROUTES = {
         ACTIONS: {
             SYNC: `${SHARED_LISTS_ROUTE}/${ACTIONS_ROUTE}/sync`,
         },
+        REFERENCES: (name: string) =>
+            `${SHARED_LISTS_ROUTE}/${encodeSharedListName(name)}/references`,
     },
 } as const;

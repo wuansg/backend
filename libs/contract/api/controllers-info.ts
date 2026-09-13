@@ -1,4 +1,9 @@
 export const CONTROLLERS_INFO = {
+    MANAGEMENT: {
+        tag: 'Management Catalog Controller',
+        description: 'Quick Open and generic entity organization.',
+        resource: 'management',
+    },
     USERS: {
         tag: 'Users Controller',
         description: 'Manage users, change their status, reset traffic, etc.',
