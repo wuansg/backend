@@ -10,7 +10,7 @@ export namespace GetNodeObservabilityCommand {
         NODES_ROUTES.OBSERVABILITY.GET(':uuid'),
         'get',
         'Get Node network and Geocheck observability',
-        { scope: 'observability', kind: 'read' },
+        { scope: 'get-observability', kind: 'read' },
     );
     export const RequestParamSchema = z.object({ uuid: z.uuid() });
     export const ResponseSchema = z.object({ response: z.record(z.string(), z.unknown()) });

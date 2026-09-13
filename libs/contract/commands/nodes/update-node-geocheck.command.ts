@@ -10,7 +10,7 @@ export namespace UpdateNodeGeocheckCommand {
         NODES_ROUTES.OBSERVABILITY.UPDATE_GEOCHECK(':uuid'),
         'patch',
         'Update scheduled Geocheck settings',
-        { scope: 'observability', kind: 'write' },
+        { scope: 'update-geocheck', kind: 'write' },
     );
     export const RequestParamSchema = z.object({ uuid: z.uuid() });
     export const RequestBodySchema = z.object({

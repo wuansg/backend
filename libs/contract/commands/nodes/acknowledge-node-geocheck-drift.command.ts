@@ -10,7 +10,7 @@ export namespace AcknowledgeNodeGeocheckDriftCommand {
         NODES_ROUTES.OBSERVABILITY.ACK_DRIFT(':uuid', ':eventId'),
         'post',
         'Acknowledge Node Geocheck drift',
-        { scope: 'observability', kind: 'write' },
+        { scope: 'acknowledge-geocheck-drift', kind: 'write' },
     );
     export const RequestParamSchema = z.object({
         uuid: z.uuid(),

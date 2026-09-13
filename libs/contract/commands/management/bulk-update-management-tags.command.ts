@@ -11,7 +11,7 @@ export namespace BulkUpdateManagementTagsCommand {
         MANAGEMENT_ROUTES.TAGS(':type'),
         'patch',
         'Bulk update entity tags',
-        { scope: 'tags', kind: 'write' },
+        { scope: 'bulk-update-tags', kind: 'write' },
     );
     export const RequestParamSchema = z.object({ type: TaggableManagementEntityTypeSchema });
     export const RequestBodySchema = z.object({

@@ -11,7 +11,7 @@ export namespace UpdateManagementTagsCommand {
         MANAGEMENT_ROUTES.ENTITY_TAGS(':type', ':uuid'),
         'patch',
         'Update entity tags',
-        { scope: 'tags', kind: 'write' },
+        { scope: 'update-tags', kind: 'write' },
     );
     export const RequestParamSchema = z.object({
         type: TaggableManagementEntityTypeSchema,

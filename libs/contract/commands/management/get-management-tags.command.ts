@@ -11,7 +11,7 @@ export namespace GetManagementTagsCommand {
         MANAGEMENT_ROUTES.TAGS(':type'),
         'get',
         'Get entity tags',
-        { scope: 'tags', kind: 'read' },
+        { scope: 'list-tags', kind: 'read' },
     );
     export const RequestParamSchema = z.object({ type: TaggableManagementEntityTypeSchema });
     export const ResponseSchema = z.object({ response: z.object({ tags: z.array(z.string()) }) });
