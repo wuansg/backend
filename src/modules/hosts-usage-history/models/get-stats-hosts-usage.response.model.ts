@@ -25,6 +25,8 @@ export class GetStatsHostsUsageResponseModel {
         data: number[];
     }[];
     public readonly sparklineData: number[];
+    public readonly uploadSparklineData: number[];
+    public readonly downloadSparklineData: number[];
     public readonly topHosts: {
         uuid: string;
         groupKey: string;
@@ -49,6 +51,8 @@ export class GetStatsHostsUsageResponseModel {
         categories: string[];
         series: IGetHostsUsageByRange[];
         sparklineData: number[];
+        uploadSparklineData?: number[];
+        downloadSparklineData?: number[];
         topHosts: ITopHost[];
     }) {
         this.categories = data.categories;
@@ -68,6 +72,8 @@ export class GetStatsHostsUsageResponseModel {
             data: item.data.map((item) => Number(item)),
         }));
         this.sparklineData = data.sparklineData;
+        this.uploadSparklineData = data.uploadSparklineData ?? [];
+        this.downloadSparklineData = data.downloadSparklineData ?? [];
         this.topHosts = data.topHosts.map((item) => ({
             uuid: item.uuid,
             groupKey: item.groupKey,

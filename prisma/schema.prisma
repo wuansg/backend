@@ -87,8 +87,12 @@ model Users {
 model UserTraffic {
   id BigInt @id @map("id")
 
-  usedTrafficBytes         BigInt @default(0) @map("used_traffic_bytes")
-  lifetimeUsedTrafficBytes BigInt @default(0) @map("lifetime_used_traffic_bytes")
+  usedTrafficBytes             BigInt @default(0) @map("used_traffic_bytes")
+  lifetimeUsedTrafficBytes     BigInt @default(0) @map("lifetime_used_traffic_bytes")
+  usedUploadTrafficBytes       BigInt @default(0) @map("used_upload_traffic_bytes")
+  usedDownloadTrafficBytes     BigInt @default(0) @map("used_download_traffic_bytes")
+  lifetimeUploadTrafficBytes   BigInt @default(0) @map("lifetime_upload_traffic_bytes")
+  lifetimeDownloadTrafficBytes BigInt @default(0) @map("lifetime_download_traffic_bytes")
 
   onlineAt              DateTime? @map("online_at")
   lastConnectedNodeUuid String?   @map("last_connected_node_uuid") @db.Uuid
@@ -276,7 +280,9 @@ model NodesUserUsageHistory {
   nodeId BigInt @map("node_id")
   userId BigInt @map("user_id")
 
-  totalBytes BigInt @map("total_bytes")
+  uploadBytes   BigInt @default(0) @map("upload_bytes")
+  downloadBytes BigInt @default(0) @map("download_bytes")
+  totalBytes    BigInt @map("total_bytes")
 
   createdAt DateTime @default(dbgenerated("CURRENT_DATE")) @map("created_at") @db.Date
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")

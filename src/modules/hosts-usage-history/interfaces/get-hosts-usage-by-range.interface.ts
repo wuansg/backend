@@ -37,5 +37,7 @@ export interface IHostUsageMember {
 export interface ITopHostUser {
     userId: bigint;
     username: string;
+    upload: bigint;
+    download: bigint;
     total: bigint;
 }

@@ -14,6 +14,8 @@ const entityToModel = (entity: NodesUserUsageHistoryEntity): NodesUserUsageHisto
     return {
         nodeId: entity.nodeId,
         userId: entity.userId,
+        uploadBytes: entity.uploadBytes,
+        downloadBytes: entity.downloadBytes,
         totalBytes: entity.totalBytes,
         createdAt: entity.createdAt,
         updatedAt: entity.updatedAt,

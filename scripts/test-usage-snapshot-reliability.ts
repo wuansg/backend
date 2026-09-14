@@ -23,6 +23,7 @@ async function main() {
                 { kind: 'inbound', name: 'anytls', direction: 'uplink', value: 100 },
                 { kind: 'inbound', name: 'anytls', direction: 'downlink', value: 200 },
                 { kind: 'outbound', name: 'direct', direction: 'uplink', value: 300 },
+                { kind: 'user', name: '42', direction: 'uplink', value: 1_001 },
                 { kind: 'user', name: '42', direction: 'downlink', value: 9_999 },
             ],
         },
@@ -117,10 +118,23 @@ async function main() {
     assert.deepEqual(batch.users, [
         {
             userId: 42n,
-            total: 9_999n,
-            multipliedTotal: 14_998n,
+            upload: 1_001n,
+            download: 9_999n,
+            total: 11_000n,
+            multipliedUpload: 1_501n,
+            multipliedDownload: 14_999n,
+            multipliedTotal: 16_500n,
             firstCapturedAt: new Date('2026-08-11T15:00:00.000Z'),
             lastCapturedAt: new Date('2026-08-11T15:00:00.000Z'),
+        },
+    ]);
+    assert.deepEqual(batch.userDays, [
+        {
+            userId: 42n,
+            day: new Date('2026-08-11T00:00:00.000Z'),
+            upload: 1_001n,
+            download: 9_999n,
+            total: 11_000n,
         },
     ]);
     assert.deepEqual(batch.hosts, [
@@ -135,7 +149,7 @@ async function main() {
             userId: 42n,
             tag: 'anytls',
             hour: new Date('2026-08-11T15:00:00.000Z'),
-            usage: { uplink: 0n, downlink: 9_999n },
+            usage: { uplink: 1_001n, downlink: 9_999n },
         },
     ]);
 

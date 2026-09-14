@@ -9,8 +9,6 @@ import { TxKyselyService } from '@common/database/tx-kysely.service';
 import { getKyselyUuid } from '@common/helpers';
 import { ICrudHistoricalRecords } from '@common/types/crud-port';
 
-import { IGetNodesUsageByRange } from '@modules/nodes-usage-history/interfaces';
-
 import { BulkUpsertHistoryEntryBuilder } from '../builders/bulk-upsert-history-entry/bulk-upsert-history-entry.builder';
 import { NodesUserUsageHistoryEntity } from '../entities/nodes-user-usage-history.entity';
 import {
@@ -90,7 +88,7 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         start: Date,
         end: Date,
         dates: string[],
-    ): Promise<IGetNodesUsageByRange[]> {
+    ): Promise<IGetUniversalSeries[]> {
         const query = Prisma.sql`
             WITH daily_usage AS (
                 SELECT
@@ -98,7 +96,9 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                     n.name,
                     n.country_code,
                     nuh.created_at::date AS date,
-                    SUM(nuh.total_bytes) AS bytes
+                    SUM(nuh.upload_bytes) AS upload_bytes,
+                    SUM(nuh.download_bytes) AS download_bytes,
+                    SUM(nuh.total_bytes) AS total_bytes
                 FROM nodes n
                 INNER JOIN nodes_user_usage_history nuh ON nuh.node_id = n.id
                 WHERE
@@ -112,7 +112,9 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                     uuid,
                     name,
                     country_code,
-                    SUM(bytes) AS total_bytes
+                    SUM(upload_bytes) AS upload_bytes,
+                    SUM(download_bytes) AS download_bytes,
+                    SUM(total_bytes) AS total_bytes
                 FROM daily_usage
                 GROUP BY uuid, name, country_code
             )
@@ -120,9 +122,19 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 nt.uuid as "uuid",
                 nt.name as "name",
                 nt.country_code as "countryCode",
+                nt.upload_bytes as "upload",
+                nt.download_bytes as "download",
                 nt.total_bytes as "total",
                 ARRAY_AGG(
-                    COALESCE(du.bytes, 0)
+                    COALESCE(du.upload_bytes, 0)
+                    ORDER BY d.ord
+                ) AS "uploadData",
+                ARRAY_AGG(
+                    COALESCE(du.download_bytes, 0)
+                    ORDER BY d.ord
+                ) AS "downloadData",
+                ARRAY_AGG(
+                    COALESCE(du.total_bytes, 0)
                     ORDER BY d.ord
                 ) AS "data"
             FROM nodes_with_totals nt
@@ -130,7 +142,7 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
             LEFT JOIN daily_usage du
                 ON du.uuid = nt.uuid
                 AND du.date = d.date::date
-            GROUP BY nt.uuid, nt.name, nt.country_code, nt.total_bytes
+            GROUP BY nt.uuid, nt.name, nt.country_code, nt.upload_bytes, nt.download_bytes, nt.total_bytes
             ORDER BY nt.total_bytes DESC;
         `;
 
@@ -150,6 +162,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 'n.uuid',
                 'n.name',
                 'n.countryCode',
+                (eb) => eb.fn.sum<bigint>('nuh.uploadBytes').as('upload'),
+                (eb) => eb.fn.sum<bigint>('nuh.downloadBytes').as('download'),
                 (eb) => eb.fn.sum<bigint>('nuh.totalBytes').as('total'),
             ])
             .where('nuh.userId', '=', userId)
@@ -166,12 +180,14 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         start: Date,
         end: Date,
         dates: string[],
-    ): Promise<number[]> {
+    ): Promise<{ total: number[]; upload: number[]; download: number[] }> {
         const query = Prisma.sql`
             WITH daily_traffic AS (
                 SELECT 
                     created_at::date AS date,
-                    SUM(total_bytes) AS bytes
+                    SUM(upload_bytes) AS upload_bytes,
+                    SUM(download_bytes) AS download_bytes,
+                    SUM(total_bytes) AS total_bytes
                 FROM nodes_user_usage_history
                 WHERE 
                     user_id = ${userId}
@@ -180,14 +196,19 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 GROUP BY created_at
             )
             SELECT 
-                COALESCE(dt.bytes, 0) AS value
+                COALESCE(dt.upload_bytes, 0) AS upload,
+                COALESCE(dt.download_bytes, 0) AS download,
+                COALESCE(dt.total_bytes, 0) AS total
             FROM unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
             LEFT JOIN daily_traffic dt ON dt.date = d.date::date
             ORDER BY d.ord;
         `;
 
-        const result = await this.prisma.tx.$queryRaw<Array<{ value: bigint }>>(query);
-        return result.map((item) => Number(item.value));
+        const result =
+            await this.prisma.tx.$queryRaw<
+                Array<{ upload: bigint; download: bigint; total: bigint }>
+            >(query);
+        return mapDirectionalDailyUsage(result);
     }
 
     public async getNewUsersTrafficByRange(start: Date, endExclusive: Date): Promise<bigint> {
@@ -220,6 +241,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
             .select([
                 'u.id as userId',
                 'u.username',
+                (eb) => eb.fn.sum<bigint>('nuh.uploadBytes').as('upload'),
+                (eb) => eb.fn.sum<bigint>('nuh.downloadBytes').as('download'),
                 (eb) => eb.fn.sum<bigint>('nuh.totalBytes').as('total'),
             ])
             .where('nuh.nodeId', '=', nodeId)
@@ -236,12 +259,14 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         start: Date,
         end: Date,
         dates: string[],
-    ): Promise<number[]> {
+    ): Promise<{ total: number[]; upload: number[]; download: number[] }> {
         const query = Prisma.sql`
         WITH daily_traffic AS (
             SELECT 
                 created_at::date AS date,
-                SUM(total_bytes) AS bytes
+                SUM(upload_bytes) AS upload_bytes,
+                SUM(download_bytes) AS download_bytes,
+                SUM(total_bytes) AS total_bytes
             FROM nodes_user_usage_history
             WHERE 
                 node_id = ${nodeId}
@@ -250,14 +275,19 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
             GROUP BY created_at
         )
         SELECT 
-            COALESCE(dt.bytes, 0) AS value
+            COALESCE(dt.upload_bytes, 0) AS upload,
+            COALESCE(dt.download_bytes, 0) AS download,
+            COALESCE(dt.total_bytes, 0) AS total
         FROM unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
         LEFT JOIN daily_traffic dt ON dt.date = d.date::date
         ORDER BY d.ord;
     `;
 
-        const result = await this.prisma.tx.$queryRaw<Array<{ value: bigint }>>(query);
-        return result.map((item) => Number(item.value));
+        const result =
+            await this.prisma.tx.$queryRaw<
+                Array<{ upload: bigint; download: bigint; total: bigint }>
+            >(query);
+        return mapDirectionalDailyUsage(result);
     }
 
     public async getNodesDailyTrafficSum(
@@ -265,12 +295,14 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         start: Date,
         end: Date,
         dates: string[],
-    ): Promise<number[]> {
+    ): Promise<{ total: number[]; upload: number[]; download: number[] }> {
         const query = Prisma.sql`
         WITH daily_traffic AS (
             SELECT 
                 created_at::date AS date,
-                SUM(total_bytes) AS bytes
+                SUM(upload_bytes) AS upload_bytes,
+                SUM(download_bytes) AS download_bytes,
+                SUM(total_bytes) AS total_bytes
             FROM nodes_user_usage_history
             WHERE 
                 node_id IN (${Prisma.join(nodeIds)})
@@ -279,14 +311,19 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
             GROUP BY created_at
         )
         SELECT 
-            COALESCE(dt.bytes, 0) AS value
+            COALESCE(dt.upload_bytes, 0) AS upload,
+            COALESCE(dt.download_bytes, 0) AS download,
+            COALESCE(dt.total_bytes, 0) AS total
         FROM unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
         LEFT JOIN daily_traffic dt ON dt.date = d.date::date
         ORDER BY d.ord;
     `;
 
-        const result = await this.prisma.tx.$queryRaw<Array<{ value: bigint }>>(query);
-        return result.map((item) => Number(item.value));
+        const result =
+            await this.prisma.tx.$queryRaw<
+                Array<{ upload: bigint; download: bigint; total: bigint }>
+            >(query);
+        return mapDirectionalDailyUsage(result);
     }
 
     public async getTopNodesUsersByTraffic(
@@ -301,6 +338,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
             .select([
                 'u.id as userId',
                 'u.username',
+                (eb) => eb.fn.sum<bigint>('nuh.uploadBytes').as('upload'),
+                (eb) => eb.fn.sum<bigint>('nuh.downloadBytes').as('download'),
                 (eb) => eb.fn.sum<bigint>('nuh.totalBytes').as('total'),
             ])
             .where('nuh.nodeId', 'in', nodeIds)
@@ -316,12 +355,14 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         start: Date,
         end: Date,
         dates: string[],
-    ): Promise<number[]> {
+    ): Promise<{ total: number[]; upload: number[]; download: number[] }> {
         const query = Prisma.sql`
             WITH daily_traffic AS (
                 SELECT
                     created_at::date AS date,
-                    SUM(total_bytes) AS bytes
+                    SUM(upload_bytes) AS upload_bytes,
+                    SUM(download_bytes) AS download_bytes,
+                    SUM(total_bytes) AS total_bytes
                 FROM nodes_user_usage_history
                 WHERE
                     created_at >= ${start}::date
@@ -329,14 +370,19 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 GROUP BY created_at::date
             )
             SELECT
-                COALESCE(dt.bytes, 0) AS value
+                COALESCE(dt.upload_bytes, 0) AS upload,
+                COALESCE(dt.download_bytes, 0) AS download,
+                COALESCE(dt.total_bytes, 0) AS total
             FROM unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
             LEFT JOIN daily_traffic dt ON dt.date = d.date::date
             ORDER BY d.ord;
         `;
 
-        const result = await this.prisma.tx.$queryRaw<Array<{ value: bigint }>>(query);
-        return result.map((item) => Number(item.value));
+        const result =
+            await this.prisma.tx.$queryRaw<
+                Array<{ upload: bigint; download: bigint; total: bigint }>
+            >(query);
+        return mapDirectionalDailyUsage(result);
     }
 
     public async getTopUsersByTraffic(
@@ -350,6 +396,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
             .select([
                 'u.id as userId',
                 'u.username',
+                (eb) => eb.fn.sum<bigint>('nuh.uploadBytes').as('upload'),
+                (eb) => eb.fn.sum<bigint>('nuh.downloadBytes').as('download'),
                 (eb) => eb.fn.sum<bigint>('nuh.totalBytes').as('total'),
             ])
             .where('nuh.createdAt', '>=', start)
@@ -372,7 +420,9 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                     u.id,
                     u.username,
                     nuh.created_at::date AS date,
-                    SUM(nuh.total_bytes) AS bytes
+                    SUM(nuh.upload_bytes) AS upload_bytes,
+                    SUM(nuh.download_bytes) AS download_bytes,
+                    SUM(nuh.total_bytes) AS total_bytes
                 FROM users u
                 INNER JOIN nodes_user_usage_history nuh ON nuh.user_id = u.id
                 WHERE
@@ -384,7 +434,9 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 SELECT
                     id,
                     username,
-                    SUM(bytes) AS total_bytes
+                    SUM(upload_bytes) AS upload_bytes,
+                    SUM(download_bytes) AS download_bytes,
+                    SUM(total_bytes) AS total_bytes
                 FROM daily_usage
                 GROUP BY id, username
             ),
@@ -392,6 +444,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 SELECT
                     id,
                     username,
+                    upload_bytes,
+                    download_bytes,
                     total_bytes
                 FROM users_with_totals
                 ORDER BY total_bytes DESC
@@ -400,9 +454,19 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
             SELECT
                 lu.id as "id",
                 lu.username as "username",
+                lu.upload_bytes as "upload",
+                lu.download_bytes as "download",
                 lu.total_bytes as "total",
                 ARRAY_AGG(
-                    COALESCE(du.bytes, 0)
+                    COALESCE(du.upload_bytes, 0)
+                    ORDER BY d.ord
+                ) AS "uploadData",
+                ARRAY_AGG(
+                    COALESCE(du.download_bytes, 0)
+                    ORDER BY d.ord
+                ) AS "downloadData",
+                ARRAY_AGG(
+                    COALESCE(du.total_bytes, 0)
                     ORDER BY d.ord
                 ) AS "data"
             FROM limited_users lu
@@ -410,7 +474,7 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
             LEFT JOIN daily_usage du
                 ON du.id = lu.id
                 AND du.date = d.date::date
-            GROUP BY lu.id, lu.username, lu.total_bytes
+            GROUP BY lu.id, lu.username, lu.upload_bytes, lu.download_bytes, lu.total_bytes
             ORDER BY lu.total_bytes DESC;
         `;
 
@@ -449,6 +513,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
             .select((eb) => [
                 'h.nodeId as nodeId',
                 'h.userId as userId',
+                eb.fn.sum('h.uploadBytes').as('uploadBytes'),
+                eb.fn.sum('h.downloadBytes').as('downloadBytes'),
                 eb.fn.sum('h.totalBytes').as('totalBytes'),
             ])
             .execute();
@@ -463,10 +529,22 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
             }
             group.users.push({
                 id: Number(row.userId),
+                uploadBytes: Number(row.uploadBytes),
+                downloadBytes: Number(row.downloadBytes),
                 totalBytes: Number(row.totalBytes),
             });
         }
 
         return { nodes: [...byNode.values()] };
     }
+}
+
+function mapDirectionalDailyUsage(
+    rows: Array<{ upload: bigint; download: bigint; total: bigint }>,
+): { total: number[]; upload: number[]; download: number[] } {
+    return {
+        total: rows.map((item) => Number(item.total)),
+        upload: rows.map((item) => Number(item.upload)),
+        download: rows.map((item) => Number(item.download)),
+    };
 }

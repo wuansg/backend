@@ -109,7 +109,9 @@ export class HostsUsageHistoryService {
                 new GetStatsHostsUsageResponseModel({
                     categories: dates,
                     series: hostsUsage,
-                    sparklineData: dailyTraffic,
+                    sparklineData: dailyTraffic.total,
+                    uploadSparklineData: dailyTraffic.upload,
+                    downloadSparklineData: dailyTraffic.download,
                     topHosts,
                 }),
             );
@@ -153,7 +155,9 @@ export class HostsUsageHistoryService {
             return ok(
                 new GetStatsHostUsersUsageResponseModel({
                     categories: dates,
-                    sparklineData: dailyTraffic,
+                    sparklineData: dailyTraffic.total,
+                    uploadSparklineData: dailyTraffic.upload,
+                    downloadSparklineData: dailyTraffic.download,
                     topUsers,
                 }),
             );

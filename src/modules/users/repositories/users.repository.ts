@@ -93,6 +93,10 @@ export class UsersRepository {
                     create: {
                         usedTrafficBytes: 0,
                         lifetimeUsedTrafficBytes: 0,
+                        usedUploadTrafficBytes: 0,
+                        usedDownloadTrafficBytes: 0,
+                        lifetimeUploadTrafficBytes: 0,
+                        lifetimeDownloadTrafficBytes: 0,
                     },
                 },
                 activeInternalSquads: {
@@ -109,7 +113,7 @@ export class UsersRepository {
     }
 
     public async bulkIncrementUsedTraffic(
-        userUsageList: { u: string; b: string; n: string }[],
+        userUsageList: { u: string; b: string; up?: string; down?: string; n: string }[],
     ): Promise<{ id: bigint }[]> {
         const { query } = new BulkUpdateUserUsedTrafficBuilder(userUsageList);
         const result = await this.prisma.tx.$queryRaw<{ id: bigint }[]>(query);
@@ -136,6 +140,8 @@ export class UsersRepository {
                 traffic: {
                     update: {
                         usedTrafficBytes: 0,
+                        usedUploadTrafficBytes: 0,
+                        usedDownloadTrafficBytes: 0,
                     },
                 },
             },
@@ -663,7 +669,11 @@ export class UsersRepository {
                 .updateTable('userTraffic')
                 .from('updateUsers')
                 .whereRef('userTraffic.id', '=', 'updateUsers.id')
-                .set({ usedTrafficBytes: 0n })
+                .set({
+                    usedTrafficBytes: 0n,
+                    usedUploadTrafficBytes: 0n,
+                    usedDownloadTrafficBytes: 0n,
+                })
                 .execute();
 
             this.logger.log(
@@ -715,7 +725,11 @@ export class UsersRepository {
             .updateTable('userTraffic')
             .from('updateUsers')
             .whereRef('userTraffic.id', '=', 'updateUsers.id')
-            .set({ usedTrafficBytes: 0n })
+            .set({
+                usedTrafficBytes: 0n,
+                usedUploadTrafficBytes: 0n,
+                usedDownloadTrafficBytes: 0n,
+            })
             .returning('userTraffic.id')
             .execute();
 

@@ -5,6 +5,8 @@ import { TResult } from '@common/types';
 interface IBulkUpdateUsedTraffic {
     u: string;
     b: string;
+    up?: string;
+    down?: string;
     n: string;
 }
 

@@ -37,7 +37,9 @@ export class UpdateUsersUsageQueueProcessor extends WorkerHost {
         }
     }
 
-    private async handleUpdateUsersUsage(job: Job<{ u: string; b: string; n: string }[]>) {
+    private async handleUpdateUsersUsage(
+        job: Job<{ u: string; b: string; up?: string; down?: string; n: string }[]>,
+    ) {
         try {
             const userUsageList = job.data;
 

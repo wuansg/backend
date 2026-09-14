@@ -374,7 +374,7 @@ export class InternalSquadRepository implements ICrud<InternalSquadEntity> {
         limit: number;
         cursor?: number;
     }): Promise<{
-        users: { id: number; totalBytes: number }[];
+        users: { id: number; uploadBytes: number; downloadBytes: number; totalBytes: number }[];
         nextCursor: string | null;
         hasMore: boolean;
     }> {
@@ -404,7 +404,12 @@ export class InternalSquadRepository implements ICrud<InternalSquadEntity> {
         const rows = await qb
             .groupBy(['m.userId'])
             .having((eb) => eb(eb.fn.sum('h.totalBytes'), '>=', BigInt(minTotalBytes)))
-            .select((eb) => ['m.userId as id', eb.fn.sum('h.totalBytes').as('totalBytes')])
+            .select((eb) => [
+                'm.userId as id',
+                eb.fn.sum('h.uploadBytes').as('uploadBytes'),
+                eb.fn.sum('h.downloadBytes').as('downloadBytes'),
+                eb.fn.sum('h.totalBytes').as('totalBytes'),
+            ])
             .orderBy('m.userId', 'asc')
             .limit(limit + 1)
             .execute();
@@ -417,6 +422,8 @@ export class InternalSquadRepository implements ICrud<InternalSquadEntity> {
         return {
             users: rows.map((row) => ({
                 id: Number(row.id),
+                uploadBytes: Number(row.uploadBytes),
+                downloadBytes: Number(row.downloadBytes),
                 totalBytes: Number(row.totalBytes),
             })),
             nextCursor: hasMore ? String(rows[rows.length - 1].id) : null,
@@ -430,7 +437,17 @@ export class InternalSquadRepository implements ICrud<InternalSquadEntity> {
         start: Date;
         end: Date;
         dates: string[];
-    }): Promise<{ date: string; nodes: { uuid: string; totalBytes: number }[] }[]> {
+    }): Promise<
+        {
+            date: string;
+            nodes: {
+                uuid: string;
+                uploadBytes: number;
+                downloadBytes: number;
+                totalBytes: number;
+            }[];
+        }[]
+    > {
         const { squadUuid, userId, start, end, dates } = params;
 
         const nodes = await this.getSquadNodesQuery(squadUuid);
@@ -449,15 +466,27 @@ export class InternalSquadRepository implements ICrud<InternalSquadEntity> {
             .select((eb) => [
                 sql<string>`to_char(${eb.ref('h.createdAt')}, 'YYYY-MM-DD')`.as('date'),
                 'h.nodeId as nodeId',
+                'h.uploadBytes as uploadBytes',
+                'h.downloadBytes as downloadBytes',
                 'h.totalBytes as totalBytes',
             ])
             .execute();
 
-        const byDate = new Map<string, { uuid: string; totalBytes: number }[]>();
+        const byDate = new Map<
+            string,
+            {
+                uuid: string;
+                uploadBytes: number;
+                downloadBytes: number;
+                totalBytes: number;
+            }[]
+        >();
         for (const row of rows) {
             const bucket = byDate.get(row.date) ?? [];
             bucket.push({
                 uuid: uuidByNodeId.get(row.nodeId)!,
+                uploadBytes: Number(row.uploadBytes),
+                downloadBytes: Number(row.downloadBytes),
                 totalBytes: Number(row.totalBytes),
             });
             byDate.set(row.date, bucket);

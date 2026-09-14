@@ -64,7 +64,9 @@ export class NodesUserUsageHistoryService {
                 new GetStatsUserUsageResponseModel({
                     categories: dates,
                     series: nodesUsage,
-                    sparklineData: dailyTraffic,
+                    sparklineData: dailyTraffic.total,
+                    uploadSparklineData: dailyTraffic.upload,
+                    downloadSparklineData: dailyTraffic.download,
                     topNodes: topNodes,
                 }),
             );
@@ -108,7 +110,9 @@ export class NodesUserUsageHistoryService {
             return ok(
                 new GetStatsNodesUsersUsageResponseModel({
                     categories: dates,
-                    sparklineData: dailyTraffic,
+                    sparklineData: dailyTraffic.total,
+                    uploadSparklineData: dailyTraffic.upload,
+                    downloadSparklineData: dailyTraffic.download,
                     topUsers: topUsers,
                 }),
             );
@@ -160,7 +164,9 @@ export class NodesUserUsageHistoryService {
             return ok(
                 new GetStatsNodesUsersUsageResponseModel({
                     categories: dates,
-                    sparklineData: dailyTraffic,
+                    sparklineData: dailyTraffic.total,
+                    uploadSparklineData: dailyTraffic.upload,
+                    downloadSparklineData: dailyTraffic.download,
                     topUsers: topUsers,
                 }),
             );
@@ -204,7 +210,9 @@ export class NodesUserUsageHistoryService {
                 new GetStatsUsersUsageResponseModel({
                     categories: dates,
                     series: usersUsage,
-                    sparklineData: dailyTraffic,
+                    sparklineData: dailyTraffic.total,
+                    uploadSparklineData: dailyTraffic.upload,
+                    downloadSparklineData: dailyTraffic.download,
                     topUsers,
                 }),
             );

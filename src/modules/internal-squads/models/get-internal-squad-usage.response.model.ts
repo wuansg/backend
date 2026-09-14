@@ -2,6 +2,8 @@ export class GetInternalSquadUsageResponseModel {
     public readonly squadUuid: string;
     public readonly users: {
         id: number;
+        uploadBytes: number;
+        downloadBytes: number;
         totalBytes: number;
     }[];
     public readonly nextCursor: string | null;

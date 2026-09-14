@@ -3,6 +3,8 @@ import { NodesUserUsageHistory } from '@prisma/client';
 export class NodesUserUsageHistoryEntity implements NodesUserUsageHistory {
     nodeId: bigint;
     userId: bigint;
+    uploadBytes: bigint;
+    downloadBytes: bigint;
     totalBytes: bigint;
     createdAt: Date;
     updatedAt: Date;

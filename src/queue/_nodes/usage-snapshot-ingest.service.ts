@@ -308,6 +308,10 @@ export class UsageSnapshotIngestService {
                 UPDATE user_traffic SET
                     used_traffic_bytes = used_traffic_bytes + ${user.multipliedTotal},
                     lifetime_used_traffic_bytes = lifetime_used_traffic_bytes + ${user.multipliedTotal},
+                    used_upload_traffic_bytes = used_upload_traffic_bytes + ${user.multipliedUpload},
+                    used_download_traffic_bytes = used_download_traffic_bytes + ${user.multipliedDownload},
+                    lifetime_upload_traffic_bytes = lifetime_upload_traffic_bytes + ${user.multipliedUpload},
+                    lifetime_download_traffic_bytes = lifetime_download_traffic_bytes + ${user.multipliedDownload},
                     last_connected_node_uuid = CASE
                         WHEN online_at IS NULL OR online_at <= ${user.lastCapturedAt}
                         THEN ${nodeUuid}::uuid ELSE last_connected_node_uuid END,
@@ -320,9 +324,16 @@ export class UsageSnapshotIngestService {
         }
         for (const userDay of batch.userDays) {
             await tx.$executeRaw(Prisma.sql`
-                INSERT INTO nodes_user_usage_history (node_id, user_id, total_bytes, created_at)
-                VALUES (${nodeId}, ${userDay.userId}, ${userDay.total}, ${userDay.day})
+                INSERT INTO nodes_user_usage_history (
+                    node_id, user_id, upload_bytes, download_bytes, total_bytes, created_at
+                )
+                VALUES (
+                    ${nodeId}, ${userDay.userId}, ${userDay.upload}, ${userDay.download},
+                    ${userDay.total}, ${userDay.day}
+                )
                 ON CONFLICT (node_id, created_at, user_id) DO UPDATE SET
+                    upload_bytes = nodes_user_usage_history.upload_bytes + EXCLUDED.upload_bytes,
+                    download_bytes = nodes_user_usage_history.download_bytes + EXCLUDED.download_bytes,
                     total_bytes = nodes_user_usage_history.total_bytes + EXCLUDED.total_bytes,
                     updated_at = now()
             `);

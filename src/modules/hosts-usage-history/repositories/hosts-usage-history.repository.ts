@@ -869,6 +869,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
             SELECT
                 u.id as "userId",
                 u.username as "username",
+                SUM(uhuh.upload_bytes) as "upload",
+                SUM(uhuh.download_bytes) as "download",
                 SUM(uhuh.total_bytes) as "total"
             FROM users u
             INNER JOIN user_hosts_usage_history uhuh ON uhuh.user_id = u.id
@@ -902,13 +904,15 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         start: Date,
         end: Date,
         dates: string[],
-    ): Promise<number[]> {
+    ): Promise<{ total: number[]; upload: number[]; download: number[] }> {
         const query = Prisma.sql`
             WITH dedup_hourly AS (
                 SELECT
                     node_uuid,
                     inbound_tag,
                     created_at,
+                    MAX(upload_bytes) AS upload_bytes,
+                    MAX(download_bytes) AS download_bytes,
                     MAX(total_bytes) AS total_bytes
                 FROM user_hosts_usage_history
                 WHERE
@@ -920,19 +924,26 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
             daily_traffic AS (
                 SELECT
                     DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
-                    SUM(total_bytes) AS bytes
+                    SUM(upload_bytes) AS upload_bytes,
+                    SUM(download_bytes) AS download_bytes,
+                    SUM(total_bytes) AS total_bytes
                 FROM dedup_hourly
                 GROUP BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
             )
             SELECT
-                COALESCE(dt.bytes, 0) AS value
+                COALESCE(dt.upload_bytes, 0) AS upload,
+                COALESCE(dt.download_bytes, 0) AS download,
+                COALESCE(dt.total_bytes, 0) AS total
             FROM unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
             LEFT JOIN daily_traffic dt ON dt.date = d.date
             ORDER BY d.ord;
         `;
 
-        const result = await this.prisma.tx.$queryRaw<Array<{ value: bigint }>>(query);
-        return result.map((item) => Number(item.value));
+        const result =
+            await this.prisma.tx.$queryRaw<
+                Array<{ upload: bigint; download: bigint; total: bigint }>
+            >(query);
+        return mapDirectionalDailyUsage(result);
     }
 
     public async getHostDailyUsersTrafficSum(
@@ -940,12 +951,14 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         start: Date,
         end: Date,
         dates: string[],
-    ): Promise<number[]> {
+    ): Promise<{ total: number[]; upload: number[]; download: number[] }> {
         const query = Prisma.sql`
             WITH daily_traffic AS (
                 SELECT
                     DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
-                    SUM(total_bytes) AS bytes
+                    SUM(upload_bytes) AS upload_bytes,
+                    SUM(download_bytes) AS download_bytes,
+                    SUM(total_bytes) AS total_bytes
                 FROM user_hosts_usage_history
                 WHERE
                     host_uuid = ${hostUuid}::uuid
@@ -954,14 +967,19 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 GROUP BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
             )
             SELECT
-                COALESCE(dt.bytes, 0) AS value
+                COALESCE(dt.upload_bytes, 0) AS upload,
+                COALESCE(dt.download_bytes, 0) AS download,
+                COALESCE(dt.total_bytes, 0) AS total
             FROM unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
             LEFT JOIN daily_traffic dt ON dt.date = d.date
             ORDER BY d.ord;
         `;
 
-        const result = await this.prisma.tx.$queryRaw<Array<{ value: bigint }>>(query);
-        return result.map((item) => Number(item.value));
+        const result =
+            await this.prisma.tx.$queryRaw<
+                Array<{ upload: bigint; download: bigint; total: bigint }>
+            >(query);
+        return mapDirectionalDailyUsage(result);
     }
 
     private async getDailyTrafficSumFiltered(
@@ -1019,4 +1037,14 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         const result = await this.prisma.tx.$queryRaw<Array<{ value: bigint }>>(query);
         return result.map((item) => Number(item.value));
     }
+}
+
+function mapDirectionalDailyUsage(
+    rows: Array<{ upload: bigint; download: bigint; total: bigint }>,
+): { total: number[]; upload: number[]; download: number[] } {
+    return {
+        total: rows.map((item) => Number(item.total)),
+        upload: rows.map((item) => Number(item.upload)),
+        download: rows.map((item) => Number(item.download)),
+    };
 }

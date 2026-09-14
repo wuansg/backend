@@ -164,9 +164,10 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
                 return;
             }
 
-            const userUsageList: { u: string; b: string; n: string }[] = Array.from({
-                length: response.users.length,
-            });
+            const userUsageList: { u: string; b: string; up: string; down: string; n: string }[] =
+                Array.from({
+                    length: response.users.length,
+                });
 
             let userUsageIndex = 0;
 
@@ -189,9 +190,14 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
 
                 pipeline.hincrby(nodeRedisKey, user.username, totalBytes);
 
+                const multipliedTotal = multiplyConsumption(consumptionMultiplier, totalBytes);
+                const multipliedUpload = multiplyConsumption(consumptionMultiplier, user.uplink);
+
                 userUsageList[userUsageIndex++] = {
                     u: user.username,
-                    b: multiplyConsumption(consumptionMultiplier, totalBytes).toString(),
+                    b: multipliedTotal.toString(),
+                    up: multipliedUpload.toString(),
+                    down: (multipliedTotal - multipliedUpload).toString(),
                     n: nodeUuid,
                 };
             });

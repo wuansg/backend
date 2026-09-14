@@ -148,6 +148,8 @@ export class PushFromRedisQueueProcessor extends WorkerHost implements OnApplica
                     new NodesUserUsageHistoryEntity({
                         nodeId,
                         userId: BigInt(chunk[i]),
+                        uploadBytes: 0n,
+                        downloadBytes: 0n,
                         totalBytes: BigInt(chunk[i + 1]),
                     }),
                 );

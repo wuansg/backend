@@ -285,7 +285,9 @@ export class UsersQueuesService implements OnApplicationBootstrap {
         );
     }
 
-    public async updateUserUsage(payload: { u: string; b: string; n: string }[]) {
+    public async updateUserUsage(
+        payload: { u: string; b: string; up: string; down: string; n: string }[],
+    ) {
         const chunks = this.chunks(payload, 1500);
         for await (const chunk of chunks) {
             await this.updateUsersUsageQueue.add(USERS_JOB_NAMES.UPDATE_USERS_USAGE, chunk, {

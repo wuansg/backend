@@ -44,6 +44,10 @@ export class GetFullUserResponseModel {
     public readonly userTraffic: {
         usedTrafficBytes: number;
         lifetimeUsedTrafficBytes: number;
+        usedUploadTrafficBytes: number;
+        usedDownloadTrafficBytes: number;
+        lifetimeUploadTrafficBytes: number;
+        lifetimeDownloadTrafficBytes: number;
         onlineAt: Date | null;
         lastConnectedNodeUuid: string | null;
         firstConnectedAt: Date | null;
@@ -87,6 +91,10 @@ export class GetFullUserResponseModel {
         this.userTraffic = {
             usedTrafficBytes: Number(entity.userTraffic.usedTrafficBytes),
             lifetimeUsedTrafficBytes: Number(entity.userTraffic.lifetimeUsedTrafficBytes),
+            usedUploadTrafficBytes: Number(entity.userTraffic.usedUploadTrafficBytes),
+            usedDownloadTrafficBytes: Number(entity.userTraffic.usedDownloadTrafficBytes),
+            lifetimeUploadTrafficBytes: Number(entity.userTraffic.lifetimeUploadTrafficBytes),
+            lifetimeDownloadTrafficBytes: Number(entity.userTraffic.lifetimeDownloadTrafficBytes),
             onlineAt: entity.userTraffic.onlineAt,
             lastConnectedNodeUuid: entity.userTraffic.lastConnectedNodeUuid,
             firstConnectedAt: entity.userTraffic.firstConnectedAt,

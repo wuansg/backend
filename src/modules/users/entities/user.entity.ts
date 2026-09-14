@@ -25,6 +25,10 @@ export class UserEntity extends BaseUserEntity {
         this.userTraffic = new UserTrafficEntity({
             usedTrafficBytes: user.usedTrafficBytes,
             lifetimeUsedTrafficBytes: user.lifetimeUsedTrafficBytes,
+            usedUploadTrafficBytes: user.usedUploadTrafficBytes,
+            usedDownloadTrafficBytes: user.usedDownloadTrafficBytes,
+            lifetimeUploadTrafficBytes: user.lifetimeUploadTrafficBytes,
+            lifetimeDownloadTrafficBytes: user.lifetimeDownloadTrafficBytes,
             firstConnectedAt: user.firstConnectedAt,
             onlineAt: user.onlineAt,
             lastConnectedNodeUuid: user.lastConnectedNodeUuid,

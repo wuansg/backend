@@ -1,7 +1,12 @@
 export class GetInternalSquadUserUsageResponseModel {
     public readonly days: {
         date: string;
-        nodes: { uuid: string; totalBytes: number }[];
+        nodes: {
+            uuid: string;
+            uploadBytes: number;
+            downloadBytes: number;
+            totalBytes: number;
+        }[];
     }[];
 
     constructor(data: GetInternalSquadUserUsageResponseModel) {

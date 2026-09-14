@@ -7,12 +7,16 @@ export interface UsageSnapshotWriteBatch {
     nodeMultipliedTotal: bigint;
     users: Array<{
         userId: bigint;
+        upload: bigint;
+        download: bigint;
         total: bigint;
+        multipliedUpload: bigint;
+        multipliedDownload: bigint;
         multipliedTotal: bigint;
         firstCapturedAt: Date;
         lastCapturedAt: Date;
     }>;
-    userDays: Array<{ userId: bigint; day: Date; total: bigint }>;
+    userDays: Array<{ userId: bigint; day: Date; upload: bigint; download: bigint; total: bigint }>;
     hosts: Array<{ tag: string; hour: Date; usage: UsageDelta }>;
     userHosts: Array<{ userId: bigint; tag: string; hour: Date; usage: UsageDelta }>;
 }
@@ -26,13 +30,17 @@ export function buildUsageSnapshotWriteBatch(
     const users = new Map<
         string,
         {
+            upload: bigint;
+            download: bigint;
             total: bigint;
+            multipliedUpload: bigint;
+            multipliedDownload: bigint;
             multipliedTotal: bigint;
             firstCapturedAt: Date;
             lastCapturedAt: Date;
         }
     >();
-    const userDays = new Map<string, bigint>();
+    const userDays = new Map<string, UsageDelta>();
     const hosts = new Map<string, UsageDelta>();
     const userHosts = new Map<string, UsageDelta>();
     let nodeMultipliedTotal = 0n;
@@ -64,22 +72,35 @@ export function buildUsageSnapshotWriteBatch(
             if (!/^\d+$/.test(username)) continue;
             const total = usage.uplink + usage.downlink;
             if (total === 0n) continue;
+            const multipliedTotal = multiplyUsage(userMultiplier, total);
+            const multipliedUpload = multiplyUsage(userMultiplier, usage.uplink);
+            // Derive the second direction from the multiplied total so integer
+            // rounding can never make upload + download differ from the quota total.
+            const multipliedDownload = multipliedTotal - multipliedUpload;
             const current = users.get(username);
             if (current) {
+                current.upload += usage.uplink;
+                current.download += usage.downlink;
                 current.total += total;
-                current.multipliedTotal += multiplyUsage(userMultiplier, total);
+                current.multipliedUpload += multipliedUpload;
+                current.multipliedDownload += multipliedDownload;
+                current.multipliedTotal += multipliedTotal;
                 if (capturedAt < current.firstCapturedAt) current.firstCapturedAt = capturedAt;
                 if (capturedAt > current.lastCapturedAt) current.lastCapturedAt = capturedAt;
             } else {
                 users.set(username, {
+                    upload: usage.uplink,
+                    download: usage.downlink,
                     total,
-                    multipliedTotal: multiplyUsage(userMultiplier, total),
+                    multipliedUpload,
+                    multipliedDownload,
+                    multipliedTotal,
                     firstCapturedAt: capturedAt,
                     lastCapturedAt: capturedAt,
                 });
             }
             const userDayKey = `${username}\u0000${dayKey}`;
-            userDays.set(userDayKey, (userDays.get(userDayKey) ?? 0n) + total);
+            addUsage(userDays, userDayKey, usage);
         }
 
         for (const [tag, usage] of aggregate(
@@ -107,12 +128,14 @@ export function buildUsageSnapshotWriteBatch(
             .map(([userId, usage]) => ({ userId: BigInt(userId), ...usage })),
         userDays: [...userDays]
             .sort(([left], [right]) => compareUserTimeKeys(left, right))
-            .map(([key, total]) => {
+            .map(([key, usage]) => {
                 const separator = key.indexOf('\u0000');
                 return {
                     userId: BigInt(key.slice(0, separator)),
                     day: new Date(key.slice(separator + 1)),
-                    total,
+                    upload: usage.uplink,
+                    download: usage.downlink,
+                    total: usage.uplink + usage.downlink,
                 };
             }),
         hosts: [...hosts]
