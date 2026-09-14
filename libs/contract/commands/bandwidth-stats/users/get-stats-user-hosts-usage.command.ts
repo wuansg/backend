@@ -54,6 +54,8 @@ export namespace GetStatsUserHostsUsageCommand {
         response: z.object({
             categories: z.array(z.string()),
             sparklineData: z.array(z.number()),
+            uploadSparklineData: z.array(z.number()),
+            downloadSparklineData: z.array(z.number()),
             topHosts: z.array(HostUsageItemSchema),
             series: z.array(
                 HostUsageItemSchema.extend({

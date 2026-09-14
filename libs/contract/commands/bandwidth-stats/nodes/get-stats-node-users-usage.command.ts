@@ -28,10 +28,14 @@ export namespace GetStatsNodeUsersUsageCommand {
         response: z.object({
             categories: z.array(z.string()),
             sparklineData: z.array(z.number()),
+            uploadSparklineData: z.array(z.number()),
+            downloadSparklineData: z.array(z.number()),
             topUsers: z.array(
                 z.object({
                     color: z.string(),
                     username: z.string(),
+                    upload: z.number(),
+                    download: z.number(),
                     total: z.number(),
                 }),
             ),

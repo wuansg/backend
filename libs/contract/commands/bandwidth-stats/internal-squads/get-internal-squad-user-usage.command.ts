@@ -34,6 +34,12 @@ export namespace GetInternalSquadUserUsageCommand {
                     nodes: z.array(
                         z.object({
                             uuid: z.uuid(),
+                            uploadBytes: z
+                                .number()
+                                .describe('Uploaded bytes on this node that day (raw bytes)'),
+                            downloadBytes: z
+                                .number()
+                                .describe('Downloaded bytes on this node that day (raw bytes)'),
                             totalBytes: z
                                 .number()
                                 .describe('Used bytes on this node that day (raw bytes)'),

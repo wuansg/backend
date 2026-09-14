@@ -47,6 +47,10 @@ export namespace GetInternalSquadUsageCommand {
             users: z.array(
                 z.object({
                     id: z.number(),
+                    uploadBytes: z.number().describe('Uploaded bytes over the period (raw bytes)'),
+                    downloadBytes: z
+                        .number()
+                        .describe('Downloaded bytes over the period (raw bytes)'),
                     totalBytes: z.number().describe('Total used bytes over the period (raw bytes)'),
                 }),
             ),

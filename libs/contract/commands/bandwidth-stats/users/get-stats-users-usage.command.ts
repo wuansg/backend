@@ -26,11 +26,15 @@ export namespace GetStatsUsersUsageCommand {
         response: z.object({
             categories: z.array(z.string()),
             sparklineData: z.array(z.number()),
+            uploadSparklineData: z.array(z.number()),
+            downloadSparklineData: z.array(z.number()),
             topUsers: z.array(
                 z.object({
                     id: z.number().int().positive(),
                     color: z.string(),
                     username: z.string(),
+                    upload: z.number(),
+                    download: z.number(),
                     total: z.number(),
                 }),
             ),
@@ -39,7 +43,11 @@ export namespace GetStatsUsersUsageCommand {
                     id: z.number().int().positive(),
                     color: z.string(),
                     username: z.string(),
+                    upload: z.number(),
+                    download: z.number(),
                     total: z.number(),
+                    uploadData: z.array(z.number()),
+                    downloadData: z.array(z.number()),
                     data: z.array(z.number()),
                 }),
             ),
