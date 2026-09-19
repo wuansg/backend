@@ -80,7 +80,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(node_plugin_deployment_info{state=~\"FAILED|ROLLED_BACK|DRIFT\",node_uuid=~\"$node\"})",
+          "expr": "sum(remnawave_node_plugin_deployment_info{state=~\"FAILED|ROLLED_BACK|DRIFT\",node_uuid=~\"$node\"}) or vector(0)",
           "legendFormat": "unhealthy",
           "range": true,
           "refId": "A"
@@ -139,7 +139,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(node_plugin_dns_stale_domains{node_uuid=~\"$node\"})",
+          "expr": "sum(remnawave_node_plugin_dns_stale_domains{node_uuid=~\"$node\"}) or vector(0)",
           "legendFormat": "stale domains",
           "range": true,
           "refId": "A"
@@ -198,7 +198,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(node_forwarding_dns_stale{node_uuid=~\"$node\"})",
+          "expr": "sum(remnawave_node_forwarding_dns_stale{node_uuid=~\"$node\"}) or vector(0)",
           "legendFormat": "stale nodes",
           "range": true,
           "refId": "A"
@@ -257,7 +257,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(node_geocheck_unacknowledged_drifts{node_uuid=~\"$node\"})",
+          "expr": "sum(remnawave_node_geocheck_unacknowledged_drifts{node_uuid=~\"$node\"}) or vector(0)",
           "legendFormat": "drifts",
           "range": true,
           "refId": "A"
@@ -342,14 +342,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "node_plugin_dns_resolution_failures{node_uuid=~\"$node\"}",
+          "expr": "remnawave_node_plugin_dns_resolution_failures{node_uuid=~\"$node\"}",
           "legendFormat": "plugin {{node_uuid}}",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "node_forwarding_dns_failures{node_uuid=~\"$node\"}",
+          "expr": "remnawave_node_forwarding_dns_failures{node_uuid=~\"$node\"}",
           "legendFormat": "forwarding {{node_uuid}}",
           "range": true,
           "refId": "B"
@@ -412,7 +412,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "node_plugin_deployment_info{node_uuid=~\"$node\"} == 1",
+          "expr": "remnawave_node_plugin_deployment_info{node_uuid=~\"$node\"} == 1",
           "format": "table",
           "instant": true,
           "legendFormat": "{{node_uuid}} {{state}}",
@@ -522,14 +522,14 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "(time() - node_geocheck_last_success_timestamp_seconds{node_uuid=~\"$node\"}) / 3600",
+          "expr": "(time() - remnawave_node_geocheck_last_success_timestamp_seconds{node_uuid=~\"$node\"}) / 3600",
           "legendFormat": "geocheck {{node_uuid}}",
           "range": true,
           "refId": "A"
         },
         {
           "editorMode": "code",
-          "expr": "(time() - node_forwarding_dns_last_success_timestamp_seconds{node_uuid=~\"$node\"}) / 3600",
+          "expr": "(time() - remnawave_node_forwarding_dns_last_success_timestamp_seconds{node_uuid=~\"$node\"}) / 3600",
           "legendFormat": "forwarding DNS {{node_uuid}}",
           "range": true,
           "refId": "B"
@@ -620,7 +620,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "node_plugin_desired_hash_match{node_uuid=~\"$node\"}",
+          "expr": "remnawave_node_plugin_desired_hash_match{node_uuid=~\"$node\"}",
           "legendFormat": "{{node_uuid}}",
           "range": true,
           "refId": "A"
@@ -645,7 +645,7 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(node_status, node_uuid)",
+        "definition": "label_values(remnawave_node_status, node_uuid)",
         "hide": 0,
         "includeAll": true,
         "label": "Node",
@@ -653,7 +653,7 @@
         "name": "node",
         "options": [],
         "query": {
-          "query": "label_values(node_status, node_uuid)",
+          "query": "label_values(remnawave_node_status, node_uuid)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
