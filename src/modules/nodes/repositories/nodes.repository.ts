@@ -97,6 +97,7 @@ export class NodesRepository implements ICrud<NodesEntity> {
                 address: true,
                 port: true,
                 proxyUrl: true,
+                nodeApiSniEnabled: true,
             },
         });
 
@@ -109,6 +110,7 @@ export class NodesRepository implements ICrud<NodesEntity> {
                 address: value.address,
                 port: value.port,
                 proxyUrl: value.proxyUrl,
+                nodeApiSniEnabled: value.nodeApiSniEnabled,
             },
         }));
     }
@@ -125,6 +127,7 @@ export class NodesRepository implements ICrud<NodesEntity> {
                 address: true,
                 port: true,
                 proxyUrl: true,
+                nodeApiSniEnabled: true,
                 activeConfigProfileUuid: true,
                 _count: {
                     select: {
@@ -144,6 +147,7 @@ export class NodesRepository implements ICrud<NodesEntity> {
                 address: value.address,
                 port: value.port,
                 proxyUrl: value.proxyUrl,
+                nodeApiSniEnabled: value.nodeApiSniEnabled,
             },
         }));
     }
@@ -160,6 +164,7 @@ export class NodesRepository implements ICrud<NodesEntity> {
                 address: true,
                 port: true,
                 proxyUrl: true,
+                nodeApiSniEnabled: true,
             },
             where: {
                 isConnected: true,
@@ -179,6 +184,7 @@ export class NodesRepository implements ICrud<NodesEntity> {
                 address: value.address,
                 port: value.port,
                 proxyUrl: value.proxyUrl,
+                nodeApiSniEnabled: value.nodeApiSniEnabled,
             },
         }));
     }
@@ -207,6 +213,14 @@ export class NodesRepository implements ICrud<NodesEntity> {
             return null;
         }
         return new NodesEntity(result);
+    }
+
+    public async supportsNodeApiSni(uuid: string): Promise<boolean> {
+        const result = await this.prisma.tx.nodeRuntimeInventory.findUnique({
+            where: { nodeUuid: uuid },
+            select: { capabilities: true },
+        });
+        return result?.capabilities.includes('node_api_sni_v1') === true;
     }
 
     public async update({ uuid, ...data }: Partial<NodesEntity>): Promise<NodesEntity> {

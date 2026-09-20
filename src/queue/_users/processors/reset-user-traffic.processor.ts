@@ -25,6 +25,7 @@ import { UsersQueuesService } from '../users-queues.service';
         scope: Scope.REQUEST,
     },
     {
+        autorun: false,
         concurrency: 1,
     },
 )

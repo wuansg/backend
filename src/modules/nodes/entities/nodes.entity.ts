@@ -30,6 +30,11 @@ export class NodesEntity implements Nodes {
     public viewPosition: number;
     public countryCode: string;
     public tags: string[];
+    public expectedAgentVersion: string | null;
+    public expectedAgentImageTag: string | null;
+    public rolloutBatch: string | null;
+    public nodeApiSniEnabled: boolean;
+    public nodeApiSniLastSuccessAt: Date | null;
     public ips: TNodeIps;
     public geocheckIntervalMinutes: number | null;
     public geocheckSource: Prisma.JsonValue | null;

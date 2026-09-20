@@ -5,6 +5,7 @@ import * as jwt from 'jsonwebtoken';
 import { Logger } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 
+import { deriveNodeApiSni } from '@common/axios/node-api-sni.util';
 import { fail, ok } from '@common/types';
 import { ERRORS, ROLE } from '@libs/contracts/constants';
 
@@ -43,6 +44,7 @@ export class GetNodeJwtHandler implements ICommandHandler<GetNodeJwtCommand> {
                 clientCert: clientCert!,
                 clientKey: clientKey!,
                 caCert: caCert!,
+                nodeApiSni: deriveNodeApiSni(caCert!, privKey),
             });
         } catch (error) {
             this.logger.error(`Error getting node jwt: ${error}`);

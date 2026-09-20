@@ -126,6 +126,7 @@ type CollectReportsResponse = {
 export type NodeAgentHealthResponse = {
     isAlive: boolean;
     nodeVersion: string;
+    architecture?: string;
     runningCore: 'SING_BOX' | null;
     supportedCores: Array<'SING_BOX'>;
     coreVersions?: {
@@ -264,6 +265,8 @@ export class AxiosService {
 
     public axiosInstance: AxiosInstance;
     private mtlsOptions: IMtlsOptions;
+    private nodeApiSni: string;
+    private readonly directAgentCache = new Map<boolean, https.Agent>();
     private readonly socksAgentCache = new Map<string, MtlsSocksProxyAgent>();
 
     constructor(private readonly commandBus: CommandBus) {
@@ -295,14 +298,15 @@ export class AxiosService {
                 key: jwt.clientKey,
                 ca: jwt.caCert,
             };
+            this.nodeApiSni = jwt.nodeApiSni;
 
-            const httpsAgent = new https.Agent({
-                ...this.mtlsOptions,
-                checkServerIdentity: () => undefined,
-                rejectUnauthorized: true,
-                keepAlive: true,
-                minVersion: 'TLSv1.3',
-            });
+            for (const agent of this.directAgentCache.values()) agent.destroy();
+            for (const agent of this.socksAgentCache.values()) agent.destroy();
+            this.directAgentCache.clear();
+            this.socksAgentCache.clear();
+
+            const httpsAgent = this.createDirectAgent(false);
+            this.directAgentCache.set(false, httpsAgent);
 
             this.axiosInstance.defaults.httpsAgent = httpsAgent;
 
@@ -313,16 +317,37 @@ export class AxiosService {
         }
     }
 
-    private resolveAgent(proxyUrl: null | string): https.Agent {
+    private createDirectAgent(nodeApiSniEnabled: boolean): https.Agent {
+        return new https.Agent({
+            ...this.mtlsOptions,
+            checkServerIdentity: () => undefined,
+            rejectUnauthorized: true,
+            keepAlive: true,
+            minVersion: 'TLSv1.3',
+            ...(nodeApiSniEnabled ? { servername: this.nodeApiSni } : {}),
+        });
+    }
+
+    private resolveAgent(proxyUrl: null | string, nodeApiSniEnabled: boolean): https.Agent {
         if (!proxyUrl) {
-            return this.axiosInstance.defaults.httpsAgent as https.Agent;
+            const cached = this.directAgentCache.get(nodeApiSniEnabled);
+            if (cached) return cached;
+
+            const httpsAgent = this.createDirectAgent(nodeApiSniEnabled);
+            this.directAgentCache.set(nodeApiSniEnabled, httpsAgent);
+            return httpsAgent;
         }
 
-        const cached = this.socksAgentCache.get(proxyUrl);
+        const cacheKey = `${nodeApiSniEnabled ? 'sni' : 'legacy'}:${proxyUrl}`;
+        const cached = this.socksAgentCache.get(cacheKey);
         if (cached) return cached;
 
-        const httpsAgent = new MtlsSocksProxyAgent(proxyUrl, this.mtlsOptions);
-        this.socksAgentCache.set(proxyUrl, httpsAgent);
+        const httpsAgent = new MtlsSocksProxyAgent(
+            proxyUrl,
+            this.mtlsOptions,
+            nodeApiSniEnabled ? this.nodeApiSni : undefined,
+        );
+        this.socksAgentCache.set(cacheKey, httpsAgent);
 
         return httpsAgent;
     }
@@ -361,7 +386,7 @@ export class AxiosService {
     ): { url: string; httpsAgent: https.Agent } {
         return {
             url: this.getNodeUrl(opts.address, path, opts.port),
-            httpsAgent: this.resolveAgent(opts.proxyUrl),
+            httpsAgent: this.resolveAgent(opts.proxyUrl, opts.nodeApiSniEnabled),
         };
     }
 
@@ -382,7 +407,7 @@ export class AxiosService {
         } = params;
 
         const url = this.getNodeUrl(opts.address, path, opts.port);
-        const httpsAgent = this.resolveAgent(opts.proxyUrl);
+        const httpsAgent = this.resolveAgent(opts.proxyUrl, opts.nodeApiSniEnabled);
 
         try {
             let body: unknown = EMPTY_BODY;

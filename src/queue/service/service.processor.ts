@@ -16,6 +16,7 @@ import { QUEUES_NAMES } from '../queue.enum';
 import { ServiceJobNames } from './enums';
 
 @Processor(QUEUES_NAMES.SERVICE, {
+    autorun: false,
     concurrency: 1,
 })
 export class ServiceQueueProcessor extends WorkerHost {

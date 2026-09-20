@@ -284,6 +284,7 @@ export class WebhookEvents {
             coreUptime,
             configApply,
             runtimeStatus,
+            runtimeInventory: null,
         };
     }
 }

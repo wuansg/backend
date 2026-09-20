@@ -15,6 +15,7 @@ export interface INodeConnectionOpts {
     address: string;
     port: number | null;
     proxyUrl: string | null;
+    nodeApiSniEnabled: boolean;
 }
 
 export interface IMtlsOptions {

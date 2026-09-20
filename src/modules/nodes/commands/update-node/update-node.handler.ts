@@ -18,6 +18,15 @@ export class UpdateNodeHandler implements ICommandHandler<UpdateNodeCommand, TRe
 
     async execute(command: UpdateNodeCommand): Promise<TResult<NodesEntity>> {
         try {
+            if (
+                command.node.nodeApiSniEnabled === true &&
+                !(await this.nodesRepository.supportsNodeApiSni(command.node.uuid!))
+            ) {
+                this.logger.warn(
+                    `Refusing to enable Node API SNI for ${command.node.uuid}: capability is missing`,
+                );
+                return fail(ERRORS.UPDATE_NODE_ERROR);
+            }
             const node = await this.nodesRepository.update(command.node);
             return ok(node);
         } catch (error: unknown) {

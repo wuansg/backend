@@ -24,6 +24,7 @@ import { USERS_JOB_NAMES } from '../constants/users-job-name.constant';
 import { UsersQueuesService } from '../users-queues.service';
 
 @Processor(QUEUES_NAMES.USERS.SERIAL_OPERATIONS, {
+    autorun: false,
     concurrency: 1,
 })
 export class SerialUsersOperationsQueueProcessor extends WorkerHost {

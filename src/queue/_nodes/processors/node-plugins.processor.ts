@@ -19,6 +19,7 @@ import { QUEUES_NAMES } from '../../queue.enum';
 import { NODES_JOB_NAMES } from '../constants';
 
 @Processor(QUEUES_NAMES.NODES.PLUGINS, {
+    autorun: false,
     concurrency: 20,
 })
 export class NodePluginsProcessor extends WorkerHost {
@@ -76,6 +77,7 @@ export class NodePluginsProcessor extends WorkerHost {
                         address: node.address,
                         port: node.port,
                         proxyUrl: node.proxyUrl,
+                        nodeApiSniEnabled: node.nodeApiSniEnabled,
                     },
                 );
 
@@ -133,6 +135,7 @@ export class NodePluginsProcessor extends WorkerHost {
                     address: node.address,
                     port: node.port,
                     proxyUrl: node.proxyUrl,
+                    nodeApiSniEnabled: node.nodeApiSniEnabled,
                 },
             );
 

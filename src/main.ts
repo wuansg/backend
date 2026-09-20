@@ -32,6 +32,7 @@ import { getDocs, isDevelopment, isDevOrDebugLogsEnabled } from '@common/utils/s
 import { getStartMessage } from '@common/utils/startup-app/get-start-message';
 
 import { AppModule } from './app.module';
+import { QueueWorkerLifecycleService } from './queue/queue-worker-lifecycle.service';
 
 dayjs.extend(utc);
 dayjs.extend(relativeTime);
@@ -142,6 +143,7 @@ async function bootstrap(): Promise<void> {
     app.enableShutdownHooks();
 
     await app.listen(Number(config.getOrThrow('APP_PORT')));
+    await app.get(QueueWorkerLifecycleService).startAll();
 
     logger.info('\n' + (await getStartMessage()) + '\n');
 

@@ -32,6 +32,7 @@ import { isNodePluginInSync } from '../node-sync-state.util';
 import { NodesQueuesService } from '../nodes-queues.service';
 
 @Processor(QUEUES_NAMES.NODES.START, {
+    autorun: false,
     concurrency: 40,
 })
 export class StartNodeProcessor extends WorkerHost {
@@ -83,6 +84,7 @@ export class StartNodeProcessor extends WorkerHost {
                 address: node.address,
                 port: node.port,
                 proxyUrl: node.proxyUrl,
+                nodeApiSniEnabled: node.nodeApiSniEnabled,
             });
 
             if (!healthResponse.isOk) {
@@ -157,6 +159,7 @@ export class StartNodeProcessor extends WorkerHost {
                         address: node.address,
                         port: node.port,
                         proxyUrl: node.proxyUrl,
+                        nodeApiSniEnabled: node.nodeApiSniEnabled,
                     },
                 );
 
@@ -184,6 +187,7 @@ export class StartNodeProcessor extends WorkerHost {
                     address: node.address,
                     port: node.port,
                     proxyUrl: node.proxyUrl,
+                    nodeApiSniEnabled: node.nodeApiSniEnabled,
                 });
 
                 if (!stopCoreResponse.isOk || !stopCoreResponse.response.isStopped) {
@@ -223,6 +227,7 @@ export class StartNodeProcessor extends WorkerHost {
                     address: node.address,
                     port: node.port,
                     proxyUrl: node.proxyUrl,
+                    nodeApiSniEnabled: node.nodeApiSniEnabled,
                 });
                 if (refreshedHealth.isOk) {
                     await this.rawCacheService.set(
@@ -312,6 +317,7 @@ export class StartNodeProcessor extends WorkerHost {
                     address: node.address,
                     port: node.port,
                     proxyUrl: node.proxyUrl,
+                    nodeApiSniEnabled: node.nodeApiSniEnabled,
                 },
             );
 
@@ -337,6 +343,7 @@ export class StartNodeProcessor extends WorkerHost {
                 address: node.address,
                 port: node.port,
                 proxyUrl: node.proxyUrl,
+                nodeApiSniEnabled: node.nodeApiSniEnabled,
             });
             if (refreshedHealth.isOk) {
                 await this.rawCacheService.set(

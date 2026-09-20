@@ -7,6 +7,7 @@ export interface IGetNodeJwtResponse {
     clientCert: string;
     clientKey: string;
     caCert: string;
+    nodeApiSni: string;
 }
 
 export class GetNodeJwtCommand extends Command<TResult<IGetNodeJwtResponse>> {

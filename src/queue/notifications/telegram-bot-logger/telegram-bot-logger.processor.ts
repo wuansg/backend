@@ -2,12 +2,13 @@ import { Job } from 'bullmq';
 import { Worker } from 'bullmq';
 
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger, OnModuleInit, Optional } from '@nestjs/common';
+import { Logger, Optional } from '@nestjs/common';
 
 import { TelegramApiError } from '@integration-modules/notifications/telegram-bot/telegram-api.error';
 import { TelegramApiService } from '@integration-modules/notifications/telegram-bot/telegram-api.service';
 import { TelegramTargetHealthService } from '@integration-modules/notifications/telegram-bot/telegram-target-health.service';
 
+import { QueueWorkerStartGuard } from '../../queue-worker-lifecycle.service';
 import { QUEUES_NAMES } from '../../queue.enum';
 import { TelegramBotLoggerJobNames } from './enums';
 import { IMessageEventPayload } from './interfaces';
@@ -21,7 +22,7 @@ import { TelegramBotLoggerQueueService } from './telegram-bot-logger.service';
         duration: 1_000,
     },
 })
-export class TelegramBotLoggerQueueProcessor extends WorkerHost implements OnModuleInit {
+export class TelegramBotLoggerQueueProcessor extends WorkerHost implements QueueWorkerStartGuard {
     private readonly logger = new Logger(TelegramBotLoggerQueueProcessor.name);
 
     constructor(
@@ -34,18 +35,17 @@ export class TelegramBotLoggerQueueProcessor extends WorkerHost implements OnMod
         super();
     }
 
-    async onModuleInit() {
-        if (!this.telegramApiService) return;
+    async prepareQueueWorkerStart(): Promise<boolean> {
+        if (!this.telegramApiService) return false;
 
         const isHealthy = await this.telegramApiService.healthcheck();
         if (!isHealthy) {
             this.logger.error('Telegram API is not healthy. Worker will not start.');
-            return;
+            return false;
         }
 
         await this.telegramTargetHealthService?.validateConfiguredTargets();
-
-        this.worker.run();
+        return true;
     }
 
     async process(job: Job) {

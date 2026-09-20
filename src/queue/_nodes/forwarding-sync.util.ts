@@ -33,6 +33,7 @@ export async function syncForwardingIfSupported(
         address: node.address,
         port: node.port,
         proxyUrl: node.proxyUrl,
+        nodeApiSniEnabled: node.nodeApiSniEnabled,
     });
     return response.isOk ? null : response.message;
 }

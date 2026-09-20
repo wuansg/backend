@@ -311,6 +311,11 @@ export class NodeForwardingService {
     }
 
     private connectionOptions(node: NodesEntity): INodeConnectionOpts {
-        return { address: node.address, port: node.port, proxyUrl: node.proxyUrl };
+        return {
+            address: node.address,
+            port: node.port,
+            proxyUrl: node.proxyUrl,
+            nodeApiSniEnabled: node.nodeApiSniEnabled,
+        };
     }
 }

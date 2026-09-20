@@ -33,6 +33,7 @@ import { MINIMUM_SING_BOX_AGENT_VERSION } from '../node-runtime-status.util';
         scope: Scope.REQUEST,
     },
     {
+        autorun: false,
         concurrency: 5,
     },
 )
@@ -176,6 +177,7 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                     address: node.address,
                     port: node.port,
                     proxyUrl: node.proxyUrl,
+                    nodeApiSniEnabled: node.nodeApiSniEnabled,
                 });
 
                 if (!healthResponse.isOk) {
@@ -266,6 +268,7 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                         address: node.address,
                         port: node.port,
                         proxyUrl: node.proxyUrl,
+                        nodeApiSniEnabled: node.nodeApiSniEnabled,
                     },
                 );
 
@@ -327,6 +330,7 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                         address: node.address,
                         port: node.port,
                         proxyUrl: node.proxyUrl,
+                        nodeApiSniEnabled: node.nodeApiSniEnabled,
                     },
                 );
 

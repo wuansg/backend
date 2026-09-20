@@ -70,6 +70,28 @@ export namespace UpdateNodeCommand {
         activePluginUuid: z.uuid().nullish(),
         note: z.optional(z.string().max(255).nullable()),
         ips: z.optional(NodeIpsSchema),
+        expectedAgentVersion: z
+            .string()
+            .trim()
+            .max(32)
+            .regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/)
+            .nullish()
+            .or(z.literal('').transform(() => null)),
+        expectedAgentImageTag: z
+            .string()
+            .trim()
+            .max(128)
+            .regex(/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/)
+            .nullish()
+            .or(z.literal('').transform(() => null)),
+        rolloutBatch: z
+            .string()
+            .trim()
+            .min(1)
+            .max(64)
+            .nullish()
+            .or(z.literal('').transform(() => null)),
+        nodeApiSniEnabled: z.boolean().optional(),
     });
 
     export const ResponseSchema = NodeResponseSchema;

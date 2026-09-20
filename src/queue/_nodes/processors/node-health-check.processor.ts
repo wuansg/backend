@@ -40,6 +40,7 @@ import {
 } from '../node-runtime-status.util';
 
 @Processor(QUEUES_NAMES.NODES.HEALTH_CHECK, {
+    autorun: false,
     concurrency: 40,
 })
 export class NodeHealthCheckQueueProcessor extends WorkerHost {
@@ -89,15 +90,27 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             await this.rawCacheService.del(CACHE_KEYS.NODE_AGENT_HEALTH_FAILURES(nodeUuid));
 
             const runtimeStatus = resolveNodeRuntimeStatus(healthResult.response);
+            const versions = resolveNodeVersions(healthResult.response);
             await Promise.all([
                 this.cacheRuntimeStatus(nodeUuid, runtimeStatus),
-                this.rawCacheService.set(
-                    CACHE_KEYS.NODE_VERSIONS(nodeUuid),
-                    resolveNodeVersions(healthResult.response),
-                ),
+                this.rawCacheService.set(CACHE_KEYS.NODE_VERSIONS(nodeUuid), versions),
                 this.nodeObservabilityRepository.recordNodeHealth(nodeUuid, {
+                    sniHandshakeSucceeded: connectionOpts.nodeApiSniEnabled,
                     plugin: healthResult.response.plugin,
                     networkInterfaces: healthResult.response.networkInterfaces,
+                    runtime: {
+                        agentVersion: versions.node,
+                        singBoxVersion: versions.singBox,
+                        architecture: healthResult.response.architecture,
+                        runtimeMode: runtimeStatus.mode,
+                        runningCore: runtimeStatus.runningCore,
+                        capabilities: runtimeStatus.capabilities,
+                        supportedCores: runtimeStatus.supportedCores,
+                        runtimeStatus,
+                        configHashes: healthResult.response.configHashes,
+                        pluginHash: healthResult.response.plugin?.configHash,
+                        forwardingHash: healthResult.response.forwarding?.configHash,
+                    },
                 }),
             ]);
 

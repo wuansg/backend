@@ -22,6 +22,7 @@ import { USERS_JOB_NAMES } from '../constants/users-job-name.constant';
 import { IFireTorrentBlockerEventJobData, IFireUserEventJobData } from '../interfaces';
 
 @Processor(QUEUES_NAMES.USERS.USER_EVENTS, {
+    autorun: false,
     concurrency: 50,
 })
 export class UserEventsQueueProcessor extends WorkerHost {

@@ -111,6 +111,7 @@ export class ConnectionsService {
                                 address: node.address,
                                 port: node.port,
                                 proxyUrl: node.proxyUrl,
+                                nodeApiSniEnabled: node.nodeApiSniEnabled,
                             },
                         });
                     }
@@ -126,6 +127,7 @@ export class ConnectionsService {
                                 address: node.address,
                                 port: node.port,
                                 proxyUrl: node.proxyUrl,
+                                nodeApiSniEnabled: node.nodeApiSniEnabled,
                             },
                         });
                     }

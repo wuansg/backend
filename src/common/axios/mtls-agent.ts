@@ -8,6 +8,7 @@ export class MtlsSocksProxyAgent extends SocksProxyAgent {
     constructor(
         uri: string,
         private readonly mtls: IMtlsOptions,
+        private readonly serverName?: string,
     ) {
         super(uri, { keepAlive: true });
     }
@@ -22,6 +23,7 @@ export class MtlsSocksProxyAgent extends SocksProxyAgent {
             checkServerIdentity: () => undefined,
             minVersion: 'TLSv1.3',
             rejectUnauthorized: true,
+            ...(this.serverName ? { servername: this.serverName } : {}),
         } as SocksConnectOpts);
     }
 }

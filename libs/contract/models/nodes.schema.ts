@@ -28,6 +28,11 @@ export const NodesSchema = z.object({
     consumptionMultiplier: z.number(),
     nodeConsumptionMultiplier: z.number(),
     tags: z.array(z.string()),
+    expectedAgentVersion: z.nullable(z.string()),
+    expectedAgentImageTag: z.nullable(z.string()),
+    rolloutBatch: z.nullable(z.string()),
+    nodeApiSniEnabled: z.boolean(),
+    nodeApiSniLastSuccessAt: z.nullable(z.iso.datetime().transform((str) => new Date(str))),
     ips: NodeIpsSchema,
 
     createdAt: z.iso.datetime().transform((str) => new Date(str)),
@@ -68,6 +73,24 @@ export const NodesSchema = z.object({
         .nullable()
         .optional(),
     runtimeStatus: NodeRuntimeStatusSchema.nullable().optional(),
+    runtimeInventory: z
+        .object({
+            agentVersion: z.string(),
+            singBoxVersion: z.string().nullable(),
+            architecture: z.string().nullable(),
+            runtimeMode: NodeRuntimeStatusSchema.shape.mode,
+            runningCore: z.literal('SING_BOX').nullable(),
+            capabilities: z.array(z.string()),
+            supportedCores: z.array(z.literal('SING_BOX')),
+            runtimeStatus: NodeRuntimeStatusSchema,
+            configHashes: z.unknown(),
+            pluginHash: z.string().nullable(),
+            forwardingHash: z.string().nullable(),
+            reportedAt: z.iso.datetime().transform((str) => new Date(str)),
+        })
+        .nullable()
+        .optional(),
+    versionDrift: z.boolean().nullable().optional(),
     coreUptime: z.number(),
     usersOnline: z.number(),
     note: z.nullable(z.string()),

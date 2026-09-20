@@ -17,6 +17,7 @@ import { PushFromRedisJobNames } from './enums';
 import { IRecordUserUsageFromRedisPayload } from './interfaces';
 
 @Processor(QUEUES_NAMES.PUSH_TO_DB, {
+    autorun: false,
     concurrency: 10,
     limiter: {
         max: 3,

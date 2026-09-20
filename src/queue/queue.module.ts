@@ -4,6 +4,7 @@ import { BullBoardModule } from '@bull-board/nestjs';
 import { BullModule } from '@nestjs/bullmq';
 import { Module, Global } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { DiscoveryModule } from '@nestjs/core';
 
 import { TypedConfigService } from '@common/config/app-config';
 import { getRedisConnectionOptions } from '@common/utils';
@@ -15,6 +16,7 @@ import { SquadsQueueModule } from './_squads/squads-queue.module';
 import { UsersQueuesModule } from './_users/users-queues.module';
 import { NOTIFICATIONS_MODULES } from './notifications/notifications-modules';
 import { PushFromRedisQueueModule } from './push-from-redis/push-from-redis.module';
+import { QueueWorkerLifecycleService } from './queue-worker-lifecycle.service';
 import { ServiceQueueModule } from './service/service.module';
 
 const queueModules = [
@@ -69,6 +71,7 @@ const bullBoard = [
 @Global()
 @Module({
     imports: [
+        DiscoveryModule,
         BullModule.forRootAsync({
             imports: [ConfigModule],
             useFactory: (configService: TypedConfigService) => {
@@ -97,6 +100,7 @@ const bullBoard = [
 
         ...queueModules,
     ],
-    exports: [...queueModules],
+    providers: [QueueWorkerLifecycleService],
+    exports: [...queueModules, QueueWorkerLifecycleService],
 })
 export class QueueModule {}

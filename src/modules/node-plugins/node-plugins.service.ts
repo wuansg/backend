@@ -326,6 +326,7 @@ export class NodePluginService {
                         address: node.response.address,
                         port: node.response.port,
                         proxyUrl: node.response.proxyUrl,
+                        nodeApiSniEnabled: node.response.nodeApiSniEnabled,
                     },
                 );
                 compile = result.isOk
@@ -456,6 +457,7 @@ export class NodePluginService {
                                 address: node.address,
                                 port: node.port,
                                 proxyUrl: node.proxyUrl,
+                                nodeApiSniEnabled: node.nodeApiSniEnabled,
                             },
                         });
                     }
@@ -470,6 +472,7 @@ export class NodePluginService {
                                 address: node.address,
                                 port: node.port,
                                 proxyUrl: node.proxyUrl,
+                                nodeApiSniEnabled: node.nodeApiSniEnabled,
                             },
                         });
                     }
@@ -481,6 +484,7 @@ export class NodePluginService {
                                 address: node.address,
                                 port: node.port,
                                 proxyUrl: node.proxyUrl,
+                                nodeApiSniEnabled: node.nodeApiSniEnabled,
                             },
                         });
                     }

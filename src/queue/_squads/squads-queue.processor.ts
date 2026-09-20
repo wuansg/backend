@@ -14,6 +14,7 @@ import { QUEUES_NAMES } from '../queue.enum';
 import { SQUADS_JOB_NAMES } from './constants';
 
 @Processor(QUEUES_NAMES.SQUADS.ACTIONS, {
+    autorun: false,
     concurrency: 1,
 })
 export class SquadsQueueProcessor extends WorkerHost {

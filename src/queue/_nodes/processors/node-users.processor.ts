@@ -11,6 +11,7 @@ import { NODES_JOB_NAMES } from '../constants/nodes-job-name.constant';
 import { IAddUserToNodePayload, IRemoveUserFromNodePayload } from '../interfaces';
 
 @Processor(QUEUES_NAMES.NODES.USERS, {
+    autorun: false,
     concurrency: 75,
 })
 export class NodeUsersQueueProcessor extends WorkerHost {
@@ -39,6 +40,7 @@ export class NodeUsersQueueProcessor extends WorkerHost {
                 address: node.address,
                 port: node.port,
                 proxyUrl: node.proxyUrl,
+                nodeApiSniEnabled: node.nodeApiSniEnabled,
             });
 
             if (!result.isOk) {
@@ -62,6 +64,7 @@ export class NodeUsersQueueProcessor extends WorkerHost {
                 address: node.address,
                 port: node.port,
                 proxyUrl: node.proxyUrl,
+                nodeApiSniEnabled: node.nodeApiSniEnabled,
             });
 
             if (!result.isOk) {

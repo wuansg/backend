@@ -13,6 +13,7 @@ import { QUEUES_NAMES } from '@queue/queue.enum';
 import { USERS_JOB_NAMES } from '../constants/users-job-name.constant';
 
 @Processor(QUEUES_NAMES.USERS.MODIFY_MANY, {
+    autorun: false,
     concurrency: 50,
 })
 export class UsersModifyManyQueueProcessor extends WorkerHost {

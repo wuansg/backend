@@ -25,6 +25,7 @@ import { IGeocheckJobResult, IGeocheckPayload, IGetIpsListResult } from '../inte
         name: QUEUES_NAMES.NODES.QUERY_NODES,
     },
     {
+        autorun: false,
         concurrency: 10,
     },
 )
@@ -125,6 +126,7 @@ export class QueryNodesQueueProcessor extends WorkerHost implements OnApplicatio
                             address: node.address,
                             port: node.port,
                             proxyUrl: node.proxyUrl,
+                            nodeApiSniEnabled: node.nodeApiSniEnabled,
                         },
                     );
 
@@ -211,6 +213,7 @@ export class QueryNodesQueueProcessor extends WorkerHost implements OnApplicatio
                 address: nodeResult.response.address,
                 port: nodeResult.response.port,
                 proxyUrl: nodeResult.response.proxyUrl,
+                nodeApiSniEnabled: nodeResult.response.nodeApiSniEnabled,
             });
 
             if (!result.isOk) {
@@ -270,6 +273,7 @@ export class QueryNodesQueueProcessor extends WorkerHost implements OnApplicatio
                     address: nodeResult.response.address,
                     port: nodeResult.response.port,
                     proxyUrl: nodeResult.response.proxyUrl,
+                    nodeApiSniEnabled: nodeResult.response.nodeApiSniEnabled,
                 },
             );
             if (!result.isOk)
@@ -310,6 +314,7 @@ export class QueryNodesQueueProcessor extends WorkerHost implements OnApplicatio
                 address: nodeResult.response.address,
                 port: nodeResult.response.port,
                 proxyUrl: nodeResult.response.proxyUrl,
+                nodeApiSniEnabled: nodeResult.response.nodeApiSniEnabled,
             });
 
             if (!result.isOk || !result.response.users.length) {

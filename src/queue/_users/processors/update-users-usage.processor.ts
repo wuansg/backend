@@ -15,6 +15,7 @@ import { QUEUES_NAMES } from '@queue/queue.enum';
 import { USERS_JOB_NAMES } from '../constants/users-job-name.constant';
 
 @Processor(QUEUES_NAMES.USERS.UPDATE_USERS_USAGE, {
+    autorun: false,
     concurrency: 5,
 })
 export class UpdateUsersUsageQueueProcessor extends WorkerHost {

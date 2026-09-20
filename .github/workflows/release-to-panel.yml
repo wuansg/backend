@@ -12,14 +12,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - id: frontend-tag
-        uses: pozetroninc/github-action-get-latest-release@master
+        uses: pozetroninc/github-action-get-latest-release@5ac6001ed175b443484c81ab32a20e12132be99c # master
         with:
           owner: remnawave
           repo: frontend
           excludes: prerelease, draft
 
       - name: Checkout main branch first
-        uses: actions/checkout@v3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: remnawave/panel
           ref: main
@@ -44,7 +44,7 @@ jobs:
 
       - name: backend-tag
         id: backend-tag
-        uses: JinoArch/get-latest-tag@latest
+        uses: JinoArch/get-latest-tag@4a55da58d123a16b749c152b45c15f1ead139d42 # latest
 
       - name: Update release info and create tag
         id: commit
@@ -59,7 +59,7 @@ jobs:
           git push origin releases --tags
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           token: ${{ secrets.TOKEN_GH_DEPLOY }}
           repository: remnawave/panel

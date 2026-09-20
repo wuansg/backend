@@ -6,7 +6,13 @@ import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
 import { InfraProviderEntity } from '@modules/infra-billing/entities';
 
 import { NodesEntity } from '../entities';
-import { INodeConfigApply, INodeHotCache, INodeSystem, INodeVersions } from '../interfaces';
+import {
+    INodeConfigApply,
+    INodeHotCache,
+    INodeRuntimeInventory,
+    INodeSystem,
+    INodeVersions,
+} from '../interfaces';
 
 export class NodeResponseModel {
     public uuid: string;
@@ -31,6 +37,11 @@ export class NodeResponseModel {
     public viewPosition: number;
     public countryCode: string;
     public tags: string[];
+    public expectedAgentVersion: string | null;
+    public expectedAgentImageTag: string | null;
+    public rolloutBatch: string | null;
+    public nodeApiSniEnabled: boolean;
+    public nodeApiSniLastSuccessAt: Date | null;
     public ips: TNodeIps;
     public createdAt: Date;
     public updatedAt: Date;
@@ -49,6 +60,8 @@ export class NodeResponseModel {
     public versions: INodeVersions | null;
     public configApply: INodeConfigApply | null;
     public runtimeStatus: TNodeRuntimeStatus | null;
+    public runtimeInventory: INodeRuntimeInventory | null;
+    public versionDrift: boolean | null;
     public usageSnapshot: {
         receivedThrough: number;
         appliedThrough: number;
@@ -85,6 +98,11 @@ export class NodeResponseModel {
         this.consumptionMultiplier = fromNanoToNumber(data.consumptionMultiplier);
         this.nodeConsumptionMultiplier = fromNanoToNumber(data.nodeConsumptionMultiplier);
         this.tags = data.tags;
+        this.expectedAgentVersion = data.expectedAgentVersion;
+        this.expectedAgentImageTag = data.expectedAgentImageTag;
+        this.rolloutBatch = data.rolloutBatch;
+        this.nodeApiSniEnabled = data.nodeApiSniEnabled;
+        this.nodeApiSniLastSuccessAt = data.nodeApiSniLastSuccessAt;
         this.ips = data.ips;
         this.createdAt = data.createdAt;
         this.updatedAt = data.updatedAt;
@@ -106,6 +124,18 @@ export class NodeResponseModel {
         this.versions = hotCache.versions;
         this.configApply = hotCache.configApply;
         this.runtimeStatus = hotCache.runtimeStatus;
+        this.runtimeInventory = hotCache.runtimeInventory;
+        const expectedVersions = [data.expectedAgentVersion, data.expectedAgentImageTag].filter(
+            (version): version is string => version !== null,
+        );
+        this.versionDrift =
+            expectedVersions.length === 0
+                ? null
+                : hotCache.runtimeInventory
+                  ? expectedVersions.some(
+                        (version) => hotCache.runtimeInventory!.agentVersion !== version,
+                    )
+                  : null;
         this.coreUptime = hotCache.coreUptime;
         this.usageSnapshot = data.usageSnapshotState
             ? {

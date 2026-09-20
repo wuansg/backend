@@ -28,6 +28,20 @@ export interface NetworkInterfaceObservation {
     defaultRoute: boolean;
 }
 
+export interface RuntimeInventoryObservation {
+    agentVersion: string;
+    singBoxVersion: string | null;
+    architecture?: string;
+    runtimeMode: string;
+    runningCore: string | null;
+    capabilities: string[];
+    supportedCores: string[];
+    runtimeStatus: unknown;
+    configHashes?: unknown;
+    pluginHash?: string;
+    forwardingHash?: string;
+}
+
 export interface GeocheckSnapshot {
     exitIp: string | null;
     asn: string | null;
@@ -128,10 +142,22 @@ export class NodeObservabilityRepository {
         observation: {
             plugin?: PluginAgentState;
             networkInterfaces?: NetworkInterfaceObservation[];
+            runtime?: RuntimeInventoryObservation;
+            sniHandshakeSucceeded?: boolean;
         },
     ): Promise<void> {
         const now = new Date();
         const writes: Array<Promise<unknown>> = [];
+
+        if (observation.sniHandshakeSucceeded) {
+            writes.push(
+                this.prisma.$executeRaw(
+                    Prisma.sql`UPDATE "nodes"
+                        SET "node_api_sni_last_success_at" = ${now}
+                        WHERE "uuid" = ${nodeUuid}::uuid`,
+                ),
+            );
+        }
 
         if (observation.networkInterfaces) {
             writes.push(
@@ -148,6 +174,31 @@ export class NodeObservabilityRepository {
                             observation.networkInterfaces as unknown as Prisma.InputJsonValue,
                         reportedAt: now,
                     },
+                }),
+            );
+        }
+
+        if (observation.runtime) {
+            const runtime = observation.runtime;
+            const data = {
+                agentVersion: runtime.agentVersion,
+                singBoxVersion: runtime.singBoxVersion,
+                architecture: runtime.architecture ?? null,
+                runtimeMode: runtime.runtimeMode,
+                runningCore: runtime.runningCore,
+                capabilities: runtime.capabilities,
+                supportedCores: runtime.supportedCores,
+                runtimeStatus: runtime.runtimeStatus as Prisma.InputJsonValue,
+                configHashes: (runtime.configHashes ?? {}) as Prisma.InputJsonValue,
+                pluginHash: runtime.pluginHash ?? null,
+                forwardingHash: runtime.forwardingHash ?? null,
+                reportedAt: now,
+            };
+            writes.push(
+                this.prisma.nodeRuntimeInventory.upsert({
+                    where: { nodeUuid },
+                    create: { nodeUuid, ...data },
+                    update: data,
                 }),
             );
         }

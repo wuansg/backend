@@ -21,6 +21,7 @@ import {
 } from '../interfaces/executor.payload.interface';
 
 @Processor(QUEUES_NAMES.NODES.BULK_USERS, {
+    autorun: false,
     concurrency: 25,
 })
 export class NodeBulkUsersQueueProcessor extends WorkerHost {

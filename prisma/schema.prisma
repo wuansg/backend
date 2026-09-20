@@ -208,6 +208,12 @@ model Nodes {
   countryCode  String   @default("XX") @map("country_code")
   tags         String[] @default([]) @map("tags")
 
+  expectedAgentVersion    String?   @map("expected_agent_version") @db.VarChar(32)
+  expectedAgentImageTag   String?   @map("expected_agent_image_tag") @db.VarChar(128)
+  rolloutBatch            String?   @map("rollout_batch") @db.VarChar(64)
+  nodeApiSniEnabled       Boolean   @default(false) @map("node_api_sni_enabled")
+  nodeApiSniLastSuccessAt DateTime? @map("node_api_sni_last_success_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -224,6 +230,7 @@ model Nodes {
   usageSnapshotInbox           NodeUsageSnapshotInbox[]
   pluginDeployment             NodePluginDeployment?
   networkInventory             NodeNetworkInventory?
+  runtimeInventory             NodeRuntimeInventory?
   geocheckHistory              NodeGeocheckHistory[]
   geocheckDriftEvents          NodeGeocheckDriftEvent[]
 
@@ -757,6 +764,30 @@ model NodeNetworkInventory {
   node Nodes @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
 
   @@map("node_network_inventory")
+}
+
+model NodeRuntimeInventory {
+  nodeUuid       String   @id @map("node_uuid") @db.Uuid
+  agentVersion   String   @map("agent_version") @db.VarChar(32)
+  singBoxVersion String?  @map("sing_box_version") @db.VarChar(32)
+  architecture   String?  @map("architecture") @db.VarChar(32)
+  runtimeMode    String   @map("runtime_mode") @db.VarChar(32)
+  runningCore    String?  @map("running_core") @db.VarChar(32)
+  capabilities   String[] @default([]) @map("capabilities")
+  supportedCores String[] @default([]) @map("supported_cores")
+  runtimeStatus  Json     @default("{}") @map("runtime_status")
+  configHashes   Json     @default("{}") @map("config_hashes")
+  pluginHash     String?  @map("plugin_hash") @db.VarChar(64)
+  forwardingHash String?  @map("forwarding_hash") @db.VarChar(64)
+  reportedAt     DateTime @map("reported_at")
+
+  node Nodes @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+
+  @@index([agentVersion])
+  @@index([architecture])
+  @@index([runtimeMode])
+  @@index([reportedAt])
+  @@map("node_runtime_inventory")
 }
 
 model NodeGeocheckHistory {

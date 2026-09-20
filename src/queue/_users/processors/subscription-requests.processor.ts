@@ -24,6 +24,7 @@ import {
 } from '../interfaces';
 
 @Processor(QUEUES_NAMES.USERS.SUBSCRIPTION_REQUESTS, {
+    autorun: false,
     concurrency: 50,
 })
 export class SubscriptionRequestsQueueProcessor

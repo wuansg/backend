@@ -109,7 +109,12 @@ export class AddUsersToNodeHandler implements IEventHandler<AddUsersToNodeEvent>
                             affectedInboundTags,
                             users: usersForNode,
                         },
-                        node: { address: node.address, port: node.port, proxyUrl: node.proxyUrl },
+                        node: {
+                            address: node.address,
+                            port: node.port,
+                            proxyUrl: node.proxyUrl,
+                            nodeApiSniEnabled: node.nodeApiSniEnabled,
+                        },
                     });
                 }
 
@@ -121,7 +126,12 @@ export class AddUsersToNodeHandler implements IEventHandler<AddUsersToNodeEvent>
                                 hashUuid: u.hashUuid,
                             })),
                         },
-                        node: { address: node.address, port: node.port, proxyUrl: node.proxyUrl },
+                        node: {
+                            address: node.address,
+                            port: node.port,
+                            proxyUrl: node.proxyUrl,
+                            nodeApiSniEnabled: node.nodeApiSniEnabled,
+                        },
                     });
                 }
             }

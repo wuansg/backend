@@ -18,6 +18,7 @@ import { NODES_JOB_NAMES } from '../constants';
         scope: Scope.REQUEST,
     },
     {
+        autorun: false,
         concurrency: 1,
     },
 )

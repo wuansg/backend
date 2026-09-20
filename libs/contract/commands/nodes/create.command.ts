@@ -68,6 +68,29 @@ export namespace CreateNodeCommand {
         activePluginUuid: z.optional(z.nullable(z.uuid())),
         note: z.optional(z.string().max(255, 'Note must be less than 255 characters')),
         ips: z.optional(NodeIpsSchema),
+        expectedAgentVersion: z
+            .string()
+            .trim()
+            .max(32)
+            .regex(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/)
+            .nullish()
+            .or(z.literal('').transform(() => null)),
+        expectedAgentImageTag: z
+            .string()
+            .trim()
+            .max(128)
+            .regex(/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/)
+            .nullish()
+            .or(z.literal('').transform(() => null)),
+        rolloutBatch: z
+            .string()
+            .trim()
+            .min(1)
+            .max(64)
+            .nullish()
+            .or(z.literal('').transform(() => null)),
+        // SNI pinning can only be enabled after the node has reported support.
+        nodeApiSniEnabled: z.literal(false).optional().default(false),
     });
 
     export const ResponseSchema = NodeResponseSchema;

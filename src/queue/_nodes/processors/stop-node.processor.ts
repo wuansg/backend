@@ -15,6 +15,7 @@ import { QUEUES_NAMES } from '@queue/queue.enum';
 import { NODES_JOB_NAMES } from '../constants/nodes-job-name.constant';
 
 @Processor(QUEUES_NAMES.NODES.STOP, {
+    autorun: false,
     concurrency: 30,
 })
 export class StopNodeProcessor extends WorkerHost {
@@ -48,6 +49,7 @@ export class StopNodeProcessor extends WorkerHost {
                 address: result.response.address,
                 port: result.response.port,
                 proxyUrl: result.response.proxyUrl,
+                nodeApiSniEnabled: result.response.nodeApiSniEnabled,
             });
 
             // TODO: disable plugins?

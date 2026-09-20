@@ -16,6 +16,7 @@ import { WebhookLoggerJobNames } from './enums';
 import { IBaseWebhookLogger } from './interfaces';
 
 @Processor(QUEUES_NAMES.NOTIFICATIONS.WEBHOOK, {
+    autorun: false,
     concurrency: 100,
 })
 export class WebhookLoggerQueueProcessor extends WorkerHost {

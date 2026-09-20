@@ -128,6 +128,7 @@ export class AddUserToNodeHandler implements IEventHandler<AddUserToNodeEvent> {
                             address: node.address,
                             port: node.port,
                             proxyUrl: node.proxyUrl,
+                            nodeApiSniEnabled: node.nodeApiSniEnabled,
                         },
                     });
 
@@ -140,6 +141,7 @@ export class AddUserToNodeHandler implements IEventHandler<AddUserToNodeEvent> {
                         address: node.address,
                         port: node.port,
                         proxyUrl: node.proxyUrl,
+                        nodeApiSniEnabled: node.nodeApiSniEnabled,
                     },
                 });
             }

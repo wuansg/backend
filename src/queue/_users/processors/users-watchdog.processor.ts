@@ -21,6 +21,7 @@ import { USERS_JOB_NAMES } from '../constants/users-job-name.constant';
 import { UsersQueuesService } from '../users-queues.service';
 
 @Processor(QUEUES_NAMES.USERS.USERS_WATCHDOG, {
+    autorun: false,
     concurrency: 1,
 })
 export class UsersWatchdogQueueProcessor extends WorkerHost {

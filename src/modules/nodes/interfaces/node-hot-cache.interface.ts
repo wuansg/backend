@@ -17,6 +17,21 @@ export interface INodeConfigApply {
     rollback: 'NOT_REQUIRED' | 'SUCCEEDED' | 'FAILED' | 'NOT_AVAILABLE';
 }
 
+export interface INodeRuntimeInventory {
+    agentVersion: string;
+    singBoxVersion: string | null;
+    architecture: string | null;
+    runtimeMode: TNodeRuntimeStatus['mode'];
+    runningCore: 'SING_BOX' | null;
+    capabilities: string[];
+    supportedCores: Array<'SING_BOX'>;
+    runtimeStatus: TNodeRuntimeStatus;
+    configHashes: unknown;
+    pluginHash: string | null;
+    forwardingHash: string | null;
+    reportedAt: Date;
+}
+
 export interface INodeHotCache {
     system: INodeSystem | null;
     versions: INodeVersions | null;
@@ -24,4 +39,5 @@ export interface INodeHotCache {
     onlineUsers: number;
     configApply: INodeConfigApply | null;
     runtimeStatus: TNodeRuntimeStatus | null;
+    runtimeInventory: INodeRuntimeInventory | null;
 }

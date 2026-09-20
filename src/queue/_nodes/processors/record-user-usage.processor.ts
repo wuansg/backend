@@ -36,6 +36,7 @@ type UserInboundUsageStat = {
 };
 
 @Processor(QUEUES_NAMES.NODES.RECORD_USER_USAGE, {
+    autorun: false,
     concurrency: 20,
 })
 export class RecordUserUsageQueueProcessor extends WorkerHost {
@@ -63,6 +64,7 @@ export class RecordUserUsageQueueProcessor extends WorkerHost {
                 address: connectionOpts.address,
                 port: connectionOpts.port,
                 proxyUrl: connectionOpts.proxyUrl,
+                nodeApiSniEnabled: connectionOpts.nodeApiSniEnabled,
             };
 
             const [snapshotsActive] = await Promise.all([
