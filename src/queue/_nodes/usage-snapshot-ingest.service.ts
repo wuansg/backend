@@ -352,6 +352,25 @@ export class UsageSnapshotIngestService {
                 userHost.hour,
             );
         }
+        for (const forwardingRule of batch.forwardingRules) {
+            const total = forwardingRule.usage.uplink + forwardingRule.usage.downlink;
+            if (total === 0n) continue;
+            await tx.$executeRaw(Prisma.sql`
+                INSERT INTO node_forwarding_usage_history (
+                    node_uuid, rule_id, protocol, upload_bytes, download_bytes,
+                    total_bytes, created_at
+                ) VALUES (
+                    ${nodeUuid}::uuid, ${forwardingRule.ruleId}::uuid,
+                    ${forwardingRule.protocol}, ${forwardingRule.usage.uplink},
+                    ${forwardingRule.usage.downlink}, ${total}, ${forwardingRule.hour}
+                )
+                ON CONFLICT (node_uuid, rule_id, protocol, created_at) DO UPDATE SET
+                    upload_bytes = node_forwarding_usage_history.upload_bytes + EXCLUDED.upload_bytes,
+                    download_bytes = node_forwarding_usage_history.download_bytes + EXCLUDED.download_bytes,
+                    total_bytes = node_forwarding_usage_history.total_bytes + EXCLUDED.total_bytes,
+                    updated_at = now()
+            `);
+        }
     }
 
     private async applyHostUsage(

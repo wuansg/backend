@@ -1,7 +1,7 @@
 import { CONTROLLERS_INFO, NODES_CONTROLLER } from '@contract/api';
 import { ROLE } from '@contract/constants';
 
-import { Body, Controller, HttpStatus, Param, UseFilters, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpStatus, Param, Query, UseFilters, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { Endpoint } from '@common/decorators/base-endpoint';
@@ -29,6 +29,7 @@ import {
     BulkNodesActionsCommand,
     BulkNodesUpdateCommand,
     GetNodeForwardingCommand,
+    GetNodeForwardingUsageCommand,
     SyncNodeForwardingCommand,
     UpdateNodeForwardingCommand,
     GetNodeObservabilityCommand,
@@ -59,6 +60,9 @@ import {
     NodeResponseDto,
     GetNodeForwardingParamDto,
     GetNodeForwardingResponseDto,
+    GetNodeForwardingUsageParamDto,
+    GetNodeForwardingUsageQueryDto,
+    GetNodeForwardingUsageResponseDto,
     UpdateNodeForwardingParamDto,
     UpdateNodeForwardingBodyDto,
     SyncNodeForwardingParamDto,
@@ -97,6 +101,20 @@ export class NodesController {
         @Param() param: GetNodeForwardingParamDto,
     ): Promise<GetNodeForwardingResponseDto> {
         return { response: errorHandler(await this.nodeForwardingService.get(param.uuid)) };
+    }
+
+    @Endpoint({
+        type: GetNodeForwardingUsageResponseDto,
+        command: GetNodeForwardingUsageCommand,
+        httpCode: HttpStatus.OK,
+    })
+    async getNodeForwardingUsage(
+        @Param() param: GetNodeForwardingUsageParamDto,
+        @Query() query: GetNodeForwardingUsageQueryDto,
+    ): Promise<GetNodeForwardingUsageResponseDto> {
+        return {
+            response: errorHandler(await this.nodeForwardingService.getUsage(param.uuid, query)),
+        };
     }
 
     @Endpoint({

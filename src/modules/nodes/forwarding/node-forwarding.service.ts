@@ -5,10 +5,12 @@ import {
     NodeForwardingIPv4Schema,
     NodeForwardingRuntimeStatus,
 } from '@contract/models';
+import { Prisma } from '@prisma/client';
 
 import { Injectable, Logger } from '@nestjs/common';
 
 import { AxiosService, INodeConnectionOpts } from '@common/axios';
+import { PrismaService } from '@common/database/prisma.service';
 import { fail, ok, TResult } from '@common/types';
 
 import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
@@ -31,6 +33,22 @@ export interface NodeForwardingView {
     status: NodeForwardingRuntimeStatus;
 }
 
+export interface NodeForwardingUsageView {
+    start: string;
+    end: string;
+    uploadBytes: number;
+    downloadBytes: number;
+    totalBytes: number;
+    lastRecordedAt: string | null;
+    rules: Array<{
+        id: string;
+        uploadBytes: number;
+        downloadBytes: number;
+        totalBytes: number;
+        lastRecordedAt: string | null;
+    }>;
+}
+
 @Injectable()
 export class NodeForwardingService {
     private readonly logger = new Logger(NodeForwardingService.name);
@@ -39,6 +57,7 @@ export class NodeForwardingService {
     constructor(
         private readonly nodesRepository: NodesRepository,
         private readonly axios: AxiosService,
+        private readonly prisma: PrismaService,
     ) {}
 
     public async get(uuid: string): Promise<TResult<NodeForwardingView>> {
@@ -47,6 +66,67 @@ export class NodeForwardingService {
 
         const config = this.readConfig(node);
         return ok({ config, status: await this.readRuntimeStatus(node, config) });
+    }
+
+    public async getUsage(
+        uuid: string,
+        query: { start?: string; end?: string },
+    ): Promise<TResult<NodeForwardingUsageView>> {
+        const node = await this.nodesRepository.findByUUID(uuid);
+        if (!node) return fail(ERRORS.NODE_NOT_FOUND);
+
+        const today = new Date().toISOString().slice(0, 10);
+        const start = query.start ?? today;
+        const end = query.end ?? start;
+        if (start > end) {
+            return fail(ERRORS.INTERNAL_SERVER_ERROR);
+        }
+        const startAt = new Date(`${start}T00:00:00.000Z`);
+        const endExclusive = new Date(`${end}T00:00:00.000Z`);
+        endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+
+        const rows = await this.prisma.$queryRaw<
+            Array<{
+                ruleId: string;
+                uploadBytes: bigint;
+                downloadBytes: bigint;
+                totalBytes: bigint;
+                lastRecordedAt: Date | null;
+            }>
+        >(Prisma.sql`
+            SELECT rule_id AS "ruleId",
+                   SUM(upload_bytes)::bigint AS "uploadBytes",
+                   SUM(download_bytes)::bigint AS "downloadBytes",
+                   SUM(total_bytes)::bigint AS "totalBytes",
+                   MAX(created_at) AS "lastRecordedAt"
+            FROM node_forwarding_usage_history
+            WHERE node_uuid = ${uuid}::uuid
+              AND created_at >= ${startAt}
+              AND created_at < ${endExclusive}
+            GROUP BY rule_id
+            ORDER BY rule_id
+        `);
+        const rules = rows.map((row) => ({
+            id: row.ruleId,
+            uploadBytes: Number(row.uploadBytes),
+            downloadBytes: Number(row.downloadBytes),
+            totalBytes: Number(row.totalBytes),
+            lastRecordedAt: row.lastRecordedAt?.toISOString() ?? null,
+        }));
+        return ok({
+            start,
+            end,
+            uploadBytes: rules.reduce((sum, rule) => sum + rule.uploadBytes, 0),
+            downloadBytes: rules.reduce((sum, rule) => sum + rule.downloadBytes, 0),
+            totalBytes: rules.reduce((sum, rule) => sum + rule.totalBytes, 0),
+            lastRecordedAt:
+                rules
+                    .map((rule) => rule.lastRecordedAt)
+                    .filter((value): value is string => value !== null)
+                    .sort()
+                    .at(-1) ?? null,
+            rules,
+        });
     }
 
     public async update(

@@ -19,6 +19,12 @@ export interface UsageSnapshotWriteBatch {
     userDays: Array<{ userId: bigint; day: Date; upload: bigint; download: bigint; total: bigint }>;
     hosts: Array<{ tag: string; hour: Date; usage: UsageDelta }>;
     userHosts: Array<{ userId: bigint; tag: string; hour: Date; usage: UsageDelta }>;
+    forwardingRules: Array<{
+        ruleId: string;
+        protocol: 'TCP' | 'UDP';
+        hour: Date;
+        usage: UsageDelta;
+    }>;
 }
 
 export function buildUsageSnapshotWriteBatch(
@@ -43,6 +49,7 @@ export function buildUsageSnapshotWriteBatch(
     const userDays = new Map<string, UsageDelta>();
     const hosts = new Map<string, UsageDelta>();
     const userHosts = new Map<string, UsageDelta>();
+    const forwardingRules = new Map<string, UsageDelta>();
     let nodeMultipliedTotal = 0n;
 
     for (const snapshot of snapshots) {
@@ -116,6 +123,23 @@ export function buildUsageSnapshotWriteBatch(
                 addUsage(userHosts, `${username}\u0000${tag}\u0000${hourKey}`, usage);
             }
         }
+
+        for (const counter of snapshot.counters) {
+            if (
+                counter.kind !== 'forwarding' ||
+                !counter.protocol ||
+                !['TCP', 'UDP'].includes(counter.protocol) ||
+                !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                    counter.name,
+                )
+            ) {
+                continue;
+            }
+            addUsage(forwardingRules, `${counter.name}\u0000${counter.protocol}\u0000${hourKey}`, {
+                uplink: counter.direction === 'uplink' ? BigInt(counter.value) : 0n,
+                downlink: counter.direction === 'downlink' ? BigInt(counter.value) : 0n,
+            });
+        }
     }
 
     return {
@@ -149,6 +173,18 @@ export function buildUsageSnapshotWriteBatch(
                 return {
                     userId: BigInt(key.slice(0, first)),
                     tag: key.slice(first + 1, second),
+                    hour: new Date(key.slice(second + 1)),
+                    usage,
+                };
+            }),
+        forwardingRules: [...forwardingRules]
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([key, usage]) => {
+                const first = key.indexOf('\u0000');
+                const second = key.indexOf('\u0000', first + 1);
+                return {
+                    ruleId: key.slice(0, first),
+                    protocol: key.slice(first + 1, second) as 'TCP' | 'UDP',
                     hour: new Date(key.slice(second + 1)),
                     usage,
                 };

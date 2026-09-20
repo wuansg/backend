@@ -1,5 +1,6 @@
 import {
     GetNodeForwardingCommand,
+    GetNodeForwardingUsageCommand,
     SyncNodeForwardingCommand,
     UpdateNodeForwardingCommand,
 } from '@contract/commands';
@@ -10,6 +11,15 @@ export class GetNodeForwardingParamDto extends createZodDto(
 ) {}
 export class GetNodeForwardingResponseDto extends createZodDto(
     GetNodeForwardingCommand.ResponseSchema,
+) {}
+export class GetNodeForwardingUsageParamDto extends createZodDto(
+    GetNodeForwardingUsageCommand.RequestParamSchema,
+) {}
+export class GetNodeForwardingUsageQueryDto extends createZodDto(
+    GetNodeForwardingUsageCommand.RequestQuerySchema,
+) {}
+export class GetNodeForwardingUsageResponseDto extends createZodDto(
+    GetNodeForwardingUsageCommand.ResponseSchema,
 ) {}
 export class UpdateNodeForwardingParamDto extends createZodDto(
     UpdateNodeForwardingCommand.RequestParamSchema,

@@ -63,6 +63,8 @@ export const REST_API = {
         FORWARDING: {
             GET: (uuid: string) =>
                 `${ROOT}/${CONTROLLERS.NODES_CONTROLLER}/${CONTROLLERS.NODES_ROUTES.FORWARDING.GET(uuid)}`,
+            GET_USAGE: (uuid: string) =>
+                `${ROOT}/${CONTROLLERS.NODES_CONTROLLER}/${CONTROLLERS.NODES_ROUTES.FORWARDING.GET_USAGE(uuid)}`,
             UPDATE: (uuid: string) =>
                 `${ROOT}/${CONTROLLERS.NODES_CONTROLLER}/${CONTROLLERS.NODES_ROUTES.FORWARDING.UPDATE(uuid)}`,
             SYNC: (uuid: string) =>

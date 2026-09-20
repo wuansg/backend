@@ -12,6 +12,7 @@ export const NODES_ROUTES = {
 
     FORWARDING: {
         GET: (uuid: string) => `${uuid}/forwarding`,
+        GET_USAGE: (uuid: string) => `${uuid}/forwarding/usage`,
         UPDATE: (uuid: string) => `${uuid}/forwarding`,
         SYNC: (uuid: string) => `${uuid}/forwarding/${NODE_ACTIONS_ROUTE}/sync`,
     },

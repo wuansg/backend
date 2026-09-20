@@ -217,9 +217,11 @@ const ZSTD_OPTIONS: ZstdOptions = {
 };
 
 export interface UsageSnapshotCounter {
-    kind: 'user' | 'inbound' | 'outbound';
+    kind: 'user' | 'inbound' | 'outbound' | 'forwarding';
     name: string;
     inbound?: string;
+    protocol?: 'TCP' | 'UDP';
+    scope?: string;
     direction: 'uplink' | 'downlink';
     value: number;
 }

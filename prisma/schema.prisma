@@ -233,6 +233,7 @@ model Nodes {
   runtimeInventory             NodeRuntimeInventory?
   geocheckHistory              NodeGeocheckHistory[]
   geocheckDriftEvents          NodeGeocheckDriftEvent[]
+  forwardingUsageHistory      NodeForwardingUsageHistory[]
 
   activeConfigProfile ConfigProfiles? @relation(fields: [activeConfigProfileUuid], references: [uuid], onDelete: SetNull)
   provider            InfraProviders? @relation(fields: [providerUuid], references: [uuid], onDelete: SetNull)
@@ -281,6 +282,24 @@ model NodeUsageSnapshotInbox {
   @@index([nodeUuid, appliedAt, sequence])
   @@index([appliedAt])
   @@map("node_usage_snapshot_inbox")
+}
+
+model NodeForwardingUsageHistory {
+  nodeUuid      String   @map("node_uuid") @db.Uuid
+  ruleId        String   @map("rule_id") @db.Uuid
+  protocol      String   @map("protocol") @db.VarChar(3)
+  uploadBytes   BigInt   @default(0) @map("upload_bytes")
+  downloadBytes BigInt   @default(0) @map("download_bytes")
+  totalBytes    BigInt   @default(0) @map("total_bytes")
+  createdAt     DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+
+  node Nodes @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+
+  @@id([nodeUuid, ruleId, protocol, createdAt])
+  @@index([nodeUuid, createdAt])
+  @@index([nodeUuid, ruleId, createdAt])
+  @@map("node_forwarding_usage_history")
 }
 
 model NodesUserUsageHistory {
