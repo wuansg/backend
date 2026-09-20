@@ -12,9 +12,11 @@ export class GetOnlineNodesHandler implements IQueryHandler<GetOnlineNodesQuery>
     private readonly logger = new Logger(GetOnlineNodesHandler.name);
     constructor(private readonly nodesRepository: NodesRepository) {}
 
-    async execute() {
+    async execute(query: GetOnlineNodesQuery) {
         try {
-            const nodes = await this.nodesRepository.findConnectedNodesPartial();
+            const nodes = await this.nodesRepository.findConnectedNodesPartial(
+                query.includeCoreless,
+            );
 
             return ok(nodes);
         } catch (error) {

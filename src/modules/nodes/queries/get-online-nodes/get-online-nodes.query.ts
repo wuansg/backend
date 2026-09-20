@@ -12,7 +12,7 @@ export interface IGetOnlineNodesPartialResponse {
 }
 
 export class GetOnlineNodesQuery extends Query<TResult<IGetOnlineNodesPartialResponse[]>> {
-    constructor() {
+    constructor(public readonly includeCoreless = false) {
         super();
     }
 }

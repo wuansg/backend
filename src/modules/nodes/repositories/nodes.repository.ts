@@ -76,7 +76,9 @@ export class NodesRepository implements ICrud<NodesEntity> {
         return nodesList.map((value) => new NodesEntity(value));
     }
 
-    public async findConnectedNodesPartial(): Promise<IGetOnlineNodesPartialResponse[]> {
+    public async findConnectedNodesPartial(
+        includeCoreless = false,
+    ): Promise<IGetOnlineNodesPartialResponse[]> {
         const nodesList = await this.prisma.tx.nodes.findMany({
             where: {
                 isConnected: true,
@@ -85,9 +87,13 @@ export class NodesRepository implements ICrud<NodesEntity> {
                 activeConfigProfileUuid: {
                     not: null,
                 },
-                configProfileInboundsToNodes: {
-                    some: {},
-                },
+                ...(includeCoreless
+                    ? {}
+                    : {
+                          configProfileInboundsToNodes: {
+                              some: {},
+                          },
+                      }),
             },
             select: {
                 uuid: true,

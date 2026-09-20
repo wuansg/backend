@@ -25,7 +25,9 @@ export class RecordNodesUsageTask {
     })
     async handleCron() {
         try {
-            const nodesResponse = await this.queryBus.execute(new GetOnlineNodesQuery());
+            // Forwarding-only nodes have no profile inbound, but their Agent
+            // still produces durable nftables usage snapshots.
+            const nodesResponse = await this.queryBus.execute(new GetOnlineNodesQuery(true));
             if (!nodesResponse.isOk) {
                 return;
             }
