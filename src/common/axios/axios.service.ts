@@ -220,7 +220,7 @@ export interface UsageSnapshotCounter {
     kind: 'user' | 'inbound' | 'outbound' | 'forwarding';
     name: string;
     inbound?: string;
-    protocol?: 'TCP' | 'UDP';
+    protocol?: 'TCP' | 'UDP' | 'tcp' | 'udp';
     scope?: string;
     direction: 'uplink' | 'downlink';
     value: number;

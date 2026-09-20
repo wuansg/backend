@@ -14,7 +14,7 @@ const batch = buildUsageSnapshotWriteBatch(
                 {
                     kind: 'forwarding',
                     name: ruleId,
-                    protocol: 'TCP',
+                    protocol: 'tcp',
                     scope: 'apply-1',
                     direction: 'uplink',
                     value: 120,

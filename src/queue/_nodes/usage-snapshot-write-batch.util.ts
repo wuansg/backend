@@ -125,17 +125,18 @@ export function buildUsageSnapshotWriteBatch(
         }
 
         for (const counter of snapshot.counters) {
+            const forwardingProtocol = counter.protocol?.toUpperCase();
             if (
                 counter.kind !== 'forwarding' ||
-                !counter.protocol ||
-                !['TCP', 'UDP'].includes(counter.protocol) ||
+                !forwardingProtocol ||
+                !['TCP', 'UDP'].includes(forwardingProtocol) ||
                 !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
                     counter.name,
                 )
             ) {
                 continue;
             }
-            addUsage(forwardingRules, `${counter.name}\u0000${counter.protocol}\u0000${hourKey}`, {
+            addUsage(forwardingRules, `${counter.name}\u0000${forwardingProtocol}\u0000${hourKey}`, {
                 uplink: counter.direction === 'uplink' ? BigInt(counter.value) : 0n,
                 downlink: counter.direction === 'downlink' ? BigInt(counter.value) : 0n,
             });
