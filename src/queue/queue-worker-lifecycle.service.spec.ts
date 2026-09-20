@@ -1,5 +1,7 @@
 import { Job, Worker } from 'bullmq';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { WorkerHost } from '@nestjs/bullmq';
@@ -40,6 +42,17 @@ function createLifecycle(instances: unknown[]): QueueWorkerLifecycleService {
 }
 
 describe('QueueWorkerLifecycleService', () => {
+    it('releases processor workers only after Nest and Axios bootstrap', () => {
+        const source = readFileSync(resolve(__dirname, '../bin/processors/processors.ts'), 'utf8');
+        const appInitialized = source.indexOf('await app.init()');
+        const jwtInitialized = source.indexOf('await axiosService.setJwt()');
+        const workersReleased = source.indexOf('QueueWorkerLifecycleService).startAll()');
+
+        assert.ok(appInitialized >= 0);
+        assert.ok(jwtInitialized > appInitialized);
+        assert.ok(workersReleased > jwtInitialized);
+    });
+
     it('starts workers once only after explicitly released', async () => {
         let running = false;
         let runCalls = 0;

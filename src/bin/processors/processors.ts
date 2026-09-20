@@ -21,6 +21,7 @@ import { customLogFilter } from '@common/utils/filter-logs/filter-logs';
 import { isDevOrDebugLogsEnabled } from '@common/utils/startup-app';
 import { METRICS_ROOT } from '@libs/contracts/api';
 
+import { QueueWorkerLifecycleService } from '../../queue/queue-worker-lifecycle.service';
 import { ProcessorsRootModule } from './processors.root.module';
 
 dayjs.extend(utc);
@@ -75,6 +76,7 @@ async function bootstrap(): Promise<void> {
 
     const axiosService = app.get(AxiosService);
     await axiosService.setJwt();
+    await app.get(QueueWorkerLifecycleService).startAll();
 
     if (import.meta.webpackHot) {
         import.meta.webpackHot.accept();
