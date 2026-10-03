@@ -1,10 +1,11 @@
 import {
+    SUBSCRIPTION_TEMPLATE_TYPE,
     TAlpnValues,
     TMihomoIpVersion,
     TSecurityLayers,
     TSubscriptionTemplateType,
 } from '@libs/contracts/constants';
-import { THostMapper } from '@libs/contracts/models';
+import { HostMapperSchema, THostMapper } from '@libs/contracts/models';
 
 import { HostsEntity } from '../entities/hosts.entity';
 
@@ -46,8 +47,6 @@ export class HostResponseModel {
     };
 
     public nodes: string[];
-
-    public xrayJsonTemplateUuid: string | null;
 
     public excludedInternalSquads: string[];
     public excludeFromSubscriptionTypes: TSubscriptionTemplateType[];
@@ -95,8 +94,9 @@ export class HostResponseModel {
             (exclusion) => exclusion.squadUuid,
         );
 
-        this.xrayJsonTemplateUuid = data.xrayJsonTemplateUuid;
-        this.excludeFromSubscriptionTypes = data.excludeFromSubscriptionTypes;
-        this.mapper = data.mapper;
+        this.excludeFromSubscriptionTypes = data.excludeFromSubscriptionTypes.filter((type) =>
+            Object.values(SUBSCRIPTION_TEMPLATE_TYPE).includes(type),
+        );
+        this.mapper = HostMapperSchema.parse(data.mapper ?? {});
     }
 }

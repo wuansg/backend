@@ -363,7 +363,7 @@ export class NodeForwardingService {
         }
         const type = inbound.type.toLowerCase();
         if (['hysteria', 'hysteria2', 'tuic', 'quic'].includes(type)) return 'UDP';
-        if (['anytls', 'trojan', 'vless', 'http', 'naive', 'shadowtls'].includes(type)) {
+        if (['snell', 'anytls', 'trojan', 'vless', 'http', 'naive', 'shadowtls'].includes(type)) {
             return 'TCP';
         }
         return 'TCP_UDP';

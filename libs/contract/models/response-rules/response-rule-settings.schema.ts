@@ -5,7 +5,7 @@ export const ResponseRuleSettingsSchema = z
         disableSubscriptionAccessByPath: z.boolean().optional().meta({
             title: 'Disable Subscription Access by Path',
             markdownDescription:
-                "Usually, a user's subscription may also be available via additional paths such as **/json**, **/stash**, or **/mihomo**. If this flag is set to **true**, access via these additional paths will be disabled.",
+                "Usually, a user's subscription may also be available via additional paths such as **/singbox**, **/stash**, or **/mihomo**. If this flag is set to **true**, access via these additional paths will be disabled.",
         }),
     })
     .optional()

@@ -113,49 +113,6 @@ export const RemnawaveWebhookCrmEvents = z.object({
     }),
 });
 
-export const RemnawaveWebhookTorrentBlockerEvents = z.object({
-    scope: z.literal(EVENTS_SCOPES.TORRENT_BLOCKER),
-    event: z.enum(toZodEnum(EVENTS.TORRENT_BLOCKER)),
-    timestamp: z
-        .string()
-        .datetime()
-        .transform((str) => new Date(str)),
-    data: z.object({
-        node: NodesSchema,
-        user: ExtendedUsersSchema,
-        report: z.object({
-            actionReport: z.object({
-                blocked: z.boolean(),
-                ip: z.string(),
-                blockDuration: z.number(),
-                willUnblockAt: z
-                    .string()
-                    .datetime({ offset: true, local: true })
-                    .transform((str) => new Date(str)),
-                userId: z.string(),
-                processedAt: z
-                    .string()
-                    .datetime({ offset: true, local: true })
-                    .transform((str) => new Date(str)),
-            }),
-            coreReport: z.object({
-                email: z.string().nullable(),
-                level: z.number().nullable(),
-                protocol: z.string().nullable(),
-                network: z.string(),
-                source: z.string().nullable(),
-                destination: z.string(),
-                routeTarget: z.string().nullable(),
-                originalTarget: z.string().nullable(),
-                inboundTag: z.string().nullable(),
-                inboundName: z.string().nullable(),
-                inboundLocal: z.string().nullable(),
-                outboundTag: z.string().nullable(),
-                ts: z.number(),
-            }),
-        }),
-    }),
-});
 export const RemnawaveWebhookEventSchema = z.discriminatedUnion('scope', [
     RemnawaveWebhookUserEvents,
     RemnawaveWebhookUserHwidDevicesEvents,
@@ -163,7 +120,6 @@ export const RemnawaveWebhookEventSchema = z.discriminatedUnion('scope', [
     RemnawaveWebhookServiceEvents,
     RemnawaveWebhookErrorsEvents,
     RemnawaveWebhookCrmEvents,
-    RemnawaveWebhookTorrentBlockerEvents,
 ]);
 
 export type TRemnawaveWebhookEvent = z.infer<typeof RemnawaveWebhookEventSchema>;
@@ -175,7 +131,4 @@ export type TRemnawaveWebhookErrorsEvent = z.infer<typeof RemnawaveWebhookErrors
 export type TRemnawaveWebhookCrmEvent = z.infer<typeof RemnawaveWebhookCrmEvents>;
 export type TRemnawaveWebhookUserHwidDevicesEvent = z.infer<
     typeof RemnawaveWebhookUserHwidDevicesEvents
->;
-export type TRemnawaveWebhookTorrentBlockerEvent = z.infer<
-    typeof RemnawaveWebhookTorrentBlockerEvents
 >;

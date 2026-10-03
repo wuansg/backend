@@ -107,12 +107,6 @@ export class ResponseRulesMiddleware implements NestMiddleware {
                 if (mods.subscriptionTemplate) {
                     ssrContext.overrideTemplateName = mods.subscriptionTemplate;
                 }
-                if (mods.ignoreHostXrayJsonTemplate) {
-                    ssrContext.ignoreHostXrayJsonTemplate = true;
-                }
-                if (mods.ignoreServeJsonAtBaseSubscription) {
-                    ssrContext.ignoreServeJsonAtBaseSubscription = true;
-                }
 
                 if (mods.disableHwidCheck) {
                     ssrContext.disableHwidCheck = true;

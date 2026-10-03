@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 import { HostMapperSchema } from '@libs/contracts/models';
 
-import { XrayGeneratorService } from '@modules/subscription-template/generators/xray.generator.service';
+import { Base64GeneratorService } from '@modules/subscription-template/generators/base64.generator.service';
 import { applyHostMapper } from '@modules/subscription-template/host-mapper';
 import { ResolvedProxyConfig } from '@modules/subscription-template/resolve-proxy/interfaces';
 
@@ -24,7 +24,6 @@ const host = {
         mihomoX25519: false,
         mihomoIpVersion: null,
         serverDescription: null,
-        xrayJsonTemplate: null,
     },
     metadata: {
         uuid: '00000000-0000-4000-8000-000000000001',
@@ -54,7 +53,6 @@ const mapper = HostMapperSchema.parse({
     ],
     mihomo: [{ op: 'set', to: 'ip-version', value: 'ipv4' }],
     base64: [{ op: 'set', to: 'fp', value: 'chrome' }],
-    xrayJson: [{ op: 'unset', to: 'mux' }],
 });
 
 const result = applyHostMapper(
@@ -88,7 +86,7 @@ const protectedResult = applyHostMapper(
 assert.deepEqual(protectedResult, {});
 assert.equal(({} as Record<string, unknown>).polluted, undefined);
 
-const generator = new XrayGeneratorService();
+const generator = new Base64GeneratorService();
 
 const mappedAnyTls = {
     ...host,

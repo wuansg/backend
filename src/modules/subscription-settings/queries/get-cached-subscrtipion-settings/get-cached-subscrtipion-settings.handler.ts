@@ -26,7 +26,7 @@ export class GetCachedSubscriptionSettingsHandler implements IQueryHandler<GetCa
             );
 
             if (cached) {
-                return cached;
+                return new SubscriptionSettingsEntity(cached);
             }
 
             const settings = await this.subscriptionSettingsRepository.findFirst();

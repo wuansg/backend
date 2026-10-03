@@ -1,5 +1,3 @@
-import { SplitHTTPMode, TCPHeaderHTTP, TCPHeaderNone, VLessFlow } from 'xray-typed';
-
 import { TMihomoIpVersion, TSubscriptionTemplateType } from '@libs/contracts/constants';
 import { THostMapper } from '@libs/contracts/models';
 
@@ -8,7 +6,7 @@ import { THostMapper } from '@libs/contracts/models';
 export interface IVlessProtocolOptions {
     encryption: string;
     id: string;
-    flow: VLessFlow;
+    flow: 'xtls-rprx-vision' | '';
 }
 
 export interface ITrojanProtocolOptions {
@@ -58,13 +56,30 @@ export interface IShadowTlsProtocolOptions {
 // ─── Transport Options ───────────────────────────────────
 
 export interface ITcpTransportOptions {
-    header: TCPHeaderNone | TCPHeaderHTTP | null;
+    header:
+        | { type: 'none' }
+        | {
+              type: 'http';
+              request?: {
+                  version?: string;
+                  method?: string;
+                  path?: string[];
+                  headers?: Record<string, string[]>;
+              };
+              response?: {
+                  version?: string;
+                  status?: string;
+                  reason?: string;
+                  headers?: Record<string, string[]>;
+              };
+          }
+        | null;
 }
 
 export interface IXhttpTransportOptions {
     path: string | null;
     host: string | null;
-    mode: SplitHTTPMode;
+    mode: 'auto' | 'packet-up' | 'stream-up' | 'stream-one';
     extra: Record<string, unknown> | null;
 }
 
@@ -170,6 +185,7 @@ export type ShadowTlsProtocol = {
 };
 
 export type ProtocolVariant =
+    | { protocol: 'snell'; protocolOptions: { psk: string; version: 5; obfs: 'none' | 'http' } }
     | VlessProtocol
     | TrojanProtocol
     | ShadowsocksProtocol
@@ -281,7 +297,6 @@ export type ResolvedProxyConfig = {
         mihomoX25519: boolean;
         mihomoIpVersion: TMihomoIpVersion | null;
         serverDescription: string | null;
-        xrayJsonTemplate: object | null;
         mapper: THostMapper;
     };
 

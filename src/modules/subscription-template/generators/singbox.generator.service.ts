@@ -8,9 +8,11 @@ import { SubscriptionTemplateService } from '@modules/subscription-template/subs
 import { applyHostMapper } from '../host-mapper';
 import { ResolvedProxyConfig } from '../resolve-proxy/interfaces';
 
-/** Target: sing-box 1.13.x. */
+/** Target: sing-box 1.14.x (required for Snell). */
 
 interface OutboundConfig {
+    psk?: string;
+    obfs_mode?: string;
     alter_id?: number;
     brutal_debug?: boolean;
     congestion_control?: string;
@@ -106,6 +108,7 @@ interface Hysteria2FinalMask {
 
 const UNSUPPORTED_TRANSPORTS = new Set(['kcp', 'xhttp']);
 const PROXY_PROTOCOL_TYPES = new Set([
+    'snell',
     'anytls',
     'hysteria',
     'hysteria2',
@@ -117,6 +120,7 @@ const PROXY_PROTOCOL_TYPES = new Set([
     'vmess',
 ]);
 const SELECTOR_TYPES = new Set([
+    'snell',
     'anytls',
     'hysteria2',
     'shadowsocks',
@@ -178,6 +182,8 @@ export class SingBoxGeneratorService {
     }
 
     private buildBaseOutbound(host: ResolvedProxyConfig): OutboundConfig | null {
+        if (host.protocol === 'snell' && (host.security !== 'none' || host.transport !== 'tcp'))
+            return null;
         if (host.protocol === 'hysteria') {
             return this.buildHysteria2Outbound(host);
         }
@@ -202,6 +208,12 @@ export class SingBoxGeneratorService {
 
     private applyProtocolFields(config: OutboundConfig, host: ResolvedProxyConfig): boolean {
         switch (host.protocol) {
+            case 'snell':
+                // The upstream v4 client speaks to a v5 server without QUIC proxy mode.
+                config.version = 4;
+                config.psk = host.protocolOptions.psk;
+                if (host.protocolOptions.obfs === 'http') config.obfs_mode = 'http';
+                return true;
             case 'vless':
                 if (host.protocolOptions.encryption && host.protocolOptions.encryption !== 'none') {
                     return false;
@@ -283,6 +295,7 @@ export class SingBoxGeneratorService {
     }
 
     private applyMultiplex(config: OutboundConfig, host: ResolvedProxyConfig): void {
+        if (host.protocol === 'snell') return;
         if (config.udp_over_tcp?.enabled) return;
 
         const multiplex = this.buildMultiplexConfig(host.mux);

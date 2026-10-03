@@ -1,7 +1,6 @@
 export const NODE_PLUGINS_CONTROLLER = 'node-plugins' as const;
 
 const ACTIONS_ROUTE = 'actions' as const;
-const TORRENT_BLOCKER_ROUTE = 'torrent-blocker' as const;
 const SHARED_LISTS_ROUTE = 'shared-lists' as const;
 
 const encodeSharedListName = (name: string): string =>
@@ -24,11 +23,6 @@ export const NODE_PLUGINS_ROUTES = {
 
     EXECUTOR: 'executor',
 
-    TORRENT_BLOCKER: {
-        GET_REPORTS: `${TORRENT_BLOCKER_ROUTE}`,
-        GET_REPORTS_STATS: `${TORRENT_BLOCKER_ROUTE}/stats`,
-        TRUNCATE_REPORTS: `${TORRENT_BLOCKER_ROUTE}/truncate`,
-    },
     SHARED_LISTS: {
         GET_ALL: `${SHARED_LISTS_ROUTE}`,
         GET: (name: string) => `${SHARED_LISTS_ROUTE}/${encodeSharedListName(name)}`,

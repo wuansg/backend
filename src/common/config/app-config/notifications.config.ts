@@ -9,6 +9,8 @@ import { YAML_MERGE_SCHEMA } from '@common/utils';
 import { isProduction } from '@common/utils/startup-app';
 import { EVENTS } from '@libs/contracts/constants';
 
+import { stripRetiredNotificationEvents } from './retired-notification-events';
+
 const ALL_EVENTS = [
     ...Object.values(EVENTS.USER),
     ...Object.values(EVENTS.USER_HWID_DEVICES),
@@ -16,7 +18,6 @@ const ALL_EVENTS = [
     ...Object.values(EVENTS.SERVICE),
     ...Object.values(EVENTS.ERRORS),
     ...Object.values(EVENTS.CRM),
-    ...Object.values(EVENTS.TORRENT_BLOCKER),
 ] as const;
 
 const eventConfigSchema = z.object({
@@ -26,10 +27,13 @@ const eventConfigSchema = z.object({
 });
 
 const notificationsConfigSchema = z.object({
-    events: z
-        .partialRecord(z.enum(ALL_EVENTS as [string, ...string[]]), eventConfigSchema)
-        .nullable()
-        .transform((val) => val ?? {}),
+    events: z.preprocess(
+        stripRetiredNotificationEvents,
+        z
+            .partialRecord(z.enum(ALL_EVENTS as [string, ...string[]]), eventConfigSchema)
+            .nullable()
+            .transform((val) => val ?? {}),
+    ),
 });
 
 export type NotificationEventConfig = z.infer<typeof eventConfigSchema>;

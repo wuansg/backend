@@ -1,5 +1,3 @@
-import { InboundConfig } from 'xray-typed';
-
 import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
 
 interface VlessSettingsWithFlow {
@@ -18,31 +16,6 @@ export const hasVlessSettingsWithFlow = (obj: unknown): obj is VlessSettingsWith
         'flow' in (obj as VlessSettingsWithFlow).settings &&
         typeof (obj as VlessSettingsWithFlow).settings.flow === 'string'
     );
-};
-
-export const getVlessFlow = (inbound: InboundConfig): 'xtls-rprx-vision' | '' => {
-    if (inbound.protocol !== 'vless' || !inbound.settings) {
-        return '';
-    }
-
-    if (inbound.settings.flow !== undefined) {
-        if (inbound.settings.flow === 'xtls-rprx-vision') {
-            return 'xtls-rprx-vision';
-        } else {
-            return '';
-        }
-    }
-
-    if (inbound.streamSettings) {
-        if (
-            ['reality', 'tls'].includes(inbound.streamSettings.security || '') &&
-            ['raw', 'tcp'].includes(inbound.streamSettings.network || '')
-        ) {
-            return 'xtls-rprx-vision';
-        }
-    }
-
-    return '';
 };
 
 export function getVlessFlowFromDbInbound(

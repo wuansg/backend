@@ -7,6 +7,7 @@ import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
 import { AxiosService } from '@common/axios/axios.service';
+import { assertSnellAgentCompatibility } from '@common/helpers/snell';
 import { RawCacheService } from '@common/raw-cache';
 import { formatExecutionTime, getTime } from '@common/utils/get-elapsed-time';
 import { stableJsonHash } from '@common/utils/stable-json-hash.util';
@@ -267,6 +268,7 @@ export class StartNodeProcessor extends WorkerHost {
             }
 
             const startTime = getTime();
+            assertSnellAgentCompatibility(node.activeInbounds, healthResponse.response.nodeVersion);
             const config = await this.queryBus.execute(
                 new GetPreparedConfigWithUsersQuery(
                     node.activeConfigProfileUuid,

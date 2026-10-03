@@ -63,16 +63,6 @@ export const ResponseRuleModificationsSchema = z
                 markdownDescription:
                     'Override the subscription template with the given name. If not provided, the default subscription template will be used. If the template name is not found, the default subscription template for this type will be used. **This modification have higher priority than settings from External Squads.**',
             }),
-        ignoreHostXrayJsonTemplate: z.boolean().optional().meta({
-            title: 'Ignore Host Xray Json Template',
-            markdownDescription:
-                "Each Host may have its own Xray Json Template. If you set this flag to **true**, the Xray Json Template defined by the SRR will be used. **The Host's Xray Json Template will be ignored.**",
-        }),
-        ignoreServeJsonAtBaseSubscription: z.boolean().optional().meta({
-            title: 'Ignore Serve Json at Base Subscription',
-            markdownDescription:
-                'If you set this flag to **true**, the **Serve JSON at Base Subscription** setting will be ignored (set to **false**).',
-        }),
         additionalExtendedClientsRegex: z
             .array(z.string().min(1))
             .optional()
@@ -84,7 +74,7 @@ export const ResponseRuleModificationsSchema = z
                     '- `^Flowvy/`\n' +
                     '- `^prizrak-box/`\n' +
                     '- `^koala-clash/`\n\n' +
-                    '**Default Xray extended clients:**\n' +
+                    '**Default extended share-link clients:**\n' +
                     '- `^Happ/`\n' +
                     '- `^INCY/`\n\n' +
                     '**Example:** `["^MyClient/", "^CustomApp\\\\/v2"]`',

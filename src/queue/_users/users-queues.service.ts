@@ -16,7 +16,6 @@ import { USERS_JOB_NAMES } from './constants/users-job-name.constant';
 import {
     IAddUserSubscriptionRequestHistoryPayload,
     ICheckAndUpsertHwidDevicePayload,
-    IFireTorrentBlockerEventJobData,
     IFireUserEventJobData,
     IFireUserEventPayload,
 } from './interfaces';
@@ -262,10 +261,6 @@ export class UsersQueuesService implements OnApplicationBootstrap {
                 })),
             );
         }
-    }
-
-    public async fireTorrentBlockerEvent(payload: IFireTorrentBlockerEventJobData) {
-        return this.userEventsQueue.add(USERS_JOB_NAMES.FIRE_TORRENT_BLOCKER_EVENT, payload);
     }
 
     public async bulkUpdateAllUsers(payload: BulkAllUpdateUsersBodyDto) {

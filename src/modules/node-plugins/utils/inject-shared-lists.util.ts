@@ -35,6 +35,8 @@ export const collectSharedListReferences = (pluginConfig: unknown): Set<string> 
     const config = isRecord(pluginConfig) ? { ...pluginConfig } : {};
 
     delete config[SHARED_LISTS_KEY];
+    delete config.torrentBlocker;
+    delete config.connectionDrop;
     collectReferences(config, references);
 
     return references;
@@ -62,8 +64,6 @@ export const validateSharedListReferences = (
         ]),
     );
     const fields: Array<{ path: string[]; expected: string }> = [
-        { path: ['torrentBlocker', 'ignoreLists', 'ip'], expected: 'ipList' },
-        { path: ['connectionDrop', 'whitelistIps'], expected: 'ipList' },
         { path: ['ingressFilter', 'blockedIps'], expected: 'ipList' },
         { path: ['egressFilter', 'blockedIps'], expected: 'ipList' },
         { path: ['egressFilter', 'blockedDomains'], expected: 'domainList' },
@@ -96,6 +96,8 @@ export function injectSharedLists(
     const config = isRecord(pluginConfig) ? { ...pluginConfig } : {};
 
     delete config[SHARED_LISTS_KEY];
+    delete config.torrentBlocker;
+    delete config.connectionDrop;
 
     const references = collectSharedListReferences(config);
 

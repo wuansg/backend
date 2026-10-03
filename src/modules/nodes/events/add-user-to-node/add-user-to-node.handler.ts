@@ -2,13 +2,9 @@ import { Logger } from '@nestjs/common';
 import { IEventHandler, QueryBus } from '@nestjs/cqrs';
 import { EventsHandler } from '@nestjs/cqrs';
 
-import { AddUserCommand as AddUserToNodeCommandSdk } from '@remnawave/node-contract';
-
-import {
-    getCipherTypeFromString,
-    getSsPassword,
-    isSS2022Method,
-} from '@common/helpers/xray-config/ss-cipher';
+import { AddNodeUserRequest } from '@common/axios/node-user-requests';
+import { getSnellPsk } from '@common/helpers/snell';
+import { getCipherTypeFromString, getSsPassword, isSS2022Method } from '@common/helpers/ss-cipher';
 import { getVlessFlowFromDbInbound } from '@common/utils/flow/get-vless-flow';
 
 import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities/config-profile-inbound.entity';
@@ -38,7 +34,8 @@ export class AddUserToNodeHandler implements IEventHandler<AddUserToNodeEvent> {
                 return;
             }
 
-            const { id, trojanPassword, vlessUuid, ssPassword, inbounds } = userEntity.response;
+            const { id, trojanPassword, vlessUuid, ssPassword, anytlsPassword, inbounds } =
+                userEntity.response;
 
             if (inbounds.length === 0) {
                 return;
@@ -50,7 +47,7 @@ export class AddUserToNodeHandler implements IEventHandler<AddUserToNodeEvent> {
                 return;
             }
 
-            const userData: AddUserToNodeCommandSdk.Request = {
+            const userData: AddNodeUserRequest = {
                 hashData: {
                     vlessUuid,
                     prevVlessUuid: event.prevVlessUuid,
@@ -60,6 +57,26 @@ export class AddUserToNodeHandler implements IEventHandler<AddUserToNodeEvent> {
                     const inboundType = this.resolveInboundType(inbound);
 
                     switch (inboundType) {
+                        case 'snell':
+                        case 'anytls':
+                        case 'hysteria2':
+                        case 'tuic':
+                        case 'vmess':
+                        case 'shadowtls':
+                            return {
+                                type: inboundType,
+                                username: id.toString(),
+                                password:
+                                    inboundType === 'snell'
+                                        ? getSnellPsk({ anytlsPassword })
+                                        : inboundType === 'anytls'
+                                          ? anytlsPassword
+                                          : inboundType === 'shadowtls' || inboundType === 'tuic'
+                                            ? trojanPassword
+                                            : vlessUuid,
+                                uuid: vlessUuid,
+                                tag: inbound.tag,
+                            };
                         case 'trojan':
                             return {
                                 type: inboundType,

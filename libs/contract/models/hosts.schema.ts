@@ -40,7 +40,6 @@ export const HostsSchema = z.object({
     mihomoIpVersion: z.enum(MIHOMO_IP_VERSION).nullable(),
 
     nodes: z.array(z.uuid()),
-    xrayJsonTemplateUuid: z.uuid().nullable(),
     excludedInternalSquads: z.array(z.uuid()),
     excludeFromSubscriptionTypes: z.array(z.enum(SUBSCRIPTION_TEMPLATE_TYPE)),
     mapper: HostMapperSchema,

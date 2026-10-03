@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { XrayGeneratorService } from '@modules/subscription-template/generators/xray.generator.service';
+import { Base64GeneratorService } from '@modules/subscription-template/generators/base64.generator.service';
 import { ResolvedProxyConfig } from '@modules/subscription-template/resolve-proxy/interfaces';
 
 function buildBaseHost(overrides: Partial<ResolvedProxyConfig>): ResolvedProxyConfig {
@@ -18,7 +18,6 @@ function buildBaseHost(overrides: Partial<ResolvedProxyConfig>): ResolvedProxyCo
             mihomoX25519: false,
             mihomoIpVersion: null,
             serverDescription: null,
-            xrayJsonTemplate: null,
             mapper: {},
         },
         metadata: {
@@ -65,7 +64,7 @@ function parseLink(link: string): URL {
 }
 
 function main() {
-    const service = new XrayGeneratorService();
+    const service = new Base64GeneratorService();
 
     const anyTlsWithTlsParams = buildBaseHost({
         finalRemark: 'anytls-with-tls-params',
@@ -137,7 +136,6 @@ function main() {
             mihomoX25519: false,
             mihomoIpVersion: null,
             serverDescription: null,
-            xrayJsonTemplate: null,
             mapper: {
                 base64: [{ op: 'set', to: 'mapped', value: 'yes' }],
             },
@@ -180,7 +178,7 @@ function main() {
         const decoded = Buffer.from(result, 'base64').toString('utf8');
         assert.match(decoded, /anytls:\/\/anytls-secret@198\.51\.100\.1:443\?/);
         assert.match(decoded, /sni=edge\.example\.com/);
-        process.stdout.write('xray generator anytls link validation passed\n');
+        process.stdout.write('Base64 generator anytls link validation passed\n');
     });
 }
 

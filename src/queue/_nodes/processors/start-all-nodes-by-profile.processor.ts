@@ -7,6 +7,7 @@ import { Logger, Scope } from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 
 import { AxiosService } from '@common/axios/axios.service';
+import { assertSnellAgentCompatibility } from '@common/helpers/snell';
 import { RawCacheService } from '@common/raw-cache';
 import { stableJsonHash } from '@common/utils/stable-json-hash.util';
 import { CACHE_KEYS, CACHE_KEYS_TTL } from '@libs/contracts/constants';
@@ -314,6 +315,10 @@ export class StartAllNodesByProfileQueueProcessor extends WorkerHost {
                     forceRestart: payload.force ?? false,
                 };
 
+                assertSnellAgentCompatibility(
+                    node.activeInbounds,
+                    healthResponse.response.nodeVersion,
+                );
                 const startCoreResponse = await this.axios.startCore(
                     {
                         coreType: 'SING_BOX' as const,

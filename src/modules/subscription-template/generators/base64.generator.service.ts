@@ -45,8 +45,8 @@ interface Hysteria2FinalMask {
  */
 
 @Injectable()
-export class XrayGeneratorService {
-    private readonly logger = new Logger(XrayGeneratorService.name);
+export class Base64GeneratorService {
+    private readonly logger = new Logger(Base64GeneratorService.name);
 
     public async generateConfig(
         hosts: ResolvedProxyConfig[],
@@ -58,7 +58,7 @@ export class XrayGeneratorService {
             const joined = links.join('\n');
             return isBase64 ? Buffer.from(joined).toString('base64') : joined;
         } catch (error) {
-            this.logger.error('Error generating xray config:', error);
+            this.logger.error('Error generating Base64 subscription:', error);
             return '';
         }
     }
@@ -86,6 +86,9 @@ export class XrayGeneratorService {
 
     private generateLink(host: ResolvedProxyConfig): ShareLink | null {
         switch (host.protocol) {
+            case 'snell':
+                // No portable Snell share-URI standard: use a structured subscription.
+                return null;
             case 'vless':
                 return this.buildVlessLink(host);
             case 'trojan':

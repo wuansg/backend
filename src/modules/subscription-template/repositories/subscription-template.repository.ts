@@ -35,7 +35,7 @@ export class SubscriptionTemplateRepository implements ICrud<SubscriptionTemplat
 
     public async findByUUID(uuid: string): Promise<null | SubscriptionTemplateEntity> {
         const result = await this.prisma.tx.subscriptionTemplate.findUnique({
-            where: { uuid },
+            where: { uuid, templateType: { not: 'XRAY_JSON' } },
         });
         if (!result) {
             return null;
@@ -109,6 +109,7 @@ export class SubscriptionTemplateRepository implements ICrud<SubscriptionTemplat
         withContent: boolean = true,
     ): Promise<SubscriptionTemplateEntity[]> {
         const result = await this.prisma.tx.subscriptionTemplate.findMany({
+            where: { templateType: { not: 'XRAY_JSON' } },
             select: {
                 viewPosition: true,
                 name: true,

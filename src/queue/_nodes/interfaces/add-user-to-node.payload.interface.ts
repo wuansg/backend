@@ -1,8 +1,7 @@
-import { AddUserCommand as AddUserToNodeCommandSdk } from '@remnawave/node-contract';
-
 import { INodeConnectionOpts } from '@common/axios';
+import { AddNodeUserRequest } from '@common/axios/node-user-requests';
 
 export interface IAddUserToNodePayload {
-    data: AddUserToNodeCommandSdk.Request;
+    data: AddNodeUserRequest;
     node: INodeConnectionOpts;
 }

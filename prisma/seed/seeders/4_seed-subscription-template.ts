@@ -12,7 +12,6 @@ import {
     DEFAULT_TEMPLATE_SINGBOX,
     DEFAULT_TEMPLATE_STASH,
     DEFAULT_TEMPLATE_SURGE,
-    DEFAULT_TEMPLATE_XRAY_JSON,
 } from '@modules/subscription-template/constants';
 
 export async function seedSubscriptionTemplate(prisma: PrismaClient) {
@@ -69,21 +68,6 @@ export async function seedSubscriptionTemplate(prisma: PrismaClient) {
                 await prisma.subscriptionTemplate.create({
                     data: { templateType, name: 'Default', templateJson: DEFAULT_TEMPLATE_SINGBOX },
                 });
-                break;
-            case SUBSCRIPTION_TEMPLATE_TYPE.XRAY_JSON:
-                if (existingConfig) {
-                    consola.info(`Default ${templateType} config already exists`);
-                    continue;
-                }
-
-                await prisma.subscriptionTemplate.create({
-                    data: {
-                        templateType,
-                        name: 'Default',
-                        templateJson: DEFAULT_TEMPLATE_XRAY_JSON,
-                    },
-                });
-
                 break;
             case SUBSCRIPTION_TEMPLATE_TYPE.CLASH:
                 if (existingConfig) {

@@ -27,8 +27,7 @@ import type { ISRRContext } from '@modules/subscription-response-rules/interface
 import { ResponseRulesMatcherService } from '@modules/subscription-response-rules/services/response-rules-matcher.service';
 import { SubscriptionSettingsEntity } from '@modules/subscription-settings/entities/subscription-settings.entity';
 import { GetCachedSubscriptionSettingsQuery } from '@modules/subscription-settings/queries/get-cached-subscrtipion-settings';
-import { isJsonSubscriptionFallbackSupported } from '@modules/subscription-template/constants';
-import { XrayGeneratorService } from '@modules/subscription-template/generators/xray.generator.service';
+import { Base64GeneratorService } from '@modules/subscription-template/generators/base64.generator.service';
 import { RenderTemplatesService } from '@modules/subscription-template/render-templates.service';
 import { ResolvedProxyConfig } from '@modules/subscription-template/resolve-proxy/interfaces';
 import { ResolveProxyConfigService } from '@modules/subscription-template/resolve-proxy/resolve-proxy-config.service';
@@ -70,7 +69,7 @@ export class SubscriptionService {
         private readonly eventEmitter: EventEmitter2,
         private readonly renderTemplatesService: RenderTemplatesService,
         private readonly resolveProxyConfigService: ResolveProxyConfigService,
-        private readonly xrayGeneratorService: XrayGeneratorService,
+        private readonly base64GeneratorService: Base64GeneratorService,
         private readonly usersQueuesService: UsersQueuesService,
         private readonly srrMatcher: ResponseRulesMatcherService,
     ) {
@@ -119,12 +118,7 @@ export class SubscriptionService {
 
             if (!srrContext.overrideTemplateName) {
                 if (user.response.externalSquadUuid) {
-                    let templateTypeMatcher = matchedResponseType as TSubscriptionTemplateType;
-
-                    if (matchedResponseType === 'XRAY_BASE64') {
-                        // In case if XRAY_BASE64 matched as fallback
-                        templateTypeMatcher = 'XRAY_JSON';
-                    }
+                    const templateTypeMatcher = matchedResponseType as TSubscriptionTemplateType;
 
                     const templateName = await this.queryBus.execute(
                         new GetCachedTemplateNameQuery(
@@ -245,22 +239,11 @@ export class SubscriptionService {
                 void this.checkAndUpsertHwidUserDevice(user.response, hwidHeaders, srrContext.ip);
             }
 
-            if (
-                srrContext.subscriptionSettings.serveJsonAtBaseSubscription &&
-                srrContext.matchedResponseType === 'XRAY_BASE64' &&
-                !srrContext.ignoreServeJsonAtBaseSubscription
-            ) {
-                if (isJsonSubscriptionFallbackSupported(srrContext.userAgent)) {
-                    srrContext.matchedResponseType = 'XRAY_JSON';
-                }
-            }
-
             const hosts = await this.queryBus.execute(
                 new GetHostsForUserQuery(
                     user.response.id,
                     false,
-                    srrContext.matchedResponseType === 'XRAY_JSON' ||
-                        srrContext.matchedResponseType === 'MIHOMO',
+                    srrContext.matchedResponseType === 'MIHOMO',
                 ),
             );
 
@@ -497,7 +480,7 @@ export class SubscriptionService {
             }
 
             let formattedHosts: ResolvedProxyConfig[] = [];
-            let xrayLinks: string[] = [];
+            let shareLinks: string[] = [];
             const ssConfLinks: Record<string, string> = {};
 
             if (!settings.hwidSettings.enabled || authenticated) {
@@ -512,10 +495,10 @@ export class SubscriptionService {
                     hostsOverrides,
                 });
 
-                xrayLinks = this.xrayGeneratorService.generateLinks(formattedHosts, false);
+                shareLinks = this.base64GeneratorService.generateLinks(formattedHosts, false);
             }
 
-            return ok(await this.getUserInfo(userEntity, xrayLinks, ssConfLinks));
+            return ok(await this.getUserInfo(userEntity, shareLinks, ssConfLinks));
         } catch (error) {
             this.logger.error(`Error getting subscription info: ${error}`);
             return fail(ERRORS.INTERNAL_SERVER_ERROR);
@@ -1030,9 +1013,12 @@ export class SubscriptionService {
 
             return ok(
                 new ConnectionKeysResponseModel({
-                    enabledKeys: this.xrayGeneratorService.generateLinks(formattedEnabled, false),
-                    disabledKeys: this.xrayGeneratorService.generateLinks(formattedDisabled, false),
-                    hiddenKeys: this.xrayGeneratorService.generateLinks(formattedHidden, false),
+                    enabledKeys: this.base64GeneratorService.generateLinks(formattedEnabled, false),
+                    disabledKeys: this.base64GeneratorService.generateLinks(
+                        formattedDisabled,
+                        false,
+                    ),
+                    hiddenKeys: this.base64GeneratorService.generateLinks(formattedHidden, false),
                 }),
             );
         } catch (error) {

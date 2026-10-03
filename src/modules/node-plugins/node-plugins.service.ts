@@ -7,7 +7,6 @@ import { QueryBus } from '@nestjs/cqrs';
 import { AxiosService } from '@common/axios';
 import { fail, ok, TResult } from '@common/types';
 import { stableJsonHash } from '@common/utils/stable-json-hash.util';
-import { GetTorrentBlockerReportsCommand } from '@libs/contracts/commands';
 import { ERRORS } from '@libs/contracts/constants';
 import { NodePluginEditorSchema } from '@libs/node-plugins/models';
 
@@ -21,17 +20,10 @@ import { NodesQueuesService } from '@queue/_nodes';
 
 import { EXAMPLE_NODE_PLUGIN_CONFIG } from './constants';
 import { PluginExecutorBodyDto } from './dtos';
-import { ExtendedTorrentBlockerReportEntity } from './entities';
 import { NodePluginEntity } from './entities/node-plugin.entity';
-import {
-    BaseNodePluginResponseModel,
-    GetNodePluginsResponseModel,
-    TorrentBlockerReportsStatsResponseModel,
-} from './models';
-import {} from './models/base-node-plugin.response.model';
+import { BaseNodePluginResponseModel, GetNodePluginsResponseModel } from './models';
 import { NodePluginRepository } from './repositories/node-plugins.repository';
 import { SharedListsRepository } from './repositories/shared-lists.repository';
-import { TorrentBlockerReportsRepository } from './repositories/torrent-blocker-report.repository';
 import {
     collectSharedListReferences,
     injectSharedLists,
@@ -46,7 +38,6 @@ export class NodePluginService {
         private readonly nodePluginRepository: NodePluginRepository,
         private readonly sharedListsRepository: SharedListsRepository,
         private readonly nodeQueuesService: NodesQueuesService,
-        private readonly torrentBlockerReportsRepository: TorrentBlockerReportsRepository,
         private readonly queryBus: QueryBus,
         private readonly axios: AxiosService,
         private readonly nodeObservabilityRepository: NodeObservabilityRepository,
@@ -495,51 +486,6 @@ export class NodePluginService {
             }
 
             return ok(true);
-        } catch (error) {
-            this.logger.error(error);
-            return fail(ERRORS.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    public async getTorrentBlockerReports(
-        dto: GetTorrentBlockerReportsCommand.RequestQuery,
-    ): Promise<
-        TResult<{
-            total: number;
-            records: ExtendedTorrentBlockerReportEntity[];
-        }>
-    > {
-        try {
-            const [records, total] = await this.torrentBlockerReportsRepository.getAllReports(dto);
-
-            return ok({
-                records,
-                total,
-            });
-        } catch (error) {
-            this.logger.error(error);
-            return fail(ERRORS.GET_TORRENT_BLOCKER_REPORTS_ERROR);
-        }
-    }
-
-    public async truncateTorrentBlockerReports(): Promise<TResult<boolean>> {
-        try {
-            await this.torrentBlockerReportsRepository.truncateReports();
-            return ok(true);
-        } catch (error) {
-            this.logger.error(error);
-            return fail(ERRORS.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    public async getTorrentBlockerReportsStats(): Promise<
-        TResult<TorrentBlockerReportsStatsResponseModel>
-    > {
-        try {
-            const stats = await this.torrentBlockerReportsRepository.getStats();
-            const topUsers = await this.torrentBlockerReportsRepository.getTopTorrentBlockerUsers();
-            const topNodes = await this.torrentBlockerReportsRepository.getTopTorrentBlockerNodes();
-            return ok(new TorrentBlockerReportsStatsResponseModel({ stats, topUsers, topNodes }));
         } catch (error) {
             this.logger.error(error);
             return fail(ERRORS.INTERNAL_SERVER_ERROR);

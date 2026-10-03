@@ -1,5 +1,5 @@
 export const SUBSCRIPTION_TEMPLATE_TYPE = {
-    XRAY_JSON: 'XRAY_JSON',
+    // Historical wire value: generic Base64 share links, independent of the node core.
     XRAY_BASE64: 'XRAY_BASE64',
     MIHOMO: 'MIHOMO',
 

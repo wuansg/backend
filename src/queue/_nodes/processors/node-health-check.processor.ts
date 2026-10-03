@@ -234,16 +234,6 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
             },
         ]);
 
-        const reports = stats.plugins.torrentBlocker.reportsCount;
-        if (reports !== undefined && reports > 0) {
-            await this.nodesQueuesService.collectReports({
-                nodeUuid,
-                connectionOpts,
-            });
-
-            this.logger.log(`Node ${nodeUuid} has ${reports} reports, collecting reports...`);
-        }
-
         const restored = await this.markAgentConnected(nodeUuid, isConnected);
         if (restored) {
             await this.nodesQueuesService.startNode({ nodeUuid });

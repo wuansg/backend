@@ -50,10 +50,8 @@ export type TResponseRulesConditionOperatorKeys =
     (typeof RESPONSE_RULES_CONDITION_OPERATORS)[keyof typeof RESPONSE_RULES_CONDITION_OPERATORS];
 
 export const RESPONSE_RULES_RESPONSE_TYPES_DESCRIPTION = {
-    [RESPONSE_RULES_RESPONSE_TYPES.XRAY_JSON]:
-        'Return **subscription** in XRAY-JSON format. (Using `Xray Json` template)',
     [RESPONSE_RULES_RESPONSE_TYPES.XRAY_BASE64]:
-        'Return **subscription** in BASE64 encoded string. Compatible with most client application with Xray core.',
+        'Return **subscription** in BASE64 encoded string. Compatible with clients that support standard share links.',
     [RESPONSE_RULES_RESPONSE_TYPES.MIHOMO]:
         'Return **subscription** in Mihomo format. (Using `Mihomo` template)',
     [RESPONSE_RULES_RESPONSE_TYPES.STASH]:

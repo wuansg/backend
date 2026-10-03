@@ -8,11 +8,7 @@ const SourcePathSchema = z
         title: 'Source path',
         markdownDescription:
             'Dot-separated path in the raw inbound. Prefix it with `$host.` to read an allowed resolved host field.',
-        examples: [
-            'streamSettings.tlsSettings.cipherSuites',
-            '$host.address',
-            '$host.securityOptions.serverName',
-        ],
+        examples: ['tls.cipher_suites', '$host.address', '$host.securityOptions.serverName'],
     });
 
 const buildTargetPathSchema = (target: string, examples: string[]) =>
@@ -53,11 +49,6 @@ const buildOperationsSchema = (target: string, examples: string[]) => {
     ]);
 };
 
-export const XrayJsonHostMapperOperationsSchema = buildOperationsSchema(
-    'the generated Xray outbound',
-    ['streamSettings.tlsSettings.cipherSuites', 'mux'],
-);
-
 export const MihomoHostMapperOperationsSchema = buildOperationsSchema(
     'the generated Mihomo proxy node',
     ['ip-version', 'reality-opts.support-x25519mlkem768'],
@@ -82,11 +73,10 @@ export const SingBoxHostMapperOperationsSchema = buildOperationsSchema(
     ['domain_resolver', 'multiplex.protocol', 'tls.utls.fingerprint'],
 );
 
-export const HostMapperOperationsSchema = XrayJsonHostMapperOperationsSchema;
+export const HostMapperOperationsSchema = SingBoxHostMapperOperationsSchema;
 
 export const HostMapperSchema = z
     .object({
-        xrayJson: z.array(XrayJsonHostMapperOperationsSchema).optional(),
         mihomo: z.array(MihomoHostMapperOperationsSchema).optional(),
         base64: z.array(Base64HostMapperOperationsSchema).optional().meta({
             title: 'Base64',

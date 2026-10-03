@@ -157,6 +157,7 @@ export class MihomoGeneratorService {
                 if (UNSUPPORTED_TRANSPORTS.has(host.transport)) continue;
                 if (UNSUPPORTED_PROTOCOLS.has(host.protocol)) continue;
                 if (isStash && host.transport === 'xhttp') continue;
+                if (isStash && host.protocol === 'snell') continue;
 
                 const node = this.buildProxyNode(host, isExtendedClient);
                 if (!node) continue;
@@ -184,6 +185,8 @@ export class MihomoGeneratorService {
         host: ResolvedProxyConfig,
         isExtendedClient: boolean,
     ): ProxyNode | null {
+        if (host.protocol === 'snell' && (host.security !== 'none' || host.transport !== 'tcp'))
+            return null;
         if (host.protocol === 'hysteria') {
             return this.buildHysteria2Node(host, isExtendedClient);
         }
@@ -207,7 +210,7 @@ export class MihomoGeneratorService {
 
         node['client-fingerprint'] = this.resolveFingerprint(host);
 
-        if (isNonEmptyObject(host.mux) && 'smux' in host.mux) {
+        if (host.protocol !== 'snell' && isNonEmptyObject(host.mux) && 'smux' in host.mux) {
             node['smux'] = host.mux['smux'];
         }
 
@@ -227,6 +230,13 @@ export class MihomoGeneratorService {
 
     private applyProtocolFields(node: ProxyNode, host: ResolvedProxyConfig): boolean {
         switch (host.protocol) {
+            case 'snell':
+                // Mihomo accepts v5 and uses the v4-compatible wire protocol internally.
+                node.version = 5;
+                node.psk = host.protocolOptions.psk;
+                delete node.network;
+                if (host.protocolOptions.obfs === 'http') node['obfs-opts'] = { mode: 'http' };
+                return true;
             case 'vless':
                 node.uuid = host.protocolOptions.id;
                 node['packet-encoding'] = 'xudp';

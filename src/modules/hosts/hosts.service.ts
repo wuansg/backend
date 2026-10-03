@@ -6,7 +6,6 @@ import { nullifyEmpty } from '@common/utils/convert-type';
 import { ERRORS } from '@libs/contracts/constants';
 
 import { GetConfigProfileByUuidQuery } from '@modules/config-profiles/queries/get-config-profile-by-uuid';
-import { GetSubscriptionTemplateByUuidQuery } from '@modules/subscription-template/queries/get-template-by-uuid';
 
 import {
     CreateHostBodyDto,
@@ -27,20 +26,6 @@ export class HostsService {
 
     public async createHost(dto: CreateHostBodyDto): Promise<TResult<HostsEntity>> {
         try {
-            if (dto.xrayJsonTemplateUuid) {
-                const xrayJsonTemplate = await this.queryBus.execute(
-                    new GetSubscriptionTemplateByUuidQuery(dto.xrayJsonTemplateUuid),
-                );
-
-                if (!xrayJsonTemplate.isOk) {
-                    return fail(ERRORS.SUBSCRIPTION_TEMPLATE_NOT_FOUND);
-                }
-
-                if (xrayJsonTemplate.response.templateType !== 'XRAY_JSON') {
-                    return fail(ERRORS.TEMPLATE_TYPE_NOT_ALLOWED);
-                }
-            }
-
             const {
                 inbound: inboundObj,
                 nodes,
@@ -115,20 +100,6 @@ export class HostsService {
 
             const host = await this.hostsRepository.findByUUID(dto.uuid);
             if (!host) return fail(ERRORS.HOST_NOT_FOUND);
-
-            if (dto.xrayJsonTemplateUuid) {
-                const xrayJsonTemplate = await this.queryBus.execute(
-                    new GetSubscriptionTemplateByUuidQuery(dto.xrayJsonTemplateUuid),
-                );
-
-                if (!xrayJsonTemplate.isOk) {
-                    return fail(ERRORS.SUBSCRIPTION_TEMPLATE_NOT_FOUND);
-                }
-
-                if (xrayJsonTemplate.response.templateType !== 'XRAY_JSON') {
-                    return fail(ERRORS.TEMPLATE_TYPE_NOT_ALLOWED);
-                }
-            }
 
             let xhttpExtraParams: null | object | undefined;
             if (dto.xhttpExtraParams !== undefined && dto.xhttpExtraParams !== null) {
@@ -353,20 +324,6 @@ export class HostsService {
                 finalMask,
                 ...rest
             } = dto;
-
-            if (dto.xrayJsonTemplateUuid) {
-                const xrayJsonTemplate = await this.queryBus.execute(
-                    new GetSubscriptionTemplateByUuidQuery(dto.xrayJsonTemplateUuid),
-                );
-
-                if (!xrayJsonTemplate.isOk) {
-                    return fail(ERRORS.SUBSCRIPTION_TEMPLATE_NOT_FOUND);
-                }
-
-                if (xrayJsonTemplate.response.templateType !== 'XRAY_JSON') {
-                    return fail(ERRORS.TEMPLATE_TYPE_NOT_ALLOWED);
-                }
-            }
 
             let configProfileUuid: string | undefined;
             let configProfileInboundUuid: string | undefined;

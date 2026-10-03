@@ -1,30 +1,13 @@
 import { filter, shuffle } from 'lodash';
 import { customAlphabet } from 'nanoid';
-import {
-    GRPCConfig,
-    HTTPUpgradeConfig,
-    HysteriaConfig,
-    InboundConfig,
-    KCPConfig,
-    SplitHTTPConfig,
-    StreamSettingsConfig,
-    TCPConfig,
-    WebSocketConfig,
-} from 'xray-typed';
 
 import { Injectable } from '@nestjs/common';
 
 import { TypedConfigService } from '@common/config/app-config';
-import {
-    resolveEncryptionFromDecryption,
-    resolveInboundAndMlDsa65PublicKey,
-    resolveInboundAndPublicKey,
-} from '@common/helpers/xray-config';
-import { getSsPassword, isSS2022MethodFromMethod } from '@common/helpers/xray-config/ss-cipher';
-import { getVlessFlow } from '@common/utils/flow';
+import { getSnellPsk } from '@common/helpers/snell';
 import { TemplateEngine } from '@common/utils/templates/replace-templates-values';
-import { setVlessRouteForUuid } from '@common/utils/vless-route';
-import { SECURITY_LAYERS, USERS_STATUS } from '@libs/contracts/constants';
+import { SUBSCRIPTION_TEMPLATE_TYPE, USERS_STATUS } from '@libs/contracts/constants';
+import { HostMapperSchema } from '@libs/contracts/models';
 
 import { ExternalSquadEntity } from '@modules/external-squads/entities';
 import { HostWithRawInbound } from '@modules/hosts/entities/host-with-inbound-tag.entity';
@@ -33,17 +16,10 @@ import { SubscriptionSettingsEntity } from '@modules/subscription-settings/entit
 import { UserEntity } from '@modules/users/entities';
 
 import {
-    GrpcTransport,
-    HttpUpgradeTransport,
-    HysteriaTransport,
-    KcpTransport,
     ProtocolVariant,
     ResolvedProxyConfig,
     SecurityVariant,
-    TcpTransport,
     TransportVariant,
-    WsTransport,
-    XHttpTransport,
 } from './interfaces';
 import { override, parseResolvedProxyRemark, toNonEmptyRecord } from './utils';
 
@@ -129,13 +105,6 @@ export class ResolveProxyConfigService {
 
         const hosts = this.applyShuffle(options.hosts);
 
-        const rawInbounds = hosts.map((h) => h.rawInbound);
-        const [publicKeyMap, mldsa65PublicKeyMap, encryptionMap] = await Promise.all([
-            resolveInboundAndPublicKey(rawInbounds),
-            resolveInboundAndMlDsa65PublicKey(rawInbounds),
-            resolveEncryptionFromDecryption(rawInbounds),
-        ]);
-
         const knownRemarks = new Map<string, number>();
         const resolvedProxyConfigs: ResolvedProxyConfig[] = [];
 
@@ -153,14 +122,13 @@ export class ResolveProxyConfigService {
                 knownRemarks,
             );
 
-            const resolvedProxyConfig = this.buildResolvedProxyConfig({
+            if (!this.isSingBoxManagedInbound(inputHost.rawInbound)) continue;
+
+            const resolvedProxyConfig = this.buildSingBoxResolvedProxyConfig({
                 inputHost,
-                inbound: inputHost.rawInbound as InboundConfig,
+                inbound: inputHost.rawInbound,
                 finalRemark,
                 user,
-                publicKeyMap,
-                mldsa65PublicKeyMap,
-                encryptionMap,
             });
 
             if (resolvedProxyConfig) {
@@ -207,281 +175,6 @@ export class ResolveProxyConfigService {
         return null;
     }
 
-    private resolveTransport(
-        streamSettings: StreamSettingsConfig | undefined,
-        inputHost: HostWithRawInbound,
-        protocol: ProtocolVariant,
-        authOptions: {
-            vlessUuid: string;
-        },
-    ): TransportVariant {
-        const rawNetwork = streamSettings?.network;
-
-        if (rawNetwork === undefined || !streamSettings) {
-            return {
-                transport: 'tcp',
-                transportOptions: {
-                    header: null,
-                },
-            };
-        }
-
-        switch (rawNetwork) {
-            case 'xhttp':
-                return this.resolveXhttp(streamSettings.xhttpSettings, inputHost);
-            case 'ws':
-                return this.resolveWs(streamSettings.wsSettings, inputHost);
-            case 'httpupgrade':
-                return this.resolveHttpUpgrade(streamSettings.httpupgradeSettings, inputHost);
-            case 'grpc':
-                return this.resolveGrpc(streamSettings.grpcSettings, inputHost);
-            case 'raw':
-                return this.resolveTcp(streamSettings.rawSettings, inputHost);
-            case 'tcp':
-                return this.resolveTcp(streamSettings.tcpSettings, inputHost);
-            case 'kcp':
-                return this.resolveKcp(streamSettings.kcpSettings);
-            case 'hysteria':
-                return this.resolveHysteria(
-                    streamSettings.hysteriaSettings,
-                    authOptions.vlessUuid,
-                    protocol,
-                    inputHost.vlessRouteId,
-                );
-            default:
-                return {
-                    transport: 'tcp',
-                    transportOptions: {
-                        header: null,
-                    },
-                };
-        }
-    }
-
-    private resolveXhttp(
-        settings: SplitHTTPConfig | undefined,
-        inputHost: HostWithRawInbound,
-    ): XHttpTransport {
-        return {
-            transport: 'xhttp',
-            transportOptions: {
-                path: override(inputHost.path, settings?.path),
-                host: this.resolveRandomizedValue(override(inputHost.host, settings?.host) ?? ''),
-                mode: settings?.mode ?? 'auto',
-                extra: override(toNonEmptyRecord(inputHost.xhttpExtraParams), settings?.extra),
-            },
-        };
-    }
-
-    private resolveWs(
-        settings: WebSocketConfig | undefined,
-        inputHost: HostWithRawInbound,
-    ): WsTransport {
-        return {
-            transport: 'ws',
-            transportOptions: {
-                host: this.resolveRandomizedValue(override(inputHost.host, settings?.host) ?? ''),
-                path: override(inputHost.path, settings?.path),
-                headers: settings?.headers ?? null,
-                heartbeatPeriod: settings?.heartbeatPeriod ?? null,
-            },
-        };
-    }
-
-    private resolveHttpUpgrade(
-        settings: HTTPUpgradeConfig | undefined,
-        inputHost: HostWithRawInbound,
-    ): HttpUpgradeTransport {
-        return {
-            transport: 'httpupgrade',
-            transportOptions: {
-                path: override(inputHost.path, settings?.path),
-                host: this.resolveRandomizedValue(override(inputHost.host, settings?.host) ?? ''),
-                headers: settings?.headers ?? null,
-            },
-        };
-    }
-
-    private resolveGrpc(
-        settings: GRPCConfig | undefined,
-        inputHost: HostWithRawInbound,
-    ): GrpcTransport {
-        return {
-            transport: 'grpc',
-            transportOptions: {
-                authority: this.resolveRandomizedValue(
-                    override(inputHost.host, settings?.authority) ?? '',
-                ),
-                serviceName: override(inputHost.path, settings?.serviceName),
-                multiMode: !!settings?.multiMode,
-            },
-        };
-    }
-
-    private resolveTcp(
-        settings: TCPConfig | undefined,
-        inputHost: HostWithRawInbound,
-    ): TcpTransport {
-        if (settings && settings.header && settings.header.type === 'http') {
-            let baseRequest = structuredClone(settings.header.request);
-            if (!baseRequest) {
-                baseRequest = {
-                    version: '1.1',
-                    method: 'GET',
-                    headers: {
-                        'Accept-Encoding': ['gzip', 'deflate'],
-                        Connection: ['keep-alive'],
-                        Pragma: ['no-cache'],
-                    },
-                };
-            } else {
-                baseRequest.headers = baseRequest.headers || {};
-
-                if (inputHost.host) {
-                    baseRequest.headers.Host = [this.resolveRandomizedValue(inputHost.host)];
-                }
-
-                if (inputHost.path) {
-                    baseRequest.path = [inputHost.path];
-                }
-            }
-
-            return {
-                transport: 'tcp',
-                transportOptions: {
-                    header: {
-                        type: 'http',
-                        request: baseRequest,
-                    },
-                },
-            };
-        }
-
-        return {
-            transport: 'tcp',
-            transportOptions: {
-                header: settings?.header ?? null,
-            },
-        };
-    }
-
-    private resolveKcp(settings: KCPConfig | undefined): KcpTransport {
-        return {
-            transport: 'kcp',
-            transportOptions: {
-                clientMtu: settings?.clientMtu || settings?.mtu || 1350,
-                clientTti: settings?.tti || 50,
-                congestion: settings?.congestion || false,
-            },
-        };
-    }
-
-    private resolveHysteria(
-        settings: HysteriaConfig | undefined,
-        vlessUuid: string,
-        protocol: ProtocolVariant,
-        vlessRouteId: number | null,
-    ): HysteriaTransport {
-        let auth: string = '';
-        if (protocol.protocol === 'hysteria') {
-            auth = setVlessRouteForUuid(vlessUuid, vlessRouteId);
-        } else if (settings?.auth) {
-            auth = settings.auth;
-        }
-
-        return {
-            transport: 'hysteria',
-            transportOptions: {
-                version: 2,
-                auth,
-            },
-        };
-    }
-
-    private resolveSecurity(
-        streamSettings: StreamSettingsConfig | undefined,
-        inputHost: HostWithRawInbound,
-        inboundTag: string,
-        publicKeyMap: Map<string, string>,
-        mldsa65Map: Map<string, string>,
-        resolvedAddress: string,
-    ): SecurityVariant {
-        if (!streamSettings) {
-            return {
-                security: 'none',
-            };
-        }
-
-        let effectiveSecurity = streamSettings.security;
-        if (inputHost.securityLayer !== SECURITY_LAYERS.DEFAULT) {
-            switch (inputHost.securityLayer) {
-                case SECURITY_LAYERS.TLS:
-                    effectiveSecurity = 'tls';
-                    break;
-                case SECURITY_LAYERS.NONE:
-                    effectiveSecurity = 'none';
-                    break;
-            }
-        }
-
-        switch (effectiveSecurity) {
-            case 'tls': {
-                const tls = streamSettings.tlsSettings;
-                const alpn =
-                    override(
-                        inputHost.alpn,
-                        Array.isArray(tls?.alpn) ? tls.alpn.join(',') : tls?.alpn,
-                    ) ?? '';
-
-                return {
-                    security: 'tls',
-                    securityOptions: {
-                        alpn,
-                        enableSessionResumption: !!tls?.enableSessionResumption,
-                        fingerprint: override(inputHost.fingerprint, tls?.fingerprint) ?? 'chrome',
-                        serverName: this.resolveFinalServerName(
-                            inputHost,
-                            streamSettings.tlsSettings?.serverName,
-                            resolvedAddress,
-                        ),
-                        echConfigList: tls?.echConfigList || null,
-                        echForceQuery: tls?.echForceQuery || null,
-                        echSockopt: toNonEmptyRecord(tls?.echSockopt),
-                        pinnedPeerCertSha256: inputHost.pinnedPeerCertSha256,
-                        verifyPeerCertByName: inputHost.verifyPeerCertByName,
-                        cipherSuites: tls?.cipherSuites || null,
-                    },
-                };
-            }
-            case 'reality': {
-                const reality = streamSettings.realitySettings;
-                const shortIds = reality?.shortIds || [];
-                const shortId = shortIds.length > 0 ? shortIds[0] : '';
-
-                return {
-                    security: 'reality',
-                    securityOptions: {
-                        fingerprint:
-                            override(inputHost.fingerprint, reality?.fingerprint) ?? 'chrome',
-                        publicKey: publicKeyMap.get(inboundTag) || '',
-                        shortId,
-                        serverName: this.resolveFinalServerName(
-                            inputHost,
-                            reality?.serverNames?.[0],
-                            resolvedAddress,
-                        ),
-                        spiderX: reality?.spiderX || '',
-                        mldsa65Verify: mldsa65Map.get(inboundTag) ?? null,
-                    },
-                };
-            }
-            case 'none':
-                return { security: 'none' };
-            default:
-                return { security: 'none' };
-        }
-    }
-
     private resolveFinalServerName(
         inputHost: HostWithRawInbound,
         serverName: string | undefined,
@@ -506,152 +199,6 @@ export class ResolveProxyConfigService {
         }
 
         return this.resolveRandomizedValue(baseSni);
-    }
-
-    private resolveProtocolOptions(
-        inputHost: HostWithRawInbound,
-        inbound: InboundConfig,
-        user: UserEntity,
-        encryption?: string,
-    ): ProtocolVariant | null {
-        if (!inbound.settings) {
-            return null;
-        }
-
-        switch (inbound.protocol) {
-            case 'vless':
-                return {
-                    protocol: 'vless',
-                    protocolOptions: {
-                        id: setVlessRouteForUuid(user.vlessUuid, inputHost.vlessRouteId),
-                        encryption: encryption ?? 'none',
-                        flow: getVlessFlow(inbound),
-                    },
-                };
-            case 'trojan':
-                return {
-                    protocol: 'trojan',
-                    protocolOptions: {
-                        password: user.trojanPassword,
-                    },
-                };
-            case 'shadowsocks':
-                const settings = inbound.settings;
-
-                let clientPassword = user.ssPassword;
-
-                if (isSS2022MethodFromMethod(settings.method) && 'password' in settings) {
-                    clientPassword = `${settings.password}:${getSsPassword(user.ssPassword, true)}`;
-                }
-
-                return {
-                    protocol: 'shadowsocks',
-                    protocolOptions: {
-                        method: settings.method || 'chacha20-ietf-poly1305',
-                        password: clientPassword,
-                        uot: settings.uot || false,
-                        uotVersion: settings.uotVersion || 1,
-                    },
-                };
-            case 'hysteria':
-                return {
-                    protocol: 'hysteria',
-                    protocolOptions: {
-                        version: 2,
-                        password: user.vlessUuid,
-                    },
-                };
-            default:
-                return null;
-        }
-    }
-
-    private buildResolvedProxyConfig(ctx: {
-        inputHost: HostWithRawInbound;
-        inbound: InboundConfig;
-        finalRemark: string;
-        user: UserEntity;
-        publicKeyMap: Map<string, string>;
-        mldsa65PublicKeyMap: Map<string, string>;
-        encryptionMap: Map<string, string>;
-    }): ResolvedProxyConfig | null {
-        const { inputHost, inbound, finalRemark, user } = ctx;
-
-        if (this.isSingBoxManagedInbound(inputHost.rawInbound)) {
-            return this.buildSingBoxResolvedProxyConfig({
-                inputHost,
-                inbound: inputHost.rawInbound,
-                finalRemark,
-                user,
-            });
-        }
-
-        const address = this.resolveRandomizedValue(inputHost.address);
-
-        const protocol = this.resolveProtocolOptions(
-            inputHost,
-            inbound,
-            user,
-            ctx.encryptionMap.get(inputHost.inboundTag),
-        );
-
-        if (!protocol) {
-            return null;
-        }
-
-        const transport = this.resolveTransport(inbound.streamSettings, inputHost, protocol, {
-            vlessUuid: user.vlessUuid,
-        });
-
-        const security = this.resolveSecurity(
-            inbound.streamSettings,
-            inputHost,
-            inbound.tag!,
-            ctx.publicKeyMap,
-            ctx.mldsa65PublicKeyMap,
-            address,
-        );
-
-        return {
-            finalRemark: finalRemark,
-            address: address,
-            port: inputHost.port,
-            streamOverrides: {
-                finalMask: override(
-                    toNonEmptyRecord(inputHost.finalMask),
-                    toNonEmptyRecord(inbound.streamSettings?.finalmask),
-                ),
-                sockopt: toNonEmptyRecord(inputHost.sockoptParams),
-            },
-            mux: toNonEmptyRecord(inputHost.muxParams),
-            clientOverrides: {
-                shuffleHost: inputHost.shuffleHost,
-                mihomoX25519: inputHost.mihomoX25519,
-                mihomoIpVersion: inputHost.mihomoIpVersion,
-                serverDescription: inputHost.serverDescription
-                    ? Buffer.from(inputHost.serverDescription).toString('base64')
-                    : null,
-                xrayJsonTemplate: inputHost.xrayJsonTemplate,
-                mapper: inputHost.mapper,
-            },
-            metadata: {
-                uuid: inputHost.uuid,
-                tags: inputHost.tags,
-                excludeFromSubscriptionTypes: inputHost.excludeFromSubscriptionTypes,
-                inboundTag: inputHost.inboundTag,
-                configProfileUuid: inputHost.configProfileUuid,
-                configProfileInboundUuid: inputHost.configProfileInboundUuid,
-                isDisabled: inputHost.isDisabled,
-                isHidden: inputHost.isHidden,
-                viewPosition: inputHost.viewPosition,
-                remark: inputHost.remark,
-                vlessRouteId: inputHost.vlessRouteId,
-                rawInbound: inputHost.rawInbound,
-            },
-            ...protocol,
-            ...security,
-            ...transport,
-        } satisfies ResolvedProxyConfig;
     }
 
     private buildSingBoxResolvedProxyConfig(ctx: {
@@ -708,13 +255,14 @@ export class ResolveProxyConfigService {
                 serverDescription: inputHost.serverDescription
                     ? Buffer.from(inputHost.serverDescription).toString('base64')
                     : null,
-                xrayJsonTemplate: inputHost.xrayJsonTemplate,
-                mapper: inputHost.mapper,
+                mapper: HostMapperSchema.parse(inputHost.mapper ?? {}),
             },
             metadata: {
                 uuid: inputHost.uuid,
                 tags: inputHost.tags,
-                excludeFromSubscriptionTypes: inputHost.excludeFromSubscriptionTypes,
+                excludeFromSubscriptionTypes: inputHost.excludeFromSubscriptionTypes.filter(
+                    (type) => Object.values(SUBSCRIPTION_TEMPLATE_TYPE).includes(type),
+                ),
                 inboundTag: inputHost.inboundTag,
                 configProfileUuid: inputHost.configProfileUuid,
                 configProfileInboundUuid: inputHost.configProfileInboundUuid,
@@ -736,6 +284,16 @@ export class ResolveProxyConfigService {
         user: UserEntity,
     ): ProtocolVariant | null {
         switch (inbound.type) {
+            case 'snell':
+                if (inbound.version !== 5 || inbound.multi_user_psk !== true) return null;
+                return {
+                    protocol: 'snell',
+                    protocolOptions: {
+                        psk: getSnellPsk(user),
+                        version: 5,
+                        obfs: inbound.obfs_mode === 'http' ? 'http' : 'none',
+                    },
+                };
             case 'anytls':
                 return {
                     protocol: 'anytls',
@@ -866,6 +424,7 @@ export class ResolveProxyConfigService {
             'type' in rawInbound &&
             typeof rawInbound.type === 'string' &&
             [
+                'snell',
                 'anytls',
                 'hysteria2',
                 'shadowsocks',
@@ -978,7 +537,6 @@ export class ResolveProxyConfigService {
                         shuffleHost: false,
                         mihomoX25519: false,
                         serverDescription: null,
-                        xrayJsonTemplate: null,
                         mihomoIpVersion: null,
                         mapper: {},
                     },

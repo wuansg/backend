@@ -3,8 +3,6 @@ import { Queue } from 'bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 
-import { INodeConnectionOpts } from '@common/axios';
-
 import { IGetEnabledNodesPartialResponse } from '@modules/nodes/queries/get-enabled-nodes-partial/get-enabled-nodes-partial.query';
 
 import { QUEUES_NAMES } from '@queue/queue.enum';
@@ -365,13 +363,6 @@ export class NodesQueuesService implements OnApplicationBootstrap {
 
     public async recreateTables(payload: IRecreateTablesPayload) {
         return this.nodeBulkUsersQueue.add(NODES_JOB_NAMES.RECREATE_TABLES, payload);
-    }
-
-    public async collectReports(payload: {
-        nodeUuid: string;
-        connectionOpts: INodeConnectionOpts;
-    }) {
-        return this.nodePluginsQueue.add(NODES_JOB_NAMES.COLLECT_REPORTS, payload);
     }
 
     public async syncNodePlugins(payload: { nodeUuid: string }) {

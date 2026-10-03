@@ -50,13 +50,15 @@ export class SurgeGeneratorService {
     }
 
     private buildProxyLine(host: ResolvedProxyConfig): string | null {
+        if (host.protocol === 'snell' && (host.security !== 'none' || host.transport !== 'tcp'))
+            return null;
         const fields = this.buildProtocolFields(host);
         if (!fields) {
             return null;
         }
 
         // Surge does not support udp-relay for AnyTLS.
-        if (host.protocol !== 'anytls') {
+        if (host.protocol !== 'anytls' && host.protocol !== 'snell') {
             fields.push(`udp-relay=${host.protocol === 'shadowsocks' ? 'true' : 'false'}`);
         }
         this.applySecurityFields(fields, host);
@@ -67,6 +69,16 @@ export class SurgeGeneratorService {
 
     private buildProtocolFields(host: ResolvedProxyConfig): string[] | null {
         switch (host.protocol) {
+            case 'snell':
+                return [
+                    'snell',
+                    host.address,
+                    host.port.toString(),
+                    `psk=${this.escapeFieldValue(host.protocolOptions.psk)}`,
+                    // version=5 makes Surge use unsupported QUIC proxy commands.
+                    'version=4',
+                    ...(host.protocolOptions.obfs === 'http' ? ['obfs=http'] : []),
+                ];
             case 'shadowsocks':
                 return [
                     'ss',

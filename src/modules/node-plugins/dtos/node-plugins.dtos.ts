@@ -13,8 +13,6 @@ import {
     PreviewNodePluginCommand,
     GetNodePluginStatusCommand,
 } from '@libs/contracts/commands';
-import { GetTorrentBlockerReportsCommand } from '@libs/contracts/commands/node-plugins/torrent-blocker';
-import { GetTorrentBlockerReportsStatsCommand } from '@libs/contracts/commands/node-plugins/torrent-blocker/get-torrent-blocker-reports-stats.command';
 
 export class GetNodePluginsResponseDto extends createZodDto(GetNodePluginsCommand.ResponseSchema) {} // GET_ALL
 
@@ -72,14 +70,3 @@ export class GetNodePluginStatusParamDto extends createZodDto(
 export class GetNodePluginStatusResponseDto extends createZodDto(
     GetNodePluginStatusCommand.ResponseSchema,
 ) {}
-
-export class GetTorrentBlockerReportsQueryDto extends createZodDto(
-    GetTorrentBlockerReportsCommand.RequestQuerySchema,
-) {} // TORRENT_BLOCKER_REPORT
-export class GetTorrentBlockerReportsResponseDto extends createZodDto(
-    GetTorrentBlockerReportsCommand.ResponseSchema,
-) {} // TORRENT_BLOCKER_REPORT
-
-export class GetTorrentBlockerReportsStatsResponseDto extends createZodDto(
-    GetTorrentBlockerReportsStatsCommand.ResponseSchema,
-) {} // TORRENT_BLOCKER_REPORT_STATS

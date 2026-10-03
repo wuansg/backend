@@ -27,11 +27,9 @@ export class GetHostsForUserHandler implements IQueryHandler<GetHostsForUserQuer
             );
 
             const inboundUuids = new Set<string>();
-            const templateUuids = new Set<string>();
 
             for (const h of hostsEntities) {
                 if (h.configProfileInboundUuid) inboundUuids.add(h.configProfileInboundUuid);
-                if (h.xrayJsonTemplateUuid) templateUuids.add(h.xrayJsonTemplateUuid);
             }
 
             const inbounds = await this.rawCache.cachedByKeys([...inboundUuids], {
@@ -40,14 +38,6 @@ export class GetHostsForUserHandler implements IQueryHandler<GetHostsForUserQuer
                 fetch: (m) => this.hostsRepository.getInboundsByUuids(m),
                 rowId: (r) => r.uuid,
                 toValue: (r) => ({ rawInbound: r.rawInbound, tag: r.tag }),
-            });
-
-            const templates = await this.rawCache.cachedByKeys([...templateUuids], {
-                cacheKey: CACHE_KEYS.XRAY_JSON_TEMPLATE,
-                ttlSeconds: CACHE_KEYS_TTL.XRAY_JSON_TEMPLATE,
-                fetch: (m) => this.hostsRepository.getTemplatesByUuids(m),
-                rowId: (r) => r.uuid,
-                toValue: (r) => r.templateJson,
             });
 
             return ok(
@@ -64,9 +54,6 @@ export class GetHostsForUserHandler implements IQueryHandler<GetHostsForUserQuer
                         ...h,
                         rawInbound: inbound.rawInbound,
                         inboundTag: inbound.tag,
-                        xrayJsonTemplate: h.xrayJsonTemplateUuid
-                            ? (templates.get(h.xrayJsonTemplateUuid) ?? null)
-                            : null,
                     });
                 }),
             );

@@ -2,11 +2,15 @@ import { hasher } from 'node-object-hash';
 
 import { HashedSet } from '@remnawave/hashed-set';
 
+import { getSnellPsk } from '@common/helpers/snell';
+
 import { UserForConfigEntity } from '@modules/users/entities/users-for-config';
 
 type TCtrSingBoxConfig = object | Record<string, unknown> | string;
 
 const SING_BOX_KEY_ALIASES: Record<string, string> = {
+    multiUserPsk: 'multi_user_psk',
+    obfsMode: 'obfs_mode',
     autoDetectInterface: 'auto_detect_interface',
     cacheFile: 'cache_file',
     certificatePath: 'certificate_path',
@@ -50,6 +54,7 @@ interface InboundsWithTagsAndType {
 }
 
 const MANAGED_CLIENT_TYPES = new Set([
+    'snell',
     'anytls',
     'hysteria2',
     'shadowsocks',
@@ -60,6 +65,7 @@ const MANAGED_CLIENT_TYPES = new Set([
     'vmess',
 ]);
 const ALLOWED_TYPES = new Set([
+    'snell',
     'anytls',
     'block',
     'direct',
@@ -153,6 +159,9 @@ export class SingBoxConfig {
             if (!inbound) continue;
 
             inbound.users ??= [];
+            if (inbound.type === 'snell' && inbound.users.length + tagUsers.length > 256) {
+                throw new Error('Managed Snell supports at most 256 users per inbound.');
+            }
             for (const user of tagUsers) {
                 const inboundUser = this.buildInboundUser(inbound, user);
                 if (inboundUser) {
@@ -234,6 +243,8 @@ export class SingBoxConfig {
         const name = user.id.toString();
 
         switch (inbound.type) {
+            case 'snell':
+                return { name, psk: getSnellPsk(user) };
             case 'anytls':
                 return {
                     name,
@@ -326,6 +337,25 @@ export class SingBoxConfig {
     }
 
     private validateType(inbound: SingBoxInbound): void {
+        if (inbound.type === 'snell') {
+            if (inbound.version !== 5 || inbound.multi_user_psk !== true) {
+                throw new Error(
+                    'Managed Snell requires version: 5 and multi_user_psk: true (patched Agent).',
+                );
+            }
+            if (
+                inbound.psk ||
+                inbound.tls ||
+                inbound.transport ||
+                inbound.multiplex ||
+                inbound.network ||
+                ![undefined, '', 'none', 'http'].includes(inbound.obfs_mode as string | undefined)
+            ) {
+                throw new Error(
+                    'Managed Snell does not support shared PSK, TLS, transport, multiplex, network or this obfs_mode.',
+                );
+            }
+        }
         if (inbound.type && !ALLOWED_TYPES.has(inbound.type)) {
             throw new Error(
                 `Invalid sing-box inbound type "${inbound.type}" in inbound "${inbound.tag}".`,

@@ -1,6 +1,6 @@
 import z from 'zod';
 
-import { TSubscriptionTemplateType } from '@libs/contracts/constants';
+import { SUBSCRIPTION_TEMPLATE_TYPE, TSubscriptionTemplateType } from '@libs/contracts/constants';
 import {
     ExternalSquadHostOverridesSchema,
     ExternalSquadResponseHeadersAddSchema,
@@ -50,12 +50,18 @@ export class GetExternalSquadByUuidResponseModel {
             membersCount: Number(entity.membersCount),
         };
 
-        this.templates = entity.templates.map((template) => ({
-            templateUuid: template.templateUuid,
-            templateType: template.templateType,
-        }));
+        this.templates = entity.templates
+            .filter((template) =>
+                Object.values(SUBSCRIPTION_TEMPLATE_TYPE).includes(template.templateType),
+            )
+            .map((template) => ({
+                templateUuid: template.templateUuid,
+                templateType: template.templateType,
+            }));
 
-        this.subscriptionSettings = entity.subscriptionSettings;
+        this.subscriptionSettings = entity.subscriptionSettings
+            ? ExternalSquadSubscriptionSettingsSchema.parse(entity.subscriptionSettings)
+            : null;
 
         this.hostOverrides = entity.hostOverrides;
         this.responseHeadersAdd = entity.responseHeadersAdd;

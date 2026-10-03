@@ -2,8 +2,6 @@ export const REQUEST_TEMPLATE_TYPE = {
     STASH: 'stash',
     SINGBOX: 'singbox',
     MIHOMO: 'mihomo',
-    XRAY_JSON: 'json',
-    V2RAY_JSON: 'v2ray-json',
     CLASH: 'clash',
     SURGE: 'surge',
 } as const;

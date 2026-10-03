@@ -7,7 +7,6 @@ import { HostMapperSchema } from '../../../models';
 const PreviewTemplateTypeSchema = z.enum([
     SUBSCRIPTION_TEMPLATE_TYPE.SINGBOX,
     SUBSCRIPTION_TEMPLATE_TYPE.MIHOMO,
-    SUBSCRIPTION_TEMPLATE_TYPE.XRAY_JSON,
     SUBSCRIPTION_TEMPLATE_TYPE.XRAY_BASE64,
 ]);
 

@@ -17,7 +17,6 @@ export const NODES_JOB_NAMES = {
     DROP_USERS_CONNECTIONS: 'dropUsersConnections',
     DROP_IPS_CONNECTIONS: 'dropIpsConnections',
     SYNC_NODE_PLUGINS: 'syncNodePlugins',
-    COLLECT_REPORTS: 'collectReports',
 
     BLOCK_IPS: 'blockIps',
     UNBLOCK_IPS: 'unblockIps',

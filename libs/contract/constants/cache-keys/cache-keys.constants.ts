@@ -27,7 +27,6 @@ export const CACHE_KEYS = {
     TELEGRAM_TARGET_SUCCESSES: (target: string) => `telegram_target_successes:${target}`,
     TELEGRAM_TARGET_FAILURES: (target: string) => `telegram_target_failures:${target}`,
     RAW_INBOUND: (uuid: string) => `raw_inbound:${uuid}`,
-    XRAY_JSON_TEMPLATE: (uuid: string) => `xray_json_template:${uuid}`,
     EXTERNAL_SQUAD_TEMPLATE_NAME: (uuid: string, type: TSubscriptionTemplateType) =>
         `external_squad_template_name:${uuid}:${type}`,
 } as const;
@@ -44,7 +43,6 @@ export const CACHE_KEYS_TTL = {
     NODE_CORE_UPTIME: 16, // 16 seconds
     NODE_RUNTIME_STATUS: 45, // 3 scheduler cycles
     RAW_INBOUND: 3_600, // 1 hour
-    XRAY_JSON_TEMPLATE: 3_600, // 1 hour
     EXTERNAL_SQUAD_TEMPLATE_NAME: 3_600, // 1 hour
 } as const;
 

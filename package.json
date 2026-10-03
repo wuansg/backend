@@ -1,6 +1,6 @@
 {
   "name": "@remnawave/backend",
-  "version": "3.13.2",
+  "version": "3.14.0",
   "private": false,
   "description": "Remnawave Panel Backend",
   "homepage": "https://github.com/remnawave",
@@ -38,7 +38,6 @@
     "test:node-ips-shared-lists": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-node-ips-shared-lists.ts",
     "test:stage-13-15": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-stage-13-15.ts",
     "test:api-scope-catalog": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-api-scope-catalog.ts",
-    "test:xray-generator": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-xray-generator.ts",
     "migrate:dev": "prisma migrate dev",
     "migrate:generate": "prisma generate",
     "migrate:deploy": "prisma migrate deploy",
@@ -51,7 +50,11 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "check": "oxfmt --check && oxlint",
-    "fix": "oxfmt && oxlint --fix"
+    "fix": "oxfmt && oxlint --fix",
+    "test:base64-generator": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-base64-generator.ts",
+    "test:xray-cleanup": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-xray-cleanup.ts",
+    "test:retired-node-plugins": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-retired-node-plugins.ts",
+    "test:snell": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-snell.ts"
   },
   "dependencies": {
     "@bull-board/api": "8.3.0",
@@ -128,7 +131,6 @@
     "ufo": "^1.6.4",
     "winston": "^3.19.0",
     "xbytes": "^1.9.1",
-    "xray-typed": "^1.1.2",
     "zod": "4.4.3"
   },
   "devDependencies": {

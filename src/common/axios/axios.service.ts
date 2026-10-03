@@ -93,36 +93,6 @@ type CoreStartResponse = {
 
 type CoreStopResponse = { response: { isStopped: boolean } };
 
-type CollectReportsResponse = {
-    response: {
-        reports: Array<{
-            actionReport: {
-                blocked: boolean;
-                ip: string;
-                blockDuration: number;
-                willUnblockAt: Date;
-                userId: string;
-                processedAt: Date;
-            };
-            coreReport: {
-                email: string | null;
-                level: number | null;
-                protocol: string | null;
-                network: string;
-                source: string | null;
-                destination: string;
-                routeTarget: string | null;
-                originalTarget: string | null;
-                inboundTag: string | null;
-                inboundName: string | null;
-                inboundLocal: string | null;
-                outboundTag: string | null;
-                ts: number;
-            };
-        }>;
-    };
-};
-
 export type NodeAgentHealthResponse = {
     isAlive: boolean;
     nodeVersion: string;
@@ -186,7 +156,6 @@ export type NodeSystemStatsResponse = {
         pauseTotalNs: number;
         uptime: number;
     } | null;
-    plugins: { torrentBlocker: { reportsCount: number } };
     system: { stats: TNodeSystem['stats'] };
 };
 
@@ -759,7 +728,7 @@ export class AxiosService {
      */
 
     public async addUser(
-        data: AddUserCommand.Request,
+        data: import('./node-user-requests').AddNodeUserRequest,
         opts: INodeConnectionOpts,
     ): Promise<TResult<AddUserCommand.Response['response']>> {
         return this.request<AddUserCommand.Response>({
@@ -786,7 +755,7 @@ export class AxiosService {
     }
 
     public async addUsers(
-        data: AddUsersCommand.Request,
+        data: import('./node-user-requests').AddNodeUsersRequest,
         opts: INodeConnectionOpts,
     ): Promise<TResult<AddUsersCommand.Response['response']>> {
         return this.request<AddUsersCommand.Response>({
@@ -873,18 +842,6 @@ export class AxiosService {
             compress: true,
             logAxiosError: false,
             timeout: 15_000,
-        });
-    }
-
-    public async collectTorrentBlockerReports(
-        opts: INodeConnectionOpts,
-    ): Promise<TResult<CollectReportsResponse['response']>> {
-        return this.request<CollectReportsResponse>({
-            label: 'COLLECT TORRENT BLOCKER REPORTS',
-            path: '/node/plugin/torrent-blocker/collect',
-            opts,
-            logAxiosError: false,
-            timeout: 20_000,
         });
     }
 

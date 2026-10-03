@@ -22,7 +22,6 @@ const resolvedProxy = {
         mihomoX25519: false,
         mihomoIpVersion: null,
         serverDescription: null,
-        xrayJsonTemplate: null,
         mapper: {},
     },
     metadata: {

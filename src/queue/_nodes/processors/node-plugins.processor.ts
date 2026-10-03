@@ -4,16 +4,12 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { QueryBus } from '@nestjs/cqrs';
 
-import { INodeConnectionOpts } from '@common/axios';
 import { AxiosService } from '@common/axios/axios.service';
 import { stableJsonHash } from '@common/utils/stable-json-hash.util';
-import { EVENTS } from '@libs/contracts/constants/events/events';
 
 import { NodeObservabilityRepository } from '@modules/node-observability';
 import { GetPluginByUuidQuery } from '@modules/node-plugins/queries/get-plugin-by-uuid';
 import { GetNodeByUuidQuery } from '@modules/nodes/queries/get-node-by-uuid';
-
-import { UsersQueuesService } from '@queue/_users/users-queues.service';
 
 import { QUEUES_NAMES } from '../../queue.enum';
 import { NODES_JOB_NAMES } from '../constants';
@@ -29,7 +25,6 @@ export class NodePluginsProcessor extends WorkerHost {
     constructor(
         private readonly axios: AxiosService,
         private readonly queryBus: QueryBus,
-        private readonly usersQueuesService: UsersQueuesService,
         private readonly nodeObservabilityRepository: NodeObservabilityRepository,
     ) {
         super();
@@ -40,8 +35,6 @@ export class NodePluginsProcessor extends WorkerHost {
         switch (job.name) {
             case NODES_JOB_NAMES.SYNC_NODE_PLUGINS:
                 return await this.handleSyncNodePlugins(job);
-            case NODES_JOB_NAMES.COLLECT_REPORTS:
-                return await this.handleCollectReports(job);
             default:
                 this.logger.warn(`Job "${job.name}" is not handled.`);
                 break;
@@ -176,48 +169,6 @@ export class NodePluginsProcessor extends WorkerHost {
             };
         } catch (error) {
             this.logger.error(`Failed to sync node plugins: ${error}`);
-        }
-    }
-
-    private async handleCollectReports(
-        job: Job<{
-            nodeUuid: string;
-            connectionOpts: INodeConnectionOpts;
-        }>,
-    ) {
-        try {
-            const { nodeUuid, connectionOpts } = job.data;
-
-            const response = await this.axios.collectTorrentBlockerReports(connectionOpts);
-
-            if (!response.isOk) {
-                this.logger.error(`Failed to collect reports: ${response.message}`);
-
-                return {
-                    success: false,
-                    nodeUuid,
-                    collectedReports: [],
-                };
-            }
-
-            const { response: collectedReports } = response;
-
-            for (const report of collectedReports.reports) {
-                await this.usersQueuesService.fireTorrentBlockerEvent({
-                    id: report.actionReport.userId,
-                    event: EVENTS.TORRENT_BLOCKER.REPORT,
-                    nodeUuid,
-                    report,
-                });
-            }
-
-            return {
-                success: true,
-                nodeUuid,
-                collectedReports,
-            };
-        } catch (error) {
-            this.logger.error(`Failed to collect reports: ${error}`);
         }
     }
 }

@@ -2,6 +2,7 @@ import { SubscriptionSettings } from '@prisma/client';
 
 import { TCustomRemarks, THwidSettings } from '@libs/contracts/models';
 
+import { normalizeStoredResponseRules } from '@modules/subscription-response-rules/legacy-response-rules';
 import { TResponseRulesConfig } from '@modules/subscription-response-rules/types/response-rules.types';
 
 export class SubscriptionSettingsEntity implements SubscriptionSettings {
@@ -18,6 +19,7 @@ export class SubscriptionSettingsEntity implements SubscriptionSettings {
     updatedAt: Date;
     constructor(config: Partial<SubscriptionSettings>) {
         Object.assign(this, config);
+        this.responseRules = normalizeStoredResponseRules(this.responseRules);
         return this;
     }
 }

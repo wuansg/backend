@@ -18,7 +18,6 @@ import {
     NodeEvent,
     CrmEvent,
     UserHwidDeviceEvent,
-    TorrentBlockerEvent,
 } from '@integration-modules/notifications/interfaces';
 
 import { BaseUserHwidDevicesResponseModel } from '@modules/hwid-user-devices/models';
@@ -212,41 +211,6 @@ export class WebhookEvents {
                 timestamp: dayjs().toISOString(),
                 data: {
                     hwidUserDevice: new BaseUserHwidDevicesResponseModel(event.data.hwidUserDevice),
-                    user: new GetFullUserResponseModel(event.data.user, this.subPublicDomain),
-                },
-            };
-
-            const { json } = serialize(payload);
-
-            await this.webhookLoggerQueueService.sendWebhooks(
-                {
-                    payload: JSON.stringify(json),
-                    timestamp: payload.timestamp,
-                },
-                [...this.webhookUrls, ...this.notificationsConfig.getWebhookUrls(event.eventName)],
-            );
-        } catch (error) {
-            this.logger.error(`Error sending webhook event: ${error}`);
-        }
-    }
-
-    @OnEvent(EVENTS.CATCH_ALL_TORRENT_BLOCKER_EVENTS)
-    async onCatchAllTorrentBlockerEvents(event: TorrentBlockerEvent): Promise<void> {
-        try {
-            if (!this.notificationsConfig.isEnabled(event.eventName, 'webhook')) {
-                return;
-            }
-
-            const payload = {
-                scope: EVENTS_SCOPES.TORRENT_BLOCKER,
-                event: event.eventName,
-                timestamp: dayjs().toISOString(),
-                data: {
-                    ...event.data,
-                    node: new NodeResponseModel(
-                        event.data.node,
-                        await this.getNodesSystemInfo(event.data.node.uuid),
-                    ),
                     user: new GetFullUserResponseModel(event.data.user, this.subPublicDomain),
                 },
             };

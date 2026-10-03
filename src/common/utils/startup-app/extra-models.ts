@@ -9,7 +9,6 @@ import {
     RemnawaveWebhookServiceEvents,
     RemnawaveWebhookUserEvents,
     RemnawaveWebhookUserHwidDevicesEvents,
-    RemnawaveWebhookTorrentBlockerEvents,
     RemnawaveUserUsageStreamMessageSchema,
     RemnawaveSubscriptionRequestStreamMessageSchema,
     RemnawaveNodeConnectionsStreamMessageSchema,
@@ -23,9 +22,6 @@ export class RemnawaveWebhookNodeEventsDto extends createZodDto(RemnawaveWebhook
 export class RemnawaveWebhookServiceEventsDto extends createZodDto(RemnawaveWebhookServiceEvents) {}
 export class RemnawaveWebhookErrorsEventsDto extends createZodDto(RemnawaveWebhookErrorsEvents) {}
 export class RemnawaveWebhookCrmEventsDto extends createZodDto(RemnawaveWebhookCrmEvents) {}
-export class RemnawaveWebhookTorrentBlockerEventsDto extends createZodDto(
-    RemnawaveWebhookTorrentBlockerEvents,
-) {}
 
 export class RemnawaveUserUsageStreamMessageDto extends createZodDto(
     RemnawaveUserUsageStreamMessageSchema,

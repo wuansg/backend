@@ -15,7 +15,6 @@ import {
     DEFAULT_TEMPLATE_SINGBOX,
     DEFAULT_TEMPLATE_STASH,
     DEFAULT_TEMPLATE_SURGE,
-    DEFAULT_TEMPLATE_XRAY_JSON,
 } from './constants';
 import { ReorderSubscriptionTemplatesBodyDto } from './dtos';
 import { SubscriptionTemplateEntity } from './entities/subscription-template.entity';
@@ -83,8 +82,7 @@ export class SubscriptionTemplateService {
                 template.templateType === 'CLASH' ||
                 template.templateType === 'SURGE';
 
-            const isJsonTemplate =
-                template.templateType === 'XRAY_JSON' || template.templateType === 'SINGBOX';
+            const isJsonTemplate = template.templateType === 'SINGBOX';
 
             if (isYamlTemplate && templateJson !== undefined) {
                 return fail(ERRORS.TEMPLATE_JSON_NOT_ALLOWED_FOR_YAML_TEMPLATE);
@@ -222,9 +220,6 @@ export class SubscriptionTemplateService {
                 case 'SINGBOX':
                     templateJson = DEFAULT_TEMPLATE_SINGBOX;
                     break;
-                case 'XRAY_JSON':
-                    templateJson = DEFAULT_TEMPLATE_XRAY_JSON;
-                    break;
             }
 
             const templateEntity = new SubscriptionTemplateEntity({
@@ -339,7 +334,6 @@ export class SubscriptionTemplateService {
                 });
                 break;
             case 'SINGBOX':
-            case 'XRAY_JSON':
                 templateContent = template.templateJson;
                 break;
         }
@@ -402,8 +396,5 @@ export class SubscriptionTemplateService {
         name: string = DEFAULT_TEMPLATE_NAME,
     ): Promise<void> {
         await this.rawCacheService.del(CACHE_KEYS.SUBSCRIPTION_TEMPLATE(name, type));
-        if (type === 'XRAY_JSON') {
-            await this.rawCacheService.del(CACHE_KEYS.XRAY_JSON_TEMPLATE(uuid));
-        }
     }
 }

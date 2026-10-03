@@ -1,12 +1,11 @@
 import { Injectable } from '@nestjs/common';
 
 import { SUBSCRIPTION_CONFIG_TYPES } from './constants/config-types';
+import { Base64GeneratorService } from './generators/base64.generator.service';
 import { ClashGeneratorService } from './generators/clash.generator.service';
 import { MihomoGeneratorService } from './generators/mihomo.generator.service';
 import { SingBoxGeneratorService } from './generators/singbox.generator.service';
 import { SurgeGeneratorService } from './generators/surge.generator.service';
-import { XrayJsonGeneratorService } from './generators/xray-json.generator.service';
-import { XrayGeneratorService } from './generators/xray.generator.service';
 import { IGenerateSubscription } from './interfaces';
 import { ResolvedProxyConfig } from './resolve-proxy/interfaces';
 import {
@@ -21,9 +20,8 @@ export class RenderTemplatesService {
         private readonly mihomoGeneratorService: MihomoGeneratorService,
         private readonly clashGeneratorService: ClashGeneratorService,
         private readonly surgeGeneratorService: SurgeGeneratorService,
-        private readonly xrayGeneratorService: XrayGeneratorService,
+        private readonly base64GeneratorService: Base64GeneratorService,
         private readonly singBoxGeneratorService: SingBoxGeneratorService,
-        private readonly xrayJsonGeneratorService: XrayJsonGeneratorService,
     ) {}
 
     public async generateSubscription(params: IGenerateSubscription): Promise<{
@@ -44,7 +42,7 @@ export class RenderTemplatesService {
         switch (srrContext.matchedResponseType) {
             case 'XRAY_BASE64':
                 return {
-                    subscription: await this.xrayGeneratorService.generateConfig(
+                    subscription: await this.base64GeneratorService.generateConfig(
                         formattedHosts,
                         SUBSCRIPTION_CONFIG_TYPES['XRAY_BASE64'].isBase64,
                         srrContext.isExtendedClient,
@@ -99,17 +97,6 @@ export class RenderTemplatesService {
                         srrContext.overrideTemplateName,
                     ),
                     contentType: SUBSCRIPTION_CONFIG_TYPES['STASH'].CONTENT_TYPE,
-                };
-
-            case 'XRAY_JSON':
-                return {
-                    subscription: await this.xrayJsonGeneratorService.generateConfig({
-                        hosts: formattedHosts,
-                        isExtendedClient: srrContext.isExtendedClient,
-                        overrideTemplateName: srrContext.overrideTemplateName,
-                        ignoreHostXrayJsonTemplate: srrContext.ignoreHostXrayJsonTemplate,
-                    }),
-                    contentType: SUBSCRIPTION_CONFIG_TYPES['XRAY_JSON'].CONTENT_TYPE,
                 };
 
             default:

@@ -24,7 +24,6 @@ function buildHost(overrides: Partial<ResolvedProxyConfig> = {}): ResolvedProxyC
             mihomoX25519: false,
             mihomoIpVersion: null,
             serverDescription: null,
-            xrayJsonTemplate: null,
             mapper: {
                 singbox: [
                     { op: 'copy', from: 'custom.resolver', to: 'domain_resolver' },

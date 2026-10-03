@@ -2,9 +2,9 @@ import { Logger } from '@nestjs/common';
 import { IEventHandler, QueryBus } from '@nestjs/cqrs';
 import { EventsHandler } from '@nestjs/cqrs';
 
-import { AddUsersCommand as AddUsersToNodeCommandSdk } from '@remnawave/node-contract';
-
-import { isSS2022Method } from '@common/helpers/xray-config/ss-cipher';
+import { AddNodeUsersRequest } from '@common/axios/node-user-requests';
+import { getSnellPsk } from '@common/helpers/snell';
+import { isSS2022Method } from '@common/helpers/ss-cipher';
 import { getVlessFlowFromDbInbound } from '@common/utils/flow/get-vless-flow';
 
 import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
@@ -50,11 +50,12 @@ export class AddUsersToNodeHandler implements IEventHandler<AddUsersToNodeEvent>
             for (const node of activeNodes) {
                 const activeTags = new Set(node.activeInbounds.map((ib) => ib.tag));
 
-                const usersForNode: AddUsersToNodeCommandSdk.Request['users'] = [];
+                const usersForNode: AddNodeUsersRequest['users'] = [];
                 const usersToRemove: Array<{ userId: string; hashUuid: string }> = [];
 
                 for (const user of usersResult.response) {
-                    const { id, trojanPassword, vlessUuid, ssPassword, inbounds } = user;
+                    const { id, trojanPassword, vlessUuid, ssPassword, anytlsPassword, inbounds } =
+                        user;
 
                     if (inbounds.length === 0) continue;
 
@@ -72,11 +73,20 @@ export class AddUsersToNodeHandler implements IEventHandler<AddUsersToNodeEvent>
                             vlessUuid,
                             trojanPassword,
                             ssPassword,
+                            anytlsPassword,
+                            snellPsk: getSnellPsk({ anytlsPassword }),
                         },
                         inboundData: filteredInbounds.map((inbound) => {
                             const inboundType = this.resolveInboundType(inbound);
 
                             switch (inboundType) {
+                                case 'snell':
+                                case 'anytls':
+                                case 'hysteria2':
+                                case 'tuic':
+                                case 'vmess':
+                                case 'shadowtls':
+                                    return { type: inboundType, tag: inbound.tag };
                                 case 'trojan':
                                     return { type: inboundType, tag: inbound.tag };
                                 case 'vless':

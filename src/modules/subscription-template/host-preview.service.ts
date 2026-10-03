@@ -12,10 +12,9 @@ import { HostsRepository } from '@modules/hosts/repositories/hosts.repository';
 import { SubscriptionSettingsEntity } from '@modules/subscription-settings/entities';
 import { UserEntity } from '@modules/users/entities';
 
+import { Base64GeneratorService } from './generators/base64.generator.service';
 import { MihomoGeneratorService } from './generators/mihomo.generator.service';
 import { SingBoxGeneratorService } from './generators/singbox.generator.service';
-import { XrayJsonGeneratorService } from './generators/xray-json.generator.service';
-import { XrayGeneratorService } from './generators/xray.generator.service';
 import { ResolvedProxyConfig } from './resolve-proxy/interfaces';
 import { ResolveProxyConfigService } from './resolve-proxy/resolve-proxy-config.service';
 
@@ -33,8 +32,7 @@ export class HostPreviewService {
         private readonly resolveProxyConfigService: ResolveProxyConfigService,
         private readonly singBoxGeneratorService: SingBoxGeneratorService,
         private readonly mihomoGeneratorService: MihomoGeneratorService,
-        private readonly xrayJsonGeneratorService: XrayJsonGeneratorService,
-        private readonly xrayGeneratorService: XrayGeneratorService,
+        private readonly base64GeneratorService: Base64GeneratorService,
     ) {}
 
     public async preview(dto: PreviewBody): Promise<TResult<PreviewResponse>> {
@@ -111,15 +109,10 @@ export class HostPreviewService {
             return null;
         }
 
-        const [template] = host.xrayJsonTemplateUuid
-            ? await this.hostsRepository.getTemplatesByUuids([host.xrayJsonTemplateUuid])
-            : [];
-
         return new HostWithRawInbound({
             ...host,
             inboundTag: inbound.tag,
             rawInbound: inbound.rawInbound as object | null,
-            xrayJsonTemplate: (template?.templateJson as object | null | undefined) ?? null,
         });
     }
 
@@ -146,14 +139,8 @@ export class HostPreviewService {
                 return await this.singBoxGeneratorService.generateConfig([host]);
             case 'MIHOMO':
                 return await this.mihomoGeneratorService.generateConfig([host], false, false);
-            case 'XRAY_JSON':
-                return await this.xrayJsonGeneratorService.generateConfig({
-                    hosts: [host],
-                    isExtendedClient: false,
-                    ignoreHostXrayJsonTemplate: false,
-                });
             case 'XRAY_BASE64':
-                return await this.xrayGeneratorService.generateConfig([host], false, false);
+                return await this.base64GeneratorService.generateConfig([host], false, false);
         }
 
         throw new Error(`Unsupported preview template type: ${String(templateType)}`);
@@ -176,20 +163,9 @@ export class HostPreviewService {
             return fragment as PreviewResponse['before'];
         }
 
-        const config = JSON.parse(subscription) as
-            | { outbounds?: unknown[] }
-            | Array<{ outbounds?: unknown[] }>;
-
-        if (templateType === 'SINGBOX') {
-            const fragment = Array.isArray(config) ? undefined : config.outbounds?.at(-1);
-            if (fragment === undefined)
-                throw new Error('The sing-box generator produced no outbound.');
-            return fragment as PreviewResponse['before'];
-        }
-
-        const fragment = Array.isArray(config) ? config[0]?.outbounds?.[0] : undefined;
-        if (fragment === undefined)
-            throw new Error('The Xray JSON generator produced no outbound.');
+        const config = JSON.parse(subscription) as { outbounds?: unknown[] };
+        const fragment = config.outbounds?.at(-1);
+        if (fragment === undefined) throw new Error('The sing-box generator produced no outbound.');
         return fragment as PreviewResponse['before'];
     }
 

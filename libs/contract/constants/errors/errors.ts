@@ -1129,11 +1129,6 @@ export const ERRORS = {
         message: 'Metadata not found',
         httpCode: 404,
     },
-    GET_TORRENT_BLOCKER_REPORTS_ERROR: {
-        code: 'A227',
-        message: 'Get torrent blocker reports error',
-        httpCode: 500,
-    },
     UPDATE_HOSTS_ERROR: {
         code: 'A228',
         message: 'Update hosts error',

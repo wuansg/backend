@@ -31,10 +31,6 @@ export const SUBSCRIPTION_CONFIG_TYPES: Record<
         CONTENT_TYPE: 'text/plain',
         isBase64: true,
     },
-    [RESPONSE_RULES_RESPONSE_TYPES.XRAY_JSON]: {
-        CONTENT_TYPE: 'application/json',
-        isBase64: false,
-    },
     [RESPONSE_RULES_RESPONSE_TYPES.BLOCK]: {
         CONTENT_TYPE: 'text/plain',
         isBase64: false,

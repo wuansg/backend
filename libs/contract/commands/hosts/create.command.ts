@@ -67,7 +67,6 @@ export namespace CreateHostCommand {
         mihomoX25519: z.optional(z.boolean().default(false)),
         mihomoIpVersion: z.enum(MIHOMO_IP_VERSION).nullish(),
         nodes: z.optional(z.array(z.uuid())),
-        xrayJsonTemplateUuid: z.uuid().nullish(),
         excludedInternalSquads: z
             .optional(z.array(z.uuid()))
             .describe('Optional. Internal squads from which the host will be excluded.'),

@@ -13,6 +13,12 @@ export const TrojanProtocolOptionsSchema = z.object({
     password: z.string(),
 });
 
+export const SnellProtocolOptionsSchema = z.object({
+    psk: z.string().min(16),
+    version: z.literal(5),
+    obfs: z.enum(['none', 'http']),
+});
+
 export const ShadowsocksProtocolOptionsSchema = z.object({
     method: z.string(),
     password: z.string(),
@@ -188,6 +194,7 @@ const ShadowTlsProtocolSchema = z.object({
 });
 
 export const ProtocolVariantSchema = z.discriminatedUnion('protocol', [
+    z.object({ protocol: z.literal('snell'), protocolOptions: SnellProtocolOptionsSchema }),
     VlessProtocolSchema,
     TrojanProtocolSchema,
     ShadowsocksProtocolSchema,
@@ -285,6 +292,7 @@ export const ResolvedProxyConfigSchema = z.object({
     port: z.int().positive(),
 
     protocol: z.enum([
+        'snell',
         'vless',
         'trojan',
         'shadowsocks',
@@ -296,6 +304,7 @@ export const ResolvedProxyConfigSchema = z.object({
         'shadowtls',
     ]),
     protocolOptions: z.union([
+        SnellProtocolOptionsSchema,
         VlessProtocolOptionsSchema,
         TrojanProtocolOptionsSchema,
         ShadowsocksProtocolOptionsSchema,
@@ -333,7 +342,6 @@ export const ResolvedProxyConfigSchema = z.object({
         mihomoX25519: z.boolean(),
         mihomoIpVersion: z.enum(MIHOMO_IP_VERSION).nullable(),
         serverDescription: z.string().nullable(),
-        xrayJsonTemplate: z.nullable(z.unknown()),
         mapper: HostMapperSchema,
     }),
 
