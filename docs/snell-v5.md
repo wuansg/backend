@@ -1,4 +1,4 @@
-# Managed Snell v5 (unreleased 3.14.0)
+# Managed Snell v5 (3.14.0)
 
 This is a Remnawave extension to the bundled sing-box 1.14.0 core, not an upstream
 configuration option. It uses standard independent client PSKs on one TCP port;
@@ -62,6 +62,11 @@ validation, so its subscription output remains version 4.
 Surge configuration output is tested; a live Surge client is not available here.
 Race checks are wired into GitHub Actions and have not run locally (CGO toolchain
 limitations on this OpenWrt development host). No images have been published.
+
+Release update (2026-10-03): GitHub Actions contract run `37129822136`, backend
+image run `37130093316`, and Agent run `37129827163` passed, including CI race
+tests. Backend/Frontend 3.14.0 is deployed on nlfra; Agent 3.14.0 is deployed on
+aiyun and DWHK. See `release-3.14.0.md` for deployment and client verification.
 
 The preceding Xray retirement work is also pending in 3.14.0: release the updated
 contract/frontend/backend before the new Agent, per `xray-retirement-3.14.0.md`.

@@ -28,11 +28,16 @@
 - Pre-existing `test:opaque-json` fails because the allowlist lacks Prisma JSON fields: `changes`, `configHashes`, `geocheckSource`, `interfaces`, `resolutionState`, `runtimeStatus`, `snapshot`. Its pre-existing working-tree change was preserved.
 - Full frontend lint crashes inside oxlint's allocator, including a single-threaded non-sandbox retry. TypeScript/build succeed.
 
-## Release order — not yet executed
+## Release order — executed 2026-10-03
+
+Deployment and verification are recorded in `release-3.14.0.md`. The sequence
+below was followed for nlfra, the aiyun canary and DWHK. Remaining Agents were not
+upgraded in this rollout.
 
 1. Review existing unrelated working-tree changes before committing. The contract has a pre-existing `node-forwarding.schema.ts` change, so verify the final release tarball against the frontend lockfile integrity.
 2. Publish the backend contract release with the existing GitHub workflow first. Check its SHA-512 and update the frontend lockfile if needed; never deploy a frontend pointing at an unpublished contract asset.
 3. Publish frontend, then build the backend image with that frontend revision via GitHub Actions. No source-copy deployment.
 4. Only after updating the backend, deploy the GitHub-built, version-tagged 3.14.0 agent image; canary aiyun before other nodes. Old backends still expect the removed Torrent report field in agent health responses. Follow the established Nikki Final-group switch procedure before upgrading DWHK.
 
-No commits, pushes, releases or production deployments were performed during this local implementation.
+The local implementation originally made no production changes; the subsequent
+authorized 2026-10-03 release is documented separately as noted above.
