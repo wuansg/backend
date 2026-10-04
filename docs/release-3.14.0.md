@@ -62,3 +62,25 @@ reports Snell and the subscription uses version 5. After a successful delay test
 - Before an Agent rollback, remove/restore its Snell assignment: 3.13.0 does not
   support the managed multi-PSK inbound. Restore the matching Host subscription
   mapping as well. Database history was not dropped by this release.
+
+## Taiwan ali follow-up — 2026-10-04
+
+- On user request, DataWave TPE was upgraded from Agent 3.13.0 to the same
+  GitHub-built 3.14.0 image and pinned digest listed above.
+- Added `Snell_DWTW` to the existing `singbox` profile and inherited the original
+  AnyTLS squad permissions. Only TPE's 54320 assignment and its ali Host were
+  replaced; 54321 Shadowsocks and 443 Trojan retain their 16 users.
+- The public Taiwan ali entry remains `alihkbalance.mugi.uk:54323` and forwards
+  to TPE port 54320. No forwarding rules were changed.
+- Isolated Mihomo version 5 and sing-box version 4 clients passed real upload and
+  download tests both directly and through the public ali entry. User 18's usage
+  recorded 1,055,008 upload and 4,047,616 download bytes across the four tests.
+  Snapshot gap and pending counts were zero, with no latest error.
+- OpenClash's active `silverspoon` subscription was refreshed using its native
+  updater. Runtime reports Snell, the client configuration specifies version 5,
+  and the Taiwan ali delay test passed at 37 ms. Final retained Hong Kong ali.
+- Configuration rollback snapshot on nlfra:
+  `/opt/remnawave/backups/tpe-snell-20261004/configuration.json`.
+- Original TPE Compose:
+  `/root/remnanode-backups/tpe-snell-20261004/docker-compose.pre.yml`.
+- This follow-up required no application code changes or new image build.

@@ -157,7 +157,6 @@ export class MihomoGeneratorService {
                 if (UNSUPPORTED_TRANSPORTS.has(host.transport)) continue;
                 if (UNSUPPORTED_PROTOCOLS.has(host.protocol)) continue;
                 if (isStash && host.transport === 'xhttp') continue;
-                if (isStash && host.protocol === 'snell') continue;
 
                 const node = this.buildProxyNode(host, isExtendedClient);
                 if (!node) continue;
@@ -231,8 +230,8 @@ export class MihomoGeneratorService {
     private applyProtocolFields(node: ProxyNode, host: ResolvedProxyConfig): boolean {
         switch (host.protocol) {
             case 'snell':
-                // Mihomo accepts v5 and uses the v4-compatible wire protocol internally.
-                node.version = 5;
+                // Mihomo and current Stash both accept the inbound's Snell v5 version.
+                node.version = host.protocolOptions.version;
                 node.psk = host.protocolOptions.psk;
                 delete node.network;
                 if (host.protocolOptions.obfs === 'http') node['obfs-opts'] = { mode: 'http' };

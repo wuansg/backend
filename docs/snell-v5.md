@@ -35,11 +35,17 @@ clients do not need sing-box's `userkey` extension. No database migration is nee
 - Service version is 5. Mihomo subscriptions use **client version 5**; Mihomo
   accepts this setting and internally uses the v4-compatible wire protocol.
   sing-box subscriptions must use **client version 4**: its outbound rejects 5,
-  while its v5 inbound interoperates with v4 clients. Surge subscriptions retain
-  version 4 to avoid invoking Snell v5 QUIC Proxy Mode (unsupported upstream).
+  while its v5 inbound interoperates with v4 clients. Since Backend 3.14.1,
+  Surge subscriptions follow the inbound version (5) with `block-quic=on` to
+  prevent unsupported QUIC Proxy Mode. Do not override this with a global
+  `block-quic=always-allow`; applications must fall back to HTTPS/TCP for QUIC.
   Normal UDP over TCP works; the core does not implement v5 QUIC conversion.
+- Since Backend 3.14.1, Stash subscriptions include Snell with version 5, PSK and
+  optional HTTP obfuscation. Snell v4/v5 requires Stash iOS/tvOS 3.6+ or macOS 4.3+.
+  Both Stash and Surge output have regression coverage, but native Apple client
+  binaries are unavailable on this development host for live-client testing.
 - Generic Base64 links omit Snell because there is no portable Snell share-URI
-  format. Stash output also omits it. Existing other protocols remain available.
+  format. Existing other protocols remain available.
 
 ## Validation and release
 
@@ -81,4 +87,5 @@ choice after validating subscriptions, user traffic and forwarding conflicts.
 References: [sing-box inbound](https://sing-box.sagernet.org/configuration/inbound/snell/),
 [sing-box outbound](https://sing-box.sagernet.org/configuration/outbound/snell/),
 [Mihomo](https://wiki.metacubex.one/config/proxies/snell/),
+[Stash](https://stash.wiki/en/proxy-protocols/proxy-types#snell),
 [Surge](https://manual.nssurge.com/policies/snell.html).

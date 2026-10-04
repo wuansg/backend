@@ -75,8 +75,10 @@ export class SurgeGeneratorService {
                     host.address,
                     host.port.toString(),
                     `psk=${this.escapeFieldValue(host.protocolOptions.psk)}`,
-                    // version=5 makes Surge use unsupported QUIC proxy commands.
-                    'version=4',
+                    `version=${host.protocolOptions.version}`,
+                    // sing-box's v5 server does not implement Surge's QUIC Proxy Mode.
+                    // Block QUIC on this policy, while retaining ordinary UDP relay.
+                    'block-quic=on',
                     ...(host.protocolOptions.obfs === 'http' ? ['obfs=http'] : []),
                 ];
             case 'shadowsocks':

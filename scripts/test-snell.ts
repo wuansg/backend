@@ -196,10 +196,35 @@ async function main(): Promise<void> {
     assert.equal(mihomo.proxies[0].version, 5);
     assert.equal(mihomo.proxies[0].smux, undefined);
     assert.deepEqual(mihomo.proxies[0]['obfs-opts'], { mode: 'http' });
+    const stashGenerator = new MihomoGeneratorService(templates);
+    const stash = load(await stashGenerator.generateConfig([host], true)) as {
+        proxies: Array<Record<string, unknown>>;
+    };
+    assert.equal(stash.proxies.length, 1);
+    assert.equal(stash.proxies[0].type, 'snell');
+    assert.equal(stash.proxies[0].version, 5);
+    assert.equal(stash.proxies[0].psk, psk);
+    assert.equal(stash.proxies[0].udp, true);
+    assert.equal(stash.proxies[0].network, undefined);
+    assert.equal(stash.proxies[0].smux, undefined);
+    assert.deepEqual(stash.proxies[0]['obfs-opts'], { mode: 'http' });
+    const excludedStash = load(
+        await stashGenerator.generateConfig(
+            [{ ...host, metadata: { ...host.metadata, excludeFromSubscriptionTypes: ['STASH'] } }],
+            true,
+        ),
+    ) as { proxies: unknown[] };
+    assert.deepEqual(excludedStash.proxies, []);
     const surge = await new SurgeGeneratorService(templates).generateConfig([host]);
     assert.match(surge, /snell-test = snell, 127\.0\.0\.1, 54320,/);
-    assert.ok(surge.includes(`psk=${psk}, version=4, obfs=http`));
+    assert.ok(surge.includes(`psk=${psk}, version=5, block-quic=on, obfs=http`));
+    assert.ok(!surge.includes('version=4'));
     assert.ok(!surge.includes('udp-relay=false'));
+    const plainSurge = await new SurgeGeneratorService(templates).generateConfig([
+        { ...host, protocolOptions: { ...host.protocolOptions, obfs: 'none' } },
+    ]);
+    assert.ok(plainSurge.includes(`psk=${psk}, version=5, block-quic=on`));
+    assert.ok(!plainSurge.includes('obfs='));
     assert.deepEqual(new Base64GeneratorService().generateLinks([host], false), []);
     process.stdout.write('Snell configuration, credentials and subscription tests passed\n');
 }
