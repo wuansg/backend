@@ -9,9 +9,16 @@ import { IInlineKeyboard } from '@queue/notifications/telegram-bot-logger/interf
 import { TelegramApiError } from './telegram-api.error';
 
 type TelegramErrorBody = {
+    error_code?: number;
     description?: string;
     parameters?: { retry_after?: number };
 };
+
+export interface TelegramRichReceipt {
+    messageId?: number;
+    nativeTableCount: number;
+    returnedRichMessage: boolean;
+}
 
 @Injectable()
 export class TelegramApiService {
@@ -56,6 +63,45 @@ export class TelegramApiService {
         try {
             await this.http.post('/sendMessage', payload);
         } catch (error) {
+            throw this.toError(error);
+        }
+    }
+
+    async sendRichMarkdown(
+        chatId: string,
+        markdown: string,
+        opts?: { threadId?: number },
+    ): Promise<TelegramRichReceipt> {
+        const payload: Record<string, unknown> = {
+            chat_id: chatId,
+            rich_message: { markdown, skip_entity_detection: true },
+        };
+        if (opts?.threadId) payload.message_thread_id = opts.threadId;
+        try {
+            const { data } = await this.http.post('/sendRichMessage', payload);
+            if (data.ok !== true) {
+                const body = data as TelegramErrorBody;
+                const status = body.error_code ?? 502;
+                throw new TelegramApiError(
+                    'Rich message request rejected',
+                    body.parameters?.retry_after,
+                    status,
+                    status === 429 || status >= 500,
+                    this.isTargetUnavailable(body.description ?? ''),
+                );
+            }
+            // Return acceptance even if the receipt lacks formatting metadata: never
+            // trigger a duplicate send after Telegram has accepted a message.
+            const blocks = data.result?.rich_message?.blocks;
+            return {
+                messageId: data.result?.message_id,
+                returnedRichMessage: Array.isArray(blocks),
+                nativeTableCount: Array.isArray(blocks)
+                    ? blocks.filter((block: { type?: string }) => block.type === 'table').length
+                    : 0,
+            };
+        } catch (error) {
+            if (error instanceof TelegramApiError) throw error;
             throw this.toError(error);
         }
     }

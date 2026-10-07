@@ -1,4 +1,4 @@
-# Telegram 每日流量日报（Backend 3.17.3）
+# Telegram 每日流量日报（Backend 3.17.4）
 
 - Backend scheduler 配置启用，无节点测速、硬件测试或 Agent 升级。
 - 默认 UTC 00:10（北京时间 08:10），统计前一完整 UTC 自然日；启动时补发当日应发但未创建的昨日汇总，不生成此前所有历史日报。
@@ -37,7 +37,9 @@ docker exec remnawave node dist/daily-traffic-preview.js --send
 
 每条 outbox 记录新增 `parse_mode` 并与消息一起冻结。新增日报显式存为 `MarkdownV2`；增量迁移将已有记录默认设为 `HTML`，原消息、状态、发送次数和时间不变，未发送的旧日报按原格式重试。其他 Telegram 通知仍默认使用 HTML，不做全局切换。回退到 3.17.1 时先确认没有待发 Markdown 日报，避免旧 worker 用 HTML 发送 Markdown。
 
-## 等宽表格（3.17.3）
+## 等宽代码块（3.17.3，已由 3.17.4 更正）
+
+此版把名称放在列表、数字放在代码块，并非用户要求的 Markdown 表格；不再用于新日报。
 
 沿用 `sendMessage` + MarkdownV2 通道，将汇总和每项非空排行放入等宽代码块表格，不依赖客户端把 Markdown 管道语法渲染成表格，也不切换到新的 Rich Messages API。
 
@@ -46,6 +48,16 @@ docker exec remnawave node dist/daily-traffic-preview.js --send
 - 上传排行按上传量排序，表格列顺序为上传/下载/总量；其他排行为总量/上传/下载，数据和既有去重统计口径不变。
 - 数字靠右对齐，固定中文列名按双宽字符补齐；不省略字节数据，保留单位，通常表格宽度不超过 40 个等宽单元。异常长名称缩短时保留全部表格、警告、未拆分用量和采集状态。
 - 预览明确标记“表格版日报预览”，只读检查输出 `layout=tables` 和实际 `tableCount`。旧日报内容仍冻结，不重写、不补发。
+
+## 真正的 Markdown 表格（3.17.4）
+
+日报使用 [Telegram Rich Markdown](https://core.telegram.org/bots/api#rich-markdown-style) 的 `| 列名 |`、`| :--- | ---: |` 表格语法，发送到 `sendRichMessage` 的 `rich_message.markdown` 字段。它与老接口 `sendMessage` 的 MarkdownV2 不是同一种语法。标题使用 `#`/`##`，名称加粗使用 `**`；不使用 fenced code block，也不拆成序号列表与数据表。
+
+节点/Host 的名称和上传、下载、总量直接放在同一行；Host 的所属节点及共享数量放在同一表内。特殊字符、HTML、链接、公式和名称中的 `|` 都按 GFM 文本规则转义，避免注入新列或格式。
+
+`parse_mode` 的持久化约束新增 `RichMarkdown`，仅新增日报使用新通道；原 HTML、MarkdownV2 记录保持正文和格式不变，重试仍走原通道。其他通知继续默认 HTML，不做全局改动。回退到 3.17.3 或更早版本前需确认没有待发 RichMarkdown 日报。
+
+镜像内预览输出 `layout=markdown-tables` 和源码表格数，发送后返回 Telegram 的 `nativeTableCount` 和 `returnedRichMessage` 回执。发送成功但缺少格式回执时不自动重发，以免重复；不能把 HTTP 成功本身当作原生表格渲染的证明。
 
 ## 可靠性与排障
 

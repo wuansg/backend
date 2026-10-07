@@ -9,9 +9,8 @@ import { DailyTrafficReportService } from '@common/daily-traffic/daily-traffic-r
 import { DailyTrafficCollector } from '@common/daily-traffic/daily-traffic.collector';
 import {
     DailyTrafficSummary,
-    escapeTelegramMarkdownV2,
-    telegramMarkdownCode,
-    telegramMarkdownPre,
+    escapeRichMarkdown,
+    countDailyTrafficTables,
     dueTrafficReportDate,
     renderDailyTrafficReport,
     trafficBytes,
@@ -37,39 +36,61 @@ const summary: DailyTrafficSummary = {
     userRecordsDisabled: false,
 };
 
-// Validate the MarkdownV2 subset generated here, without calling real Telegram.
+// Check genuine pipe tables and literal names, not an aligned preformatted substitute.
 function assertSafeMarkdown(message: string) {
-    const reserved = new Set('_*[]()~`>#+-=|{}.!\\');
+    assert.ok(!message.includes('```'), 'Tables must not be enclosed in code fences');
+    assert.ok(!/^\d+\\?\. /m.test(message), 'Names must stay in the same table row as usage');
     let bold = false;
-    let code: 'inline' | 'pre' | null = null;
     for (let i = 0; i < message.length; i++) {
         const character = message[i];
         if (character === '\\') {
             assert.ok(i + 1 < message.length, 'No dangling escape');
-            if (code) assert.ok(['\\', '`'].includes(message[i + 1]));
             i++;
-        } else if (code !== 'inline' && message.startsWith('```', i)) {
-            assert.equal(bold, false, 'Preformatted tables cannot be nested in bold');
-            code = code === 'pre' ? null : 'pre';
-            i += 2;
-        } else if (character === '`') {
-            assert.equal(bold, false, 'Code cannot be nested in bold');
-            assert.notEqual(code, 'pre', 'Backticks inside a table must be escaped');
-            code = code === 'inline' ? null : 'inline';
-        } else if (!code && character === '*') {
+        } else if (message.startsWith('**', i)) {
             bold = !bold;
-        } else if (!code && character === '>' && (i === 0 || message[i - 1] === '\n')) {
-            assert.equal(bold, false, 'Blockquote must start outside bold');
-        } else if (!code) {
-            assert.equal(reserved.has(character), false, `Unescaped Markdown character at ${i}`);
+            i++;
+        } else if (bold && character === '|') {
+            assert.fail('Literal table pipes in names must be escaped');
+        } else if (['`', '<', '*'].includes(character)) {
+            assert.fail('Formatting injection in name');
         }
     }
     assert.equal(bold, false, 'Balanced bold');
-    assert.equal(code, null, 'Balanced inline code and table fences');
+    const tables = reportTables(message);
+    assert.equal(tables.length, countDailyTrafficTables(message));
+    for (const table of tables) {
+        assert.ok(table.length >= 3, 'Header, delimiter and at least one data row');
+        assert.ok(
+            table.every((row) => row.length === table[0].length),
+            'Names must not inject extra cells',
+        );
+        assert.ok(
+            table[1].every((cell) => /^:?---:?$/.test(cell)),
+            'GFM alignment row',
+        );
+    }
+}
+
+function markdownCells(line: string): string[] {
+    const cells: string[] = [];
+    let cell = '';
+    for (let i = 0; i < line.length; i++) {
+        if (line[i] === '\\') {
+            cell += line[i] + (line[++i] ?? '');
+        } else if (line[i] === '|') {
+            cells.push(cell.trim());
+            cell = '';
+        } else cell += line[i];
+    }
+    assert.equal(cell.trim(), '', 'Trailing table border');
+    return cells.slice(1);
 }
 
 const reportTables = (message: string) =>
-    Array.from(message.matchAll(/^```\n([\s\S]*?)\n```$/gm), (match) => match[1]);
+    message
+        .split('\n\n')
+        .filter((block) => block.startsWith('| '))
+        .map((block) => block.split('\n').map(markdownCells));
 
 async function unitTests() {
     assert.equal(dueTrafficReportDate(new Date('2026-10-07T00:09:59Z')), null);
@@ -122,29 +143,39 @@ async function unitTests() {
         nodes: { ...empty, total: 100n },
         topNodes: [{ ...empty, name: '<b>&bad\nname', uuid: 'fixture' }],
     });
-    assert.ok(rendered.includes('<b\\>&bad name'));
+    assert.ok(rendered.includes('\\<b\\>\\&bad name'));
     assert.ok(!rendered.includes('&lt;'), 'Markdown must not use HTML entities');
-    assert.ok(rendered.includes('未拆分 `100 B`'));
+    assert.ok(rendered.includes('未拆分：**100 B**'));
     assert.ok(rendered.includes('暂无用量'));
-    assert.ok(rendered.includes('北京时间：`10-06 08:00 → 10-07 08:00`'));
+    assert.ok(rendered.includes('北京时间：10-06 08:00 → 10-07 08:00'));
     assertSafeMarkdown(rendered);
     const summaryTable = reportTables(rendered)[0];
-    assert.match(summaryTable, /^类型\s+总量\s+上传\s+下载/m);
-    assert.match(summaryTable, /^节点\s+100 B\s+0 B\s+0 B$/m);
-    for (const label of ['用户', '节点', 'Host', '转发'])
-        assert.ok(summaryTable.includes(label), `Summary table retains ${label}`);
-    const reserved = '_*[]()~`>#+-=|{}.!\\';
-    assert.equal(
-        escapeTelegramMarkdownV2(reserved),
-        Array.from(reserved, (c) => '\\' + c).join(''),
+    assert.deepEqual(summaryTable[0], ['类型', '总量', '上传', '下载']);
+    assert.deepEqual(
+        summaryTable.find((row) => row[0] === '节点'),
+        ['节点', '100 B', '0 B', '0 B'],
     );
-    assert.equal(escapeTelegramMarkdownV2('中文 & < / 🇭🇰'), '中文 & < / 🇭🇰');
-    assert.equal(telegramMarkdownCode('a`b\\c_-1.23'), '`a\\`b\\\\c_-1.23`');
-    assertSafeMarkdown(telegramMarkdownCode('a`b\\c_-1.23'));
-    assert.equal(telegramMarkdownPre('a`b\\c_-1.23\n第二行'), '```\na\\`b\\\\c_-1.23\n第二行\n```');
-    assertSafeMarkdown(telegramMarkdownPre('a`b\\c_-1.23\n第二行'));
-    await assert.rejects(async () => assertSafeMarkdown('```\nunclosed'), /Balanced/);
-    for (const name of [reserved, '*'.repeat(400), '\\'.repeat(400), '\n\t ', '🇭🇰'.repeat(400)]) {
+    for (const label of ['用户', '节点', 'Host', '转发'])
+        assert.ok(
+            summaryTable.some((row) => row[0] === label),
+            `Summary table retains ${label}`,
+        );
+    const reserved = Array.from({ length: 94 }, (_value, i) => String.fromCharCode(33 + i))
+        .filter((character) => !/[a-z0-9]/i.test(character))
+        .join('');
+    assert.equal(escapeRichMarkdown(reserved), Array.from(reserved, (c) => '\\' + c).join(''));
+    assert.equal(escapeRichMarkdown('中文 🇭🇰'), '中文 🇭🇰');
+    for (const name of [
+        reserved,
+        '*'.repeat(400),
+        '\\'.repeat(400),
+        '\n\t ',
+        '🇭🇰'.repeat(400),
+        'x\\| y|z',
+        '<tg-math>x</tg-math>',
+        '![x](https://invalid/x)',
+        '$x$',
+    ]) {
         const escaped = renderDailyTrafficReport(new Date('2026-10-06T00:00:00Z'), {
             ...summary,
             topNodes: [{ ...empty, uuid: 'fixture', name }],
@@ -169,18 +200,18 @@ async function unitTests() {
             { upload: 90n, download: 10n, total: 100n, name: 'upload-winner', uuid: 'node' },
         ],
     });
-    assert.ok(hostRendered.includes('Host <&\\>'));
-    assert.ok(hostRendered.includes('Node <&\\>（共享×2）'));
+    assert.ok(hostRendered.includes('Host \\<\\&\\>'));
+    assert.ok(hostRendered.includes('Node \\<\\&\\>（共享×2）'));
     assert.ok(
-        hostRendered.includes('1\\. *upload\\-winner*'),
-        'Ranking legend keeps the row number and escaped name',
+        hostRendered.includes('| **upload\\-winner** | 90 B | 10 B | 100 B |'),
+        'Name and usage are in one actual table row; upload ranking puts upload first',
     );
     const hostTables = reportTables(hostRendered);
     assert.equal(hostTables.length, 3, 'Summary, Host and upload ranking tables');
-    assert.match(hostTables[1], /^#\s+总量\s+上传\s+下载/m);
-    assert.match(hostTables[1], /^1\s+100 B\s+10 B\s+90 B$/m);
-    assert.match(hostTables[2], /^#\s+上传\s+下载\s+总量/m);
-    assert.match(hostTables[2], /^1\s+90 B\s+10 B\s+100 B$/m);
+    assert.deepEqual(hostTables[1][0], ['Host', '节点', '总量', '上传', '下载']);
+    assert.deepEqual(hostTables[1][2].slice(2), ['100 B', '10 B', '90 B']);
+    assert.deepEqual(hostTables[2][0], ['节点', '上传', '下载', '总量']);
+    assert.deepEqual(hostTables[2][2].slice(1), ['90 B', '10 B', '100 B']);
     assertSafeMarkdown(hostRendered);
     const worstRows = Array.from({ length: 5 }, () => ({
         name: reserved.repeat(40),
@@ -208,26 +239,17 @@ async function unitTests() {
     assert.ok(worst.includes('🔀 转发节点排行'), 'Length budgeting must retain every section');
     assertSafeMarkdown(worst);
     assert.equal(reportTables(worst).length, 5, 'All usage and ranking sections use tables');
-    const width = (text: string) =>
-        Array.from(text).reduce((sum, c) => sum + (/[\u4e00-\u9fff]/.test(c) ? 2 : 1), 0);
-    for (const table of reportTables(worst)) {
-        const lines = table.split('\n');
-        assert.ok(
-            lines.every((line) => width(line) === width(lines[0])),
-            'Table columns align without names or emojis',
-        );
-        assert.ok(width(lines[0]) <= 40, 'Keep table width compact for phones');
-    }
     const nearUnitBoundary = renderDailyTrafficReport(new Date('2026-10-06T00:00:00Z'), {
         ...summary,
         nodes: { upload: 1_048_575n, download: 1_048_575n, total: 1_048_575n },
     });
-    assert.ok(
+    assert.deepEqual(
         reportTables(nearUnitBoundary)[0]
-            .split('\n')
-            .every((line) => width(line) <= 40),
+            .find((row) => row[0] === '节点')
+            ?.slice(1),
+        ['1024.00 KiB', '1024.00 KiB', '1024.00 KiB'],
     );
-    const previewPrefix = '*🆕 表格版日报预览*\n\n';
+    const previewPrefix = '**🆕 Markdown 表格日报预览**\n\n';
     const bounded = renderDailyTrafficReport(
         new Date('2026-10-06T00:00:00Z'),
         {
@@ -253,10 +275,22 @@ async function unitTests() {
         }),
     );
     const payloads: Array<Record<string, any>> = [];
+    const paths: string[] = [];
     (api as any).http = {
         post: async (path: string, payload: Record<string, any>) => {
-            assert.equal(path, '/sendMessage');
+            paths.push(path);
             payloads.push(payload);
+            return {
+                data: {
+                    ok: true,
+                    result: {
+                        message_id: 123,
+                        rich_message: {
+                            blocks: reportTables(hostRendered).map(() => ({ type: 'table' })),
+                        },
+                    },
+                },
+            };
         },
     };
     await api.sendMessage('fixture', '<b>Original notification</b>');
@@ -266,6 +300,40 @@ async function unitTests() {
     assert.equal(payloads[1].parse_mode, 'MarkdownV2');
     assert.equal(payloads[1].text, hostRendered);
     assert.equal(payloads[1].message_thread_id, 45);
+    const receipt = await api.sendRichMarkdown('fixture', hostRendered, { threadId: 45 });
+    assert.deepEqual(paths, ['/sendMessage', '/sendMessage', '/sendRichMessage']);
+    assert.deepEqual(payloads[2].rich_message, {
+        markdown: hostRendered,
+        skip_entity_detection: true,
+    });
+    assert.equal(payloads[2].message_thread_id, 45);
+    assert.equal(
+        payloads[2].parse_mode,
+        undefined,
+        'Rich Markdown is not a sendMessage parse_mode',
+    );
+    assert.deepEqual(receipt, { messageId: 123, nativeTableCount: 3, returnedRichMessage: true });
+    (api as any).http.post = async () => ({ data: { ok: true, result: { message_id: 124 } } });
+    assert.deepEqual(
+        await api.sendRichMarkdown('fixture', hostRendered),
+        {
+            messageId: 124,
+            nativeTableCount: 0,
+            returnedRichMessage: false,
+        },
+        'Missing formatting metadata after acceptance must not cause a duplicate retry',
+    );
+    (api as any).http.post = async () => ({
+        data: { ok: false, error_code: 429, parameters: { retry_after: 30 } },
+    });
+    await assert.rejects(
+        api.sendRichMarkdown('fixture', hostRendered),
+        (error: unknown) =>
+            error instanceof TelegramApiError &&
+            error.statusCode === 429 &&
+            error.retryAfter === 30 &&
+            error.retryable,
+    );
     let capturedOptions: any;
     const queue = new TelegramBotLoggerQueueService({
         add: async (_name: string, data: unknown, options: unknown) => {
@@ -283,8 +351,14 @@ async function unitTests() {
     const processor = new TelegramBotLoggerQueueProcessor(
         {
             sendMessage: async (_chat: string, _message: string, options: any) => {
+                assert.notEqual(reportMode, 'RichMarkdown');
                 assert.equal(options.threadId, 45);
                 assert.equal(options.parseMode, reportMode);
+                sent++;
+            },
+            sendRichMarkdown: async (_chat: string, _message: string, options: any) => {
+                assert.equal(reportMode, 'RichMarkdown');
+                assert.equal(options.threadId, 45);
                 sent++;
             },
         } as any,
@@ -317,9 +391,12 @@ async function unitTests() {
     reportMode = 'MarkdownV2';
     await processor.process(job);
     assert.equal(sent, 2, "Worker must use each frozen report's stored format");
+    reportMode = 'RichMarkdown';
+    await processor.process(job);
+    assert.equal(sent, 3, 'New reports use the native Rich Markdown endpoint');
     reportMode = 'invalid';
     await assert.rejects(processor.process(job), /Unsupported report format/);
-    assert.equal(sent, 2, 'Invalid formats must not reach the Telegram API');
+    assert.equal(sent, 3, 'Invalid formats must not reach the Telegram API');
     await assert.rejects(processor.process({ ...job, data: { reportDate: 'bad' } }), /Invalid/);
     const offlineProcessor = new TelegramBotLoggerQueueProcessor(
         { healthcheck: async () => false } as any,
@@ -333,7 +410,7 @@ async function unitTests() {
         'Daily retries must recover a startup Telegram outage without a restart',
     );
     console.log(
-        'Daily traffic unit tests passed (UTC, config, MarkdownV2, legacy HTML, BigInt, length, queue, circuit).',
+        'Daily traffic unit tests passed (actual Markdown tables, native receipt, legacy HTML/MarkdownV2, UTC, BigInt, length, queue, circuit).',
     );
 }
 
@@ -365,6 +442,24 @@ async function databaseTests(testUrl: string) {
         );
         for (const statement of markdownMigration.split(';').filter((value) => value.trim()))
             await db.$executeRawUnsafe(statement);
+        await db.$executeRaw`INSERT INTO telegram_daily_traffic_reports
+            (report_date,target,chat_id,message,parse_mode,status)
+            VALUES ('2026-09-29','users','fixture','*Frozen MarkdownV2*','MarkdownV2','PENDING')`;
+        const richMigration = readFileSync(
+            'prisma/migrations/20261007000300_telegram_daily_traffic_rich_markdown/migration.sql',
+            'utf8',
+        );
+        for (const statement of richMigration.split(';').filter((value) => value.trim()))
+            await db.$executeRawUnsafe(statement);
+        const legacyMarkdownDate = new Date('2026-09-29T00:00:00Z');
+        const legacyMarkdown = await db.telegramDailyTrafficReport.findUniqueOrThrow({
+            where: { reportDate: legacyMarkdownDate },
+        });
+        assert.equal(legacyMarkdown.parseMode, 'MarkdownV2');
+        assert.equal(legacyMarkdown.message, '*Frozen MarkdownV2*');
+        assert.equal(legacyMarkdown.status, 'PENDING');
+        assert.equal(legacyMarkdown.attempts, 0);
+        await db.telegramDailyTrafficReport.delete({ where: { reportDate: legacyMarkdownDate } });
         const legacyDate = new Date('2026-09-30T00:00:00Z');
         const legacy = await db.telegramDailyTrafficReport.findUniqueOrThrow({
             where: { reportDate: legacyDate },
@@ -476,7 +571,7 @@ async function databaseTests(testUrl: string) {
         assert.equal(
             (await db.telegramDailyTrafficReport.findUniqueOrThrow({ where: { reportDate: date } }))
                 .parseMode,
-            'MarkdownV2',
+            'RichMarkdown',
         );
         let calls = 0;
         let release!: () => void;
@@ -490,7 +585,7 @@ async function databaseTests(testUrl: string) {
         const first = reports.deliver(
             date,
             async (report) => {
-                assert.equal(report.parseMode, 'MarkdownV2');
+                assert.equal(report.parseMode, 'RichMarkdown');
                 assertSafeMarkdown(report.message);
                 calls++;
                 started();

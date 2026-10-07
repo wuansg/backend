@@ -66,7 +66,7 @@ export class TelegramBotLoggerQueueProcessor extends WorkerHost implements Queue
                 new Date(`${job.data.reportDate}T00:00:00.000Z`),
                 async (report) => {
                     if (!this.telegramApiService) throw new Error('Telegram unavailable');
-                    if (report.parseMode !== 'HTML' && report.parseMode !== 'MarkdownV2')
+                    if (!['HTML', 'MarkdownV2', 'RichMarkdown'].includes(report.parseMode))
                         throw new TelegramApiError(
                             'Unsupported report format',
                             undefined,
@@ -81,10 +81,25 @@ export class TelegramBotLoggerQueueProcessor extends WorkerHost implements Queue
                         throw new Error('Telegram target circuit is open');
                     }
                     try {
-                        await this.telegramApiService.sendMessage(report.chatId, report.message, {
-                            parseMode: report.parseMode,
-                            threadId: report.threadId ? parseInt(report.threadId, 10) : undefined,
-                        });
+                        const threadId = report.threadId
+                            ? parseInt(report.threadId, 10)
+                            : undefined;
+                        if (report.parseMode === 'RichMarkdown') {
+                            await this.telegramApiService.sendRichMarkdown(
+                                report.chatId,
+                                report.message,
+                                { threadId },
+                            );
+                        } else {
+                            await this.telegramApiService.sendMessage(
+                                report.chatId,
+                                report.message,
+                                {
+                                    parseMode: report.parseMode as 'HTML' | 'MarkdownV2',
+                                    threadId,
+                                },
+                            );
+                        }
                     } catch (error) {
                         if (error instanceof TelegramApiError) {
                             await this.telegramTargetHealthService

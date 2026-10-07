@@ -7,13 +7,17 @@ import { DailyTrafficCollector } from '@common/daily-traffic/daily-traffic.colle
 import {
     DAILY_TRAFFIC_LAYOUT,
     DAILY_TRAFFIC_PARSE_MODE,
+    countDailyTrafficTables,
     dueTrafficReportDate,
     renderDailyTrafficReport,
 } from '@common/daily-traffic/daily-traffic.util';
 import { PrismaService } from '@common/database/prisma.service';
 
 import { TelegramApiError } from '@integration-modules/notifications/telegram-bot/telegram-api.error';
-import { TelegramApiService } from '@integration-modules/notifications/telegram-bot/telegram-api.service';
+import {
+    TelegramApiService,
+    TelegramRichReceipt,
+} from '@integration-modules/notifications/telegram-bot/telegram-api.service';
 
 async function main() {
     const mode = process.argv[2] ?? '--check';
@@ -32,9 +36,10 @@ async function main() {
     try {
         const date = dueTrafficReportDate(new Date(), '00:00')!;
         const summary = await new DailyTrafficCollector(db, typed).collect(date);
-        const prefix = '*🆕 表格版日报预览*\n\n';
+        const prefix = '**🆕 Markdown 表格日报预览**\n\n';
         const message = prefix + renderDailyTrafficReport(date, summary, 4096 - prefix.length);
         if (message.length > 4096) throw new Error('Preview exceeds Telegram message limit');
+        let receipt: TelegramRichReceipt | undefined;
         if (mode === '--send') {
             if (!typed.get('IS_TELEGRAM_NOTIFICATIONS_ENABLED'))
                 throw new Error('Telegram disabled');
@@ -48,8 +53,7 @@ async function main() {
             const telegram = new TelegramApiService(new ConfigService(parsed.data));
             await telegram.validateTarget(chatId);
             // Explicit one-off send only: never retry an ambiguous send response automatically.
-            await telegram.sendMessage(chatId, message, {
-                parseMode: DAILY_TRAFFIC_PARSE_MODE,
+            receipt = await telegram.sendRichMarkdown(chatId, message, {
                 threadId: threadId ? Number(threadId) : undefined,
             });
         }
@@ -62,7 +66,8 @@ async function main() {
                     messageLength: message.length,
                     parseMode: DAILY_TRAFFIC_PARSE_MODE,
                     layout: DAILY_TRAFFIC_LAYOUT,
-                    tableCount: (message.match(/^```$/gm)?.length ?? 0) / 2,
+                    tableCount: countDailyTrafficTables(message),
+                    receipt,
                     topHosts: summary.topHosts,
                     totals: {
                         users: summary.users,

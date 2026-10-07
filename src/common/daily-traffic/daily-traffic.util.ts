@@ -48,18 +48,16 @@ export function trafficBytes(bytes: bigint): string {
     return `${rounded / 100n}.${String(rounded % 100n).padStart(2, '0')} ${units[unit]}`;
 }
 
-// MarkdownV2 has separate escaping rules for ordinary text and inline code.
-export const escapeTelegramMarkdownV2 = (text: string) =>
-    text.replace(/[\\_*\[\]()~`>#+\-=|{}.!]/g, '\\$&');
+// Rich Markdown follows GFM, not sendMessage's MarkdownV2 dialect.
+// Escape punctuation in names, including table pipes, HTML, links and formulas.
+export const escapeRichMarkdown = (text: string) =>
+    text.replace(/[\\!"#$%&'()*+,\-./:;<=>?@\[\]^_`{|}~]/g, '\\$&');
 
-const escapeTelegramCode = (text: string) => text.replace(/[\\`]/g, '\\$&');
+export const DAILY_TRAFFIC_PARSE_MODE = 'RichMarkdown' as const;
+export const DAILY_TRAFFIC_LAYOUT = 'markdown-tables' as const;
 
-export const telegramMarkdownCode = (text: string) => '`' + escapeTelegramCode(text) + '`';
-
-export const telegramMarkdownPre = (text: string) => '```\n' + escapeTelegramCode(text) + '\n```';
-
-export const DAILY_TRAFFIC_PARSE_MODE = 'MarkdownV2' as const;
-export const DAILY_TRAFFIC_LAYOUT = 'tables' as const;
+export const countDailyTrafficTables = (message: string) =>
+    message.split('\n').filter((line) => /^\| :--- \|(?: :?---:? \|)+$/.test(line)).length;
 
 const escapeName = (name: string, maxLength: number) => {
     const characters = Array.from(name.replace(/[\u0000-\u001f\u007f]/g, ' ').trim() || '未命名');
@@ -67,49 +65,13 @@ const escapeName = (name: string, maxLength: number) => {
         characters.length > maxLength
             ? `${characters.slice(0, maxLength - 1).join('')}…`
             : characters.join('');
-    return escapeTelegramMarkdownV2(clipped);
+    return escapeRichMarkdown(clipped);
 };
 
-const usageCode = (bytes: bigint) => telegramMarkdownCode(trafficBytes(bytes));
-
-// Table cells contain only fixed Chinese labels or ASCII numbers/units, never names/emojis.
-const cellWidth = (text: string) =>
-    Array.from(text).reduce(
-        (width, character) => width + (/[\u4e00-\u9fff]/.test(character) ? 2 : 1),
-        0,
-    );
-
-const usageTable = (
-    rows: Array<{ label: string; usage: DailyTrafficUsage }>,
-    labelTitle: string,
-    direction: 'total' | 'upload' = 'total',
-) => {
-    const fields: Array<keyof DailyTrafficUsage> =
-        direction === 'upload' ? ['upload', 'download', 'total'] : ['total', 'upload', 'download'];
-    const titles = { total: '总量', upload: '上传', download: '下载' };
-    const header = [labelTitle, ...fields.map((field) => titles[field])];
-    const values = rows.map(({ label, usage }) => [
-        label,
-        ...fields.map((field) => trafficBytes(usage[field])),
-    ]);
-    const widths = header.map((title, column) =>
-        Math.max(cellWidth(title), ...values.map((row) => cellWidth(row[column]))),
-    );
-    const line = (row: string[]) =>
-        row
-            .map((cell, column) => {
-                const padding = ' '.repeat(widths[column] - cellWidth(cell));
-                return column === 0 ? cell + padding : padding + cell;
-            })
-            .join(' ');
-    return telegramMarkdownPre(
-        [
-            line(header),
-            '-'.repeat(widths.reduce((total, width) => total + width, widths.length - 1)),
-            ...values.map(line),
-        ].join('\n'),
-    );
-};
+const markdownTable = (headers: string[], rows: string[][], textColumns = 1) =>
+    [headers, headers.map((_header, column) => (column < textColumns ? ':---' : '---:')), ...rows]
+        .map((row) => `| ${row.join(' | ')} |`)
+        .join('\n');
 
 export function renderDailyTrafficReport(
     date: Date,
@@ -136,39 +98,66 @@ export function renderDailyTrafficReport(
             title: string,
             rows: Array<DailyTrafficNode | DailyTrafficHost>,
             direction: 'total' | 'upload' = 'total',
-        ) => [
-            `*${title}*`,
-            ...(rows.length
-                ? [
-                      ...rows.slice(0, 5).map((row, i) => {
-                          const host = 'aliasCount' in row ? row : undefined;
-                          const context = host
-                              ? ` / ${escapeName(host.nodeName, Math.min(maxNameLength, 14))}${host.aliasCount > 1 ? `（共享×${host.aliasCount}）` : ''}`
-                              : '';
-                          return `${i + 1}\\. *${escapeName(row.name, maxNameLength)}*${context}`;
-                      }),
-                      usageTable(
-                          rows.slice(0, 5).map((row, i) => ({ label: String(i + 1), usage: row })),
-                          '#',
-                          direction,
-                      ),
-                  ]
-                : ['暂无用量']),
-        ];
+        ) => {
+            const isHost = rows.length > 0 && 'aliasCount' in rows[0];
+            const fields: Array<keyof DailyTrafficUsage> =
+                direction === 'upload'
+                    ? ['upload', 'download', 'total']
+                    : ['total', 'upload', 'download'];
+            const titles = { total: '总量', upload: '上传', download: '下载' };
+            return [
+                `## ${title}`,
+                '',
+                rows.length
+                    ? markdownTable(
+                          [
+                              ...(isHost ? ['Host', '节点'] : ['节点']),
+                              ...fields.map((field) => titles[field]),
+                          ],
+                          rows.slice(0, 5).map((row) => {
+                              const host = 'aliasCount' in row ? row : undefined;
+                              return [
+                                  `**${escapeName(row.name, maxNameLength)}**`,
+                                  ...(isHost
+                                      ? [
+                                            host
+                                                ? `${escapeName(host.nodeName, maxNameLength)}${host.aliasCount > 1 ? `（共享×${host.aliasCount}）` : ''}`
+                                                : '—',
+                                        ]
+                                      : []),
+                                  ...fields.map((field) => trafficBytes(row[field])),
+                              ];
+                          }),
+                          isHost ? 2 : 1,
+                      )
+                    : '暂无用量',
+            ];
+        };
         const health = summary.health;
         return [
-            `*📊 流量日报* · ${telegramMarkdownCode(dateText)}`,
+            `# 📊 流量日报 · ${dateText}`,
+            '',
             '统计：UTC 00:00–24:00',
-            `北京时间：${telegramMarkdownCode(`${localStart} → ${localEnd}`)}`,
+            `北京时间：${localStart} → ${localEnd}`,
             '↑ 上传  ｜  ↓ 下载',
             '',
-            '*🧾 流量汇总*',
-            usageTable(summaryRows, '类型'),
+            '## 🧾 流量汇总',
+            '',
+            markdownTable(
+                ['类型', '总量', '上传', '下载'],
+                summaryRows.map(({ label, usage }) => [
+                    label,
+                    trafficBytes(usage.total),
+                    trafficBytes(usage.upload),
+                    trafficBytes(usage.download),
+                ]),
+            ),
+            '',
             ...summaryRows.flatMap(({ label, usage }) => {
                 const unknown = usage.total - usage.upload - usage.download;
-                return unknown > 0n ? [`└ ${label}未拆分 ${usageCode(unknown)}`] : [];
+                return unknown > 0n ? [`${label}未拆分：**${trafficBytes(unknown)}**`] : [];
             }),
-            `活跃用户：${telegramMarkdownCode(String(summary.users.activeUsers))}`,
+            `活跃用户：**${summary.users.activeUsers}**`,
             ...(summary.userRecordsDisabled ? ['⚠️ 用户记录已停用，统计可能不完整'] : []),
             '',
             ...ranking(
@@ -186,8 +175,9 @@ export function renderDailyTrafficReport(
                 ? ['', ...ranking('🔀 转发节点排行', summary.topForwardingNodes.slice(0, 3))]
                 : []),
             '',
-            '*🩺 采集状态（生成时）*',
-            `在线：${telegramMarkdownCode(`${health.connected}/${health.enabled}`)}  ｜  积压：${telegramMarkdownCode(String(health.pending))}`,
+            '## 🩺 采集状态（生成时）',
+            '',
+            `在线：**${health.connected}/${health.enabled}**  ｜  积压：**${health.pending}**`,
             ...(health.errors || health.stale || health.pending
                 ? [`⚠️ 异常：${health.errors}；15 分钟未入库：${health.stale}，统计可能不完整`]
                 : ['✅ 流量采集正常']),
@@ -197,7 +187,7 @@ export function renderDailyTrafficReport(
         ].join('\n');
     };
     // Keep every section and balanced Markdown; shorten names only for unusually long reports.
-    for (const maxNameLength of [35, 24, 16]) {
+    for (const maxNameLength of [64, 48, 35, 24, 16]) {
         const message = render(maxNameLength);
         if (message.length <= maxCharacters || maxNameLength === 16) return message;
     }
