@@ -9,7 +9,11 @@ import { PrismaService } from '@common/database/prisma.service';
 import { TelegramApiError } from '@integration-modules/notifications/telegram-bot/telegram-api.error';
 
 import { DailyTrafficCollector } from './daily-traffic.collector';
-import { dueTrafficReportDate, renderDailyTrafficReport } from './daily-traffic.util';
+import {
+    DAILY_TRAFFIC_PARSE_MODE,
+    dueTrafficReportDate,
+    renderDailyTrafficReport,
+} from './daily-traffic.util';
 
 const LEASE_MS = 120_000;
 const MAX_AGE_MS = 7 * 86_400_000;
@@ -51,7 +55,17 @@ export class DailyTrafficReportService {
             throw new Error('Daily traffic report exceeds Telegram message limit');
         await this.db.telegramDailyTrafficReport.createMany({
             skipDuplicates: true,
-            data: [{ reportDate: date, target, chatId, threadId, message, nextAttemptAt: now }],
+            data: [
+                {
+                    reportDate: date,
+                    target,
+                    chatId,
+                    threadId,
+                    message,
+                    parseMode: DAILY_TRAFFIC_PARSE_MODE,
+                    nextAttemptAt: now,
+                },
+            ],
         });
     }
 

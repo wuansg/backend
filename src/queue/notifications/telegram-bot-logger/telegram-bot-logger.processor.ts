@@ -66,6 +66,13 @@ export class TelegramBotLoggerQueueProcessor extends WorkerHost implements Queue
                 new Date(`${job.data.reportDate}T00:00:00.000Z`),
                 async (report) => {
                     if (!this.telegramApiService) throw new Error('Telegram unavailable');
+                    if (report.parseMode !== 'HTML' && report.parseMode !== 'MarkdownV2')
+                        throw new TelegramApiError(
+                            'Unsupported report format',
+                            undefined,
+                            400,
+                            false,
+                        );
                     const target = report.target as TTelegramTarget;
                     if (
                         this.telegramTargetHealthService &&
@@ -75,6 +82,7 @@ export class TelegramBotLoggerQueueProcessor extends WorkerHost implements Queue
                     }
                     try {
                         await this.telegramApiService.sendMessage(report.chatId, report.message, {
+                            parseMode: report.parseMode,
                             threadId: report.threadId ? parseInt(report.threadId, 10) : undefined,
                         });
                     } catch (error) {

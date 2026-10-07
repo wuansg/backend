@@ -5,6 +5,7 @@ import { configSchema } from '@common/config/app-config/config.schema';
 import { TypedConfigService } from '@common/config/app-config/typed-config.service';
 import { DailyTrafficCollector } from '@common/daily-traffic/daily-traffic.collector';
 import {
+    DAILY_TRAFFIC_PARSE_MODE,
     dueTrafficReportDate,
     renderDailyTrafficReport,
 } from '@common/daily-traffic/daily-traffic.util';
@@ -30,7 +31,7 @@ async function main() {
     try {
         const date = dueTrafficReportDate(new Date(), '00:00')!;
         const summary = await new DailyTrafficCollector(db, typed).collect(date);
-        const prefix = '<b>🆕 新版日报预览</b>\n\n';
+        const prefix = '*🆕 Markdown 日报预览*\n\n';
         const message = prefix + renderDailyTrafficReport(date, summary, 4096 - prefix.length);
         if (message.length > 4096) throw new Error('Preview exceeds Telegram message limit');
         if (mode === '--send') {
@@ -47,6 +48,7 @@ async function main() {
             await telegram.validateTarget(chatId);
             // Explicit one-off send only: never retry an ambiguous send response automatically.
             await telegram.sendMessage(chatId, message, {
+                parseMode: DAILY_TRAFFIC_PARSE_MODE,
                 threadId: threadId ? Number(threadId) : undefined,
             });
         }
@@ -57,6 +59,7 @@ async function main() {
                     version: typed.get('__RW_METADATA_VERSION'),
                     sent: mode === '--send',
                     messageLength: message.length,
+                    parseMode: DAILY_TRAFFIC_PARSE_MODE,
                     topHosts: summary.topHosts,
                     totals: {
                         users: summary.users,

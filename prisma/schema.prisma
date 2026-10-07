@@ -291,6 +291,7 @@ model TelegramDailyTrafficReport {
   chatId        String    @map("chat_id")
   threadId      String?   @map("thread_id")
   message       String
+  parseMode     String    @default("HTML") @map("parse_mode") @db.VarChar(16)
   status        String    @default("PENDING") @db.VarChar(16)
   attempts      Int       @default(0)
   nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)

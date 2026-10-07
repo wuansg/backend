@@ -11,6 +11,7 @@ on:
       - 'src/common/config/app-config/config.schema.ts'
       - 'src/scheduler/tasks/daily-traffic/**'
       - 'src/queue/notifications/telegram-bot-logger/**'
+      - 'src/integration-modules/notifications/telegram-bot/telegram-api.service.ts'
       - 'prisma/migrations/*telegram_daily_traffic*/**'
       - 'scripts/test-daily-traffic.ts'
       - '.github/workflows/daily-traffic.yml'

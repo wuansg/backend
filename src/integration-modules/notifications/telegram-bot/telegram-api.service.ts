@@ -35,12 +35,16 @@ export class TelegramApiService {
     async sendMessage(
         chatId: string,
         text: string,
-        opts?: { threadId?: number; keyboard?: IInlineKeyboard[] },
+        opts?: {
+            threadId?: number;
+            keyboard?: IInlineKeyboard[];
+            parseMode?: 'HTML' | 'MarkdownV2';
+        },
     ): Promise<void> {
         const payload: Record<string, unknown> = {
             chat_id: chatId,
             text,
-            parse_mode: 'HTML',
+            parse_mode: opts?.parseMode ?? 'HTML',
             link_preview_options: { is_disabled: true },
         };
 

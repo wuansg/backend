@@ -1,4 +1,4 @@
-# Telegram 每日流量日报（Backend 3.17.1）
+# Telegram 每日流量日报（Backend 3.17.2）
 
 - Backend scheduler 配置启用，无节点测速、硬件测试或 Agent 升级。
 - 默认 UTC 00:10（北京时间 08:10），统计前一完整 UTC 自然日；启动时补发当日应发但未创建的昨日汇总，不生成此前所有历史日报。
@@ -18,7 +18,7 @@ TELEGRAM_DAILY_TRAFFIC_TOP_N=5
 
 ## 排版及 Host 排行（3.17.1）
 
-汇总/节点/Host/上传/转发/采集状态分区显示，总量和排行名称加粗；统一 `↑ 上传 / ↓ 下载`，增加对应北京时间区间。上传排行突出上传量，而不是总量。异常长名称自动省略，极端长度时缩短名称，不丢弃统计区块，保持 Telegram HTML 完整和 4096 字符上限。
+汇总/节点/Host/上传/转发/采集状态分区显示；统一 `↑ 上传 / ↓ 下载`，增加对应北京时间区间。上传排行突出上传量，而不是总量。异常长名称自动省略，极端长度时缩短名称，不丢弃统计区块，保持格式完整和 4096 字符上限。
 
 Host 按 `(node_uuid, inbound_tag)` 物理入口合并，先以小时 MAX 去掉共享别名重复量，再按天 SUM 排名，排序后取 Top N。显示该组代表 Host、所属节点及共享数量；不把共享入口当作多个独立 Host 的精确用量。同一 Host 跨节点的入口分别记录，避免名称误导。
 
@@ -31,9 +31,15 @@ docker exec remnawave node dist/daily-traffic-preview.js --send
 
 每天北京时间 08:10 的发送时间和接收会话保持不变。
 
+## MarkdownV2 排版（3.17.2）
+
+新日报使用 [Telegram MarkdownV2](https://core.telegram.org/bots/api#markdownv2-style)：标题、分类和排行名称加粗；流量和日期等宽显示；统计口径说明使用引用块。名称中的下划线、括号、星号、反斜杠等保留原文字并按普通文本规则转义，等宽数字使用独立 code 转义规则，不混用 HTML 实体。预览明确标记为“Markdown 日报预览”。
+
+每条 outbox 记录新增 `parse_mode` 并与消息一起冻结。新增日报显式存为 `MarkdownV2`；增量迁移将已有记录默认设为 `HTML`，原消息、状态、发送次数和时间不变，未发送的旧日报按原格式重试。其他 Telegram 通知仍默认使用 HTML，不做全局切换。回退到 3.17.1 时先确认没有待发 Markdown 日报，避免旧 worker 用 HTML 发送 Markdown。
+
 ## 可靠性与排障
 
-`telegram_daily_traffic_reports` 保存 UTC 日期唯一键、消息快照、接收位置、状态、发送次数、发送时间及不含 token 的错误类别。BullMQ 确定性任务 ID + 数据库原子租约防止并发发送。Telegram 成功接受后才记录 `SENT`，断路器、队列丢失、进程重启不会把未发消息标成已发。
+`telegram_daily_traffic_reports` 保存 UTC 日期唯一键、消息快照和格式、接收位置、状态、发送次数、发送时间及不含 token 的错误类别。BullMQ 确定性任务 ID + 数据库原子租约防止并发发送。Telegram 成功接受后才记录 `SENT`，断路器、队列丢失、进程重启不会把未发消息标成已发。
 
 数据库 outbox 每分钟巡检，重试间隔 5/10/20/40/80 分钟，尊重 Telegram `retry_after`，保留生成时的消息和目标。超过 7 天仍未发送标记失败；永久 API 拒绝标记 `FAILED`，修正后需管理员明确重试。发送记录不自动清理。
 
@@ -42,7 +48,7 @@ Telegram API 没有幂等键：如果消息已接收但客户端响应丢失，�
 只读查看（不要输出 `message/chat_id` 到公开日志）：
 
 ```sql
-SELECT report_date, status, attempts, sent_at, last_error, next_attempt_at
+SELECT report_date, parse_mode, status, attempts, sent_at, last_error, next_attempt_at
 FROM telegram_daily_traffic_reports ORDER BY report_date DESC LIMIT 7;
 ```
 

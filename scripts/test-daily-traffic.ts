@@ -2,17 +2,22 @@ import { PrismaClient } from '@prisma/client';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+import { ConfigService } from '@nestjs/config';
+
 import { configSchema } from '@common/config/app-config/config.schema';
 import { DailyTrafficReportService } from '@common/daily-traffic/daily-traffic-report.service';
 import { DailyTrafficCollector } from '@common/daily-traffic/daily-traffic.collector';
 import {
     DailyTrafficSummary,
+    escapeTelegramMarkdownV2,
+    telegramMarkdownCode,
     dueTrafficReportDate,
     renderDailyTrafficReport,
     trafficBytes,
 } from '@common/daily-traffic/daily-traffic.util';
 
 import { TelegramApiError } from '@integration-modules/notifications/telegram-bot/telegram-api.error';
+import { TelegramApiService } from '@integration-modules/notifications/telegram-bot/telegram-api.service';
 
 import { TelegramBotLoggerQueueProcessor } from '@queue/notifications/telegram-bot-logger/telegram-bot-logger.processor';
 import { TelegramBotLoggerQueueService } from '@queue/notifications/telegram-bot-logger/telegram-bot-logger.service';
@@ -30,6 +35,32 @@ const summary: DailyTrafficSummary = {
     health: { enabled: 13, connected: 13, pending: 0, errors: 0, stale: 0 },
     userRecordsDisabled: false,
 };
+
+// Validate the MarkdownV2 subset generated here, without calling real Telegram.
+function assertSafeMarkdown(message: string) {
+    const reserved = new Set('_*[]()~`>#+-=|{}.!\\');
+    let bold = false;
+    let code = false;
+    for (let i = 0; i < message.length; i++) {
+        const character = message[i];
+        if (character === '\\') {
+            assert.ok(i + 1 < message.length, 'No dangling escape');
+            if (code) assert.ok(['\\', '`'].includes(message[i + 1]));
+            i++;
+        } else if (character === '`') {
+            assert.equal(bold, false, 'Code cannot be nested in bold');
+            code = !code;
+        } else if (!code && character === '*') {
+            bold = !bold;
+        } else if (!code && character === '>' && (i === 0 || message[i - 1] === '\n')) {
+            assert.equal(bold, false, 'Blockquote must start outside bold');
+        } else if (!code) {
+            assert.equal(reserved.has(character), false, `Unescaped Markdown character at ${i}`);
+        }
+    }
+    assert.equal(bold, false, 'Balanced bold');
+    assert.equal(code, false, 'Balanced code');
+}
 
 async function unitTests() {
     assert.equal(dueTrafficReportDate(new Date('2026-10-07T00:09:59Z')), null);
@@ -82,10 +113,28 @@ async function unitTests() {
         nodes: { ...empty, total: 100n },
         topNodes: [{ ...empty, name: '<b>&bad\nname', uuid: 'fixture' }],
     });
-    assert.ok(rendered.includes('&lt;b&gt;&amp;bad name'));
-    assert.ok(rendered.includes('未拆分 100 B'));
+    assert.ok(rendered.includes('<b\\>&bad name'));
+    assert.ok(!rendered.includes('&lt;'), 'Markdown must not use HTML entities');
+    assert.ok(rendered.includes('未拆分 `100 B`'));
     assert.ok(rendered.includes('暂无用量'));
-    assert.ok(rendered.includes('北京时间：10-06 08:00 → 10-07 08:00'));
+    assert.ok(rendered.includes('北京时间：`10-06 08:00 → 10-07 08:00`'));
+    assertSafeMarkdown(rendered);
+    const reserved = '_*[]()~`>#+-=|{}.!\\';
+    assert.equal(
+        escapeTelegramMarkdownV2(reserved),
+        Array.from(reserved, (c) => '\\' + c).join(''),
+    );
+    assert.equal(escapeTelegramMarkdownV2('中文 & < / 🇭🇰'), '中文 & < / 🇭🇰');
+    assert.equal(telegramMarkdownCode('a`b\\c_-1.23'), '`a\\`b\\\\c_-1.23`');
+    assertSafeMarkdown(telegramMarkdownCode('a`b\\c_-1.23'));
+    for (const name of [reserved, '*'.repeat(400), '\\'.repeat(400), '\n\t ', '🇭🇰'.repeat(400)]) {
+        const escaped = renderDailyTrafficReport(new Date('2026-10-06T00:00:00Z'), {
+            ...summary,
+            topNodes: [{ ...empty, uuid: 'fixture', name }],
+            topHosts: [{ ...empty, groupKey: 'fixture', name, nodeName: name, aliasCount: 2 }],
+        });
+        assertSafeMarkdown(escaped);
+    }
     const hostRendered = renderDailyTrafficReport(new Date('2026-10-06T00:00:00Z'), {
         ...summary,
         topHosts: [
@@ -103,14 +152,15 @@ async function unitTests() {
             { upload: 90n, download: 10n, total: 100n, name: 'upload-winner', uuid: 'node' },
         ],
     });
-    assert.ok(hostRendered.includes('Host &lt;&amp;&gt;'));
-    assert.ok(hostRendered.includes('Node &lt;&amp;&gt;（共享×2）'));
+    assert.ok(hostRendered.includes('Host <&\\>'));
+    assert.ok(hostRendered.includes('Node <&\\>（共享×2）'));
     assert.ok(
-        hostRendered.includes('upload-winner</b> · <b>90 B</b>'),
+        hostRendered.includes('upload\\-winner* · `90 B`'),
         'Upload ranking highlights upload, not total',
     );
+    assertSafeMarkdown(hostRendered);
     const worstRows = Array.from({ length: 5 }, () => ({
-        name: '&'.repeat(400),
+        name: reserved.repeat(40),
         uuid: 'fixture',
         upload: 9_223_372_036_854_775_807n,
         download: 9_223_372_036_854_775_807n,
@@ -122,7 +172,7 @@ async function unitTests() {
         topUploadNodes: worstRows,
         topHosts: worstRows.map((row) => ({
             ...row,
-            nodeName: '&'.repeat(400),
+            nodeName: reserved.repeat(40),
             aliasCount: 100,
             groupKey: 'fixture',
         })),
@@ -133,6 +183,27 @@ async function unitTests() {
     assert.ok(worst.length < 4096, `Worst escaped message: ${worst.length}`);
     assert.ok(worst.includes('Host 用量 Top 5'), 'Length budgeting must retain Host ranking');
     assert.ok(worst.includes('🔀 转发节点排行'), 'Length budgeting must retain every section');
+    assertSafeMarkdown(worst);
+    const api = new TelegramApiService(
+        new ConfigService({
+            TELEGRAM_BOT_TOKEN: 'fixture',
+            TELEGRAM_BOT_API_ROOT: 'https://fixture.invalid',
+        }),
+    );
+    const payloads: Array<Record<string, any>> = [];
+    (api as any).http = {
+        post: async (path: string, payload: Record<string, any>) => {
+            assert.equal(path, '/sendMessage');
+            payloads.push(payload);
+        },
+    };
+    await api.sendMessage('fixture', '<b>Original notification</b>');
+    await api.sendMessage('fixture', hostRendered, { parseMode: 'MarkdownV2', threadId: 45 });
+    assert.equal(payloads[0].parse_mode, 'HTML', 'Other notifications keep their default HTML');
+    assert.equal(payloads[0].text, '<b>Original notification</b>');
+    assert.equal(payloads[1].parse_mode, 'MarkdownV2');
+    assert.equal(payloads[1].text, hostRendered);
+    assert.equal(payloads[1].message_thread_id, 45);
     let capturedOptions: any;
     const queue = new TelegramBotLoggerQueueService({
         add: async (_name: string, data: unknown, options: unknown) => {
@@ -146,10 +217,12 @@ async function unitTests() {
     assert.equal(capturedOptions.removeOnComplete, true);
     let sent = 0;
     let circuitOpen = true;
+    let reportMode = 'HTML';
     const processor = new TelegramBotLoggerQueueProcessor(
         {
             sendMessage: async (_chat: string, _message: string, options: any) => {
                 assert.equal(options.threadId, 45);
+                assert.equal(options.parseMode, reportMode);
                 sent++;
             },
         } as any,
@@ -167,6 +240,7 @@ async function unitTests() {
                     threadId: '45',
                     message: 'fixture',
                     target: 'users',
+                    parseMode: reportMode,
                 });
                 return true;
             },
@@ -178,6 +252,12 @@ async function unitTests() {
     circuitOpen = false;
     await processor.process(job);
     assert.equal(sent, 1, 'Health cache failure after acceptance must not cause failure');
+    reportMode = 'MarkdownV2';
+    await processor.process(job);
+    assert.equal(sent, 2, "Worker must use each frozen report's stored format");
+    reportMode = 'invalid';
+    await assert.rejects(processor.process(job), /Unsupported report format/);
+    assert.equal(sent, 2, 'Invalid formats must not reach the Telegram API');
     await assert.rejects(processor.process({ ...job, data: { reportDate: 'bad' } }), /Invalid/);
     const offlineProcessor = new TelegramBotLoggerQueueProcessor(
         { healthcheck: async () => false } as any,
@@ -191,7 +271,7 @@ async function unitTests() {
         'Daily retries must recover a startup Telegram outage without a restart',
     );
     console.log(
-        'Daily traffic unit tests passed (UTC, config, escaping, BigInt, length, queue, circuit).',
+        'Daily traffic unit tests passed (UTC, config, MarkdownV2, legacy HTML, BigInt, length, queue, circuit).',
     );
 }
 
@@ -213,6 +293,29 @@ async function databaseTests(testUrl: string) {
         );
         for (const statement of migration.split(';').filter((value) => value.trim()))
             await db.$executeRawUnsafe(statement);
+        // Emulate a previously frozen HTML report before applying the additive migration.
+        await db.$executeRaw`INSERT INTO telegram_daily_traffic_reports
+            (report_date,target,chat_id,message,status,attempts,sent_at)
+            VALUES ('2026-09-30','users','fixture','<b>Frozen HTML</b>','SENT',1,'2026-10-01T00:10:00Z')`;
+        const markdownMigration = readFileSync(
+            'prisma/migrations/20261007000200_telegram_daily_traffic_markdown/migration.sql',
+            'utf8',
+        );
+        for (const statement of markdownMigration.split(';').filter((value) => value.trim()))
+            await db.$executeRawUnsafe(statement);
+        const legacyDate = new Date('2026-09-30T00:00:00Z');
+        const legacy = await db.telegramDailyTrafficReport.findUniqueOrThrow({
+            where: { reportDate: legacyDate },
+        });
+        assert.equal(legacy.parseMode, 'HTML');
+        assert.equal(legacy.message, '<b>Frozen HTML</b>');
+        assert.equal(legacy.status, 'SENT');
+        assert.equal(legacy.attempts, 1);
+        assert.equal(legacy.sentAt?.toISOString(), '2026-10-01T00:10:00.000Z');
+        await assert.rejects(
+            db.$executeRaw`UPDATE telegram_daily_traffic_reports SET parse_mode='invalid' WHERE report_date='2026-09-30'`,
+        );
+        await db.telegramDailyTrafficReport.delete({ where: { reportDate: legacyDate } });
         const a = '00000000-0000-4000-8000-000000000001';
         const b = '00000000-0000-4000-8000-000000000002';
         for (const ddl of [
@@ -308,6 +411,11 @@ async function databaseTests(testUrl: string) {
                 .threadId,
             '45',
         );
+        assert.equal(
+            (await db.telegramDailyTrafficReport.findUniqueOrThrow({ where: { reportDate: date } }))
+                .parseMode,
+            'MarkdownV2',
+        );
         let calls = 0;
         let release!: () => void;
         const blocked = new Promise<void>((resolve) => {
@@ -319,7 +427,9 @@ async function databaseTests(testUrl: string) {
         });
         const first = reports.deliver(
             date,
-            async () => {
+            async (report) => {
+                assert.equal(report.parseMode, 'MarkdownV2');
+                assertSafeMarkdown(report.message);
                 calls++;
                 started();
                 await blocked;

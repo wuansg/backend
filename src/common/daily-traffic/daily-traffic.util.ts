@@ -48,22 +48,32 @@ export function trafficBytes(bytes: bigint): string {
     return `${rounded / 100n}.${String(rounded % 100n).padStart(2, '0')} ${units[unit]}`;
 }
 
+// MarkdownV2 has separate escaping rules for ordinary text and inline code.
+export const escapeTelegramMarkdownV2 = (text: string) =>
+    text.replace(/[\\_*\[\]()~`>#+\-=|{}.!]/g, '\\$&');
+
+export const telegramMarkdownCode = (text: string) => '`' + text.replace(/[\\`]/g, '\\$&') + '`';
+
+export const DAILY_TRAFFIC_PARSE_MODE = 'MarkdownV2' as const;
+
 const escapeName = (name: string, maxLength: number) => {
-    const characters = Array.from(name.replace(/[\u0000-\u001f\u007f]/g, ' '));
+    const characters = Array.from(name.replace(/[\u0000-\u001f\u007f]/g, ' ').trim() || '未命名');
     const clipped =
         characters.length > maxLength
             ? `${characters.slice(0, maxLength - 1).join('')}…`
             : characters.join('');
-    return clipped.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return escapeTelegramMarkdownV2(clipped);
 };
+
+const usageCode = (bytes: bigint) => telegramMarkdownCode(trafficBytes(bytes));
 
 const usageLines = (title: string, usage: DailyTrafficUsage) => {
     const lines = [
-        `${title}  <b>${trafficBytes(usage.total)}</b>`,
-        `↑ ${trafficBytes(usage.upload)}  ｜  ↓ ${trafficBytes(usage.download)}`,
+        `*${title}*  ${usageCode(usage.total)}`,
+        `↑ ${usageCode(usage.upload)}  ｜  ↓ ${usageCode(usage.download)}`,
     ];
     const unknown = usage.total - usage.upload - usage.download;
-    if (unknown > 0n) lines.push(`└ 未拆分 ${trafficBytes(unknown)}`);
+    if (unknown > 0n) lines.push(`└ 未拆分 ${usageCode(unknown)}`);
     return lines;
 };
 
@@ -87,7 +97,7 @@ export function renderDailyTrafficReport(
             rows: Array<DailyTrafficNode | DailyTrafficHost>,
             direction: 'total' | 'upload' = 'total',
         ) => [
-            `<b>${title}</b>`,
+            `*${title}*`,
             ...(rows.length
                 ? rows.slice(0, 5).map((row, i) => {
                       const host = 'aliasCount' in row ? row : undefined;
@@ -96,22 +106,22 @@ export function renderDailyTrafficReport(
                           : '';
                       const details =
                           direction === 'upload'
-                              ? `↓ ${trafficBytes(row.download)}  ｜  总 ${trafficBytes(row.total)}`
-                              : `↑ ${trafficBytes(row.upload)}  ｜  ↓ ${trafficBytes(row.download)}`;
-                      return `${i + 1}. <b>${escapeName(row.name, maxNameLength)}</b>${context} · <b>${trafficBytes(row[direction])}</b>\n   ${details}`;
+                              ? `↓ ${usageCode(row.download)}  ｜  总 ${usageCode(row.total)}`
+                              : `↑ ${usageCode(row.upload)}  ｜  ↓ ${usageCode(row.download)}`;
+                      return `${i + 1}\\. *${escapeName(row.name, maxNameLength)}*${context} · ${usageCode(row[direction])}\n   ${details}`;
                   })
                 : ['暂无用量']),
         ];
         const health = summary.health;
         return [
-            `<b>📊 流量日报 · ${dateText}</b>`,
+            `*📊 流量日报* · ${telegramMarkdownCode(dateText)}`,
             '统计：UTC 00:00–24:00',
-            `北京时间：${localStart} → ${localEnd}`,
+            `北京时间：${telegramMarkdownCode(`${localStart} → ${localEnd}`)}`,
             '↑ 上传  ｜  ↓ 下载',
             '',
-            '<b>🧾 流量汇总</b>',
+            '*🧾 流量汇总*',
             ...usageLines('👤 用户消耗', summary.users),
-            `活跃用户：${summary.users.activeUsers}`,
+            `活跃用户：${telegramMarkdownCode(String(summary.users.activeUsers))}`,
             ...(summary.userRecordsDisabled ? ['⚠️ 用户记录已停用，统计可能不完整'] : []),
             '',
             ...usageLines('🖥 节点代理', summary.nodes),
@@ -135,17 +145,17 @@ export function renderDailyTrafficReport(
                 ? ['', ...ranking('🔀 转发节点排行', summary.topForwardingNodes.slice(0, 3))]
                 : []),
             '',
-            '<b>🩺 采集状态（生成时）</b>',
-            `在线：${health.connected}/${health.enabled}  ｜  积压：${health.pending}`,
+            '*🩺 采集状态（生成时）*',
+            `在线：${telegramMarkdownCode(`${health.connected}/${health.enabled}`)}  ｜  积压：${telegramMarkdownCode(String(health.pending))}`,
             ...(health.errors || health.stale || health.pending
                 ? [`⚠️ 异常：${health.errors}；15 分钟未入库：${health.stale}，统计可能不完整`]
                 : ['✅ 流量采集正常']),
             '',
-            'Host 同入口合并排行，共享别名不重复计量。',
-            '各口径有重叠，请勿相加；非主机网卡统计。',
+            '> Host 同入口合并排行，共享别名不重复计量。',
+            '> 各口径有重叠，请勿相加；非主机网卡统计。',
         ].join('\n');
     };
-    // Keep every section and balanced HTML; shorten names only for unusually long reports.
+    // Keep every section and balanced Markdown; shorten names only for unusually long reports.
     for (const maxNameLength of [35, 24, 16]) {
         const message = render(maxNameLength);
         if (message.length <= maxCharacters || maxNameLength === 16) return message;
