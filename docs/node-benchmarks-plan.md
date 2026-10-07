@@ -1,9 +1,9 @@
 # 节点硬件与网络测试
 
-状态：Contract、Frontend、Agent 3.15.0 已通过 GitHub Actions；Backend 3.15.1
-已修复 REST 模块依赖并恢复网站。aiyun 3.15.0 灰度发现 REST 进程需要显式初始化
-节点 JWT/mTLS，任务尚未下发至 Agent；正在发布 Backend 3.15.2 完成认证修复。
-更新日期：2026-10-07（Asia/Shanghai）。没有在生产节点执行压力测试。
+状态：Backend `3.15.2-anytls` 和 Frontend `3.15.0` 已部署 HostDZire SG；
+aiyun Agent `3.15.0` 灰度通过。其他 Agent 未更新，所有测试仍仅支持手动触发。
+更新日期：2026-10-07（Asia/Shanghai）。已在 aiyun 执行明确预算的小范围测试；
+没有执行全城市满载测速。详见 [发布记录](./release-3.15.2.md)。
 
 ## 目标与入口
 
@@ -129,17 +129,26 @@ LibreSpeed 上传接口分别接受了 1 KiB 请求。此核验不等于各生�
 - Benchmark 协调器在首次请求 Agent 前初始化 JWT/mTLS/SNI；并发共享初始化，
   失败后允许重试。测试覆盖初始化顺序、并发一次、失败不得下发与恢复后重试。
 
-## 发布与灰度待办
+## 发布与灰度结果
 
 - Frontend/Agent `3.15.0`，Contract `3.15.0-anytls.0`；Backend 修复版 `3.15.2`。
   Backend `3.15.0-anytls` 无法启动 REST，`3.15.1-anytls` 未初始化 Benchmark
   节点认证；保留不可变标签，但正式发布应使用 `3.15.2-anytls`。
-- 先独立完成 Contract 发布，例如用专用发布分支触发 `deploy-lib`，
-  核对最终 release 资产和 Frontend 锁文件 integrity，再发布 Frontend，最后构建
-  Backend 镜像。不要在新 Contract 资产尚不存在时触发 Frontend CI，也不要让
-  Backend 的新不可变版本镜像先打入旧 Frontend。
+- 已按 Contract → Frontend → Backend 镜像顺序发布，Agent 镜像独立发布。
+  正式 Contract release 资产的 integrity 与 Frontend 锁文件一致；Backend
+  镜像中的 Frontend 提交、实际功能包标记和版本均已核验。
 - 发布时同步 Frontend、Backend、Contract、Agent 版本号及镜像标签，不复用旧标签。
-  通过 GitHub Actions 构建镜像，再在 aiyun 做明确预算的小范围灰度；不先跑全城市满载。
+  本次全部使用 GitHub Actions 构建的 x64 镜像及固定摘要，未复制本地二进制部署。
+- aiyun 单线程 CPU/内存各最多 2 秒、fio 四阶段各最多 5 秒完成；fio 仅使用
+  64 MiB 独立文件、累计写入最多 128 MiB，临时目录已清理。
+- 新加坡和法兰克福 TCP 延迟及下载、法兰克福上传完成：每可测方向 1 MiB，
+  共 3 MiB 应用层数据；新加坡上传如实显示不支持。这不是峰值带宽测试。
+- 运行中取消成功；Agent 受控重启后 5 条历史恢复，真实 JWT/mTLS/SNI GET
+  结果与数据库对比通过。整数、字符串和状态精确比较，浮点测量允许 1e-12
+  的末位相对舍入差异。测试没有自动重跑。
+- 最终网站 HTTP 200、REST 未认证 401、容器无自动重启；13/13 节点在线，
+  snapshot gap/pending 均为 0，没有活动 Benchmark 或残留诊断 API token。
+  APP_SECRET/环境文件保持不变，数据库/Compose/环境备份保留。
 - 当前面板在 HostDZire SG，不在旧 nlfra；后续升级 DWHK 前按用户约定切走实际代理
   客户端 Final，验收后恢复。任何节点升级均不得自动触发测速。
 
