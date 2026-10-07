@@ -92,6 +92,16 @@ FROM telegram_daily_traffic_reports ORDER BY report_date DESC LIMIT 7;
 - GitHub [Markdown/旧 HTML/真实 SQL 回归](https://github.com/wuansg/backend/actions/runs/37604641533)与 [amd64 镜像构建](https://github.com/wuansg/backend/actions/runs/37604702916)均通过。
 - 固定部署镜像 `ghcr.io/wuansg/backend:3.17.2-anytls@sha256:c762ec7126c40cc9f2d5bb4f650409fc53273ec62f53243c641e2a8c9fb4d528`，Frontend 3.16.0 和 Agent 3.15.0 不变。
 - 增量迁移已应用；原日报仍为 HTML，正文 hash、SENT 状态、attempts=1、sentAt 均未改变。环境文件逐字节不变，UTC 00:10/现有 users 会话不变。
-- 镜像内只读预览确认为 MarkdownV2、1673 字符，Host Top 5 与独立数据库查询一致；未额外发送 Telegram 预览。
+- 镜像内只读预览确认为 MarkdownV2、1673 字符，Host Top 5 与独立数据库查询一致；后经用户确认发送一条 Markdown 预览，Telegram 已接受，原日报记录不变。
 - 网站 HTTP 200，Backend 无重启，13/13 节点在线、配置/版本不变，流量快照无积压、无错误，无测速任务。
 - 升级前数据库/配置备份保存在 `/opt/remnawave/backups/release-3.17.2-20261007/`，旧镜像保留；本次临时 SQL 验证容器与卷已回收。
+
+### 3.17.3 表格版发布
+
+- 功能提交 `138aba2e0270b905486735bebe6cc42f3381e711`。
+- GitHub [表格/格式/真实 SQL 回归](https://github.com/wuansg/backend/actions/runs/37606130133)与 [amd64 镜像构建](https://github.com/wuansg/backend/actions/runs/37606165014)均通过。
+- 固定部署镜像 `ghcr.io/wuansg/backend:3.17.3-anytls@sha256:8fec633a2247ba319ee8b7e188f4200f739a299d78fd47ca26da2066141b8ab4`，Frontend 3.16.0 和 Agent 3.15.0 不变。
+- 镜像内预览确认 `layout=tables`、五张表格、1674 字符；汇总上传/下载/总量与上一版一致，Host Top 5 与独立 SQL 查询一致。
+- 经用户确认发送一次表格版预览，Telegram 已接受；发送前后原日报内容 hash、格式、状态、发送次数和发送时间均不变。定时 UTC 00:10/现有 users 会话保持不变。
+- 网站 HTTP 200，Backend 无重启，13/13 节点在线且版本/配置不变，流量快照无积压或错误，无测速任务。
+- 升级前数据库/配置备份保存在 `/opt/remnawave/backups/release-3.17.3-20261007/`，环境文件逐字节保留，旧镜像可回退。本次没有新的数据库迁移。
