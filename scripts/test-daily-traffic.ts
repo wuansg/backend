@@ -11,6 +11,7 @@ import {
     DailyTrafficSummary,
     escapeTelegramMarkdownV2,
     telegramMarkdownCode,
+    telegramMarkdownPre,
     dueTrafficReportDate,
     renderDailyTrafficReport,
     trafficBytes,
@@ -40,16 +41,21 @@ const summary: DailyTrafficSummary = {
 function assertSafeMarkdown(message: string) {
     const reserved = new Set('_*[]()~`>#+-=|{}.!\\');
     let bold = false;
-    let code = false;
+    let code: 'inline' | 'pre' | null = null;
     for (let i = 0; i < message.length; i++) {
         const character = message[i];
         if (character === '\\') {
             assert.ok(i + 1 < message.length, 'No dangling escape');
             if (code) assert.ok(['\\', '`'].includes(message[i + 1]));
             i++;
+        } else if (code !== 'inline' && message.startsWith('```', i)) {
+            assert.equal(bold, false, 'Preformatted tables cannot be nested in bold');
+            code = code === 'pre' ? null : 'pre';
+            i += 2;
         } else if (character === '`') {
             assert.equal(bold, false, 'Code cannot be nested in bold');
-            code = !code;
+            assert.notEqual(code, 'pre', 'Backticks inside a table must be escaped');
+            code = code === 'inline' ? null : 'inline';
         } else if (!code && character === '*') {
             bold = !bold;
         } else if (!code && character === '>' && (i === 0 || message[i - 1] === '\n')) {
@@ -59,8 +65,11 @@ function assertSafeMarkdown(message: string) {
         }
     }
     assert.equal(bold, false, 'Balanced bold');
-    assert.equal(code, false, 'Balanced code');
+    assert.equal(code, null, 'Balanced inline code and table fences');
 }
+
+const reportTables = (message: string) =>
+    Array.from(message.matchAll(/^```\n([\s\S]*?)\n```$/gm), (match) => match[1]);
 
 async function unitTests() {
     assert.equal(dueTrafficReportDate(new Date('2026-10-07T00:09:59Z')), null);
@@ -119,6 +128,11 @@ async function unitTests() {
     assert.ok(rendered.includes('暂无用量'));
     assert.ok(rendered.includes('北京时间：`10-06 08:00 → 10-07 08:00`'));
     assertSafeMarkdown(rendered);
+    const summaryTable = reportTables(rendered)[0];
+    assert.match(summaryTable, /^类型\s+总量\s+上传\s+下载/m);
+    assert.match(summaryTable, /^节点\s+100 B\s+0 B\s+0 B$/m);
+    for (const label of ['用户', '节点', 'Host', '转发'])
+        assert.ok(summaryTable.includes(label), `Summary table retains ${label}`);
     const reserved = '_*[]()~`>#+-=|{}.!\\';
     assert.equal(
         escapeTelegramMarkdownV2(reserved),
@@ -127,6 +141,9 @@ async function unitTests() {
     assert.equal(escapeTelegramMarkdownV2('中文 & < / 🇭🇰'), '中文 & < / 🇭🇰');
     assert.equal(telegramMarkdownCode('a`b\\c_-1.23'), '`a\\`b\\\\c_-1.23`');
     assertSafeMarkdown(telegramMarkdownCode('a`b\\c_-1.23'));
+    assert.equal(telegramMarkdownPre('a`b\\c_-1.23\n第二行'), '```\na\\`b\\\\c_-1.23\n第二行\n```');
+    assertSafeMarkdown(telegramMarkdownPre('a`b\\c_-1.23\n第二行'));
+    await assert.rejects(async () => assertSafeMarkdown('```\nunclosed'), /Balanced/);
     for (const name of [reserved, '*'.repeat(400), '\\'.repeat(400), '\n\t ', '🇭🇰'.repeat(400)]) {
         const escaped = renderDailyTrafficReport(new Date('2026-10-06T00:00:00Z'), {
             ...summary,
@@ -155,9 +172,15 @@ async function unitTests() {
     assert.ok(hostRendered.includes('Host <&\\>'));
     assert.ok(hostRendered.includes('Node <&\\>（共享×2）'));
     assert.ok(
-        hostRendered.includes('upload\\-winner* · `90 B`'),
-        'Upload ranking highlights upload, not total',
+        hostRendered.includes('1\\. *upload\\-winner*'),
+        'Ranking legend keeps the row number and escaped name',
     );
+    const hostTables = reportTables(hostRendered);
+    assert.equal(hostTables.length, 3, 'Summary, Host and upload ranking tables');
+    assert.match(hostTables[1], /^#\s+总量\s+上传\s+下载/m);
+    assert.match(hostTables[1], /^1\s+100 B\s+10 B\s+90 B$/m);
+    assert.match(hostTables[2], /^#\s+上传\s+下载\s+总量/m);
+    assert.match(hostTables[2], /^1\s+90 B\s+10 B\s+100 B$/m);
     assertSafeMarkdown(hostRendered);
     const worstRows = Array.from({ length: 5 }, () => ({
         name: reserved.repeat(40),
@@ -184,6 +207,45 @@ async function unitTests() {
     assert.ok(worst.includes('Host 用量 Top 5'), 'Length budgeting must retain Host ranking');
     assert.ok(worst.includes('🔀 转发节点排行'), 'Length budgeting must retain every section');
     assertSafeMarkdown(worst);
+    assert.equal(reportTables(worst).length, 5, 'All usage and ranking sections use tables');
+    const width = (text: string) =>
+        Array.from(text).reduce((sum, c) => sum + (/[\u4e00-\u9fff]/.test(c) ? 2 : 1), 0);
+    for (const table of reportTables(worst)) {
+        const lines = table.split('\n');
+        assert.ok(
+            lines.every((line) => width(line) === width(lines[0])),
+            'Table columns align without names or emojis',
+        );
+        assert.ok(width(lines[0]) <= 40, 'Keep table width compact for phones');
+    }
+    const nearUnitBoundary = renderDailyTrafficReport(new Date('2026-10-06T00:00:00Z'), {
+        ...summary,
+        nodes: { upload: 1_048_575n, download: 1_048_575n, total: 1_048_575n },
+    });
+    assert.ok(
+        reportTables(nearUnitBoundary)[0]
+            .split('\n')
+            .every((line) => width(line) <= 40),
+    );
+    const previewPrefix = '*🆕 表格版日报预览*\n\n';
+    const bounded = renderDailyTrafficReport(
+        new Date('2026-10-06T00:00:00Z'),
+        {
+            ...summary,
+            topNodes: worstRows,
+            topUploadNodes: worstRows,
+            topForwardingNodes: worstRows,
+            topHosts: worstRows.map((row) => ({
+                ...row,
+                nodeName: reserved.repeat(40),
+                aliasCount: 100,
+                groupKey: 'fixture',
+            })),
+        },
+        4096 - previewPrefix.length,
+    );
+    assert.ok((previewPrefix + bounded).length <= 4096, 'Leave space for the preview label');
+    assertSafeMarkdown(previewPrefix + bounded);
     const api = new TelegramApiService(
         new ConfigService({
             TELEGRAM_BOT_TOKEN: 'fixture',

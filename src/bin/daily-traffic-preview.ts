@@ -5,6 +5,7 @@ import { configSchema } from '@common/config/app-config/config.schema';
 import { TypedConfigService } from '@common/config/app-config/typed-config.service';
 import { DailyTrafficCollector } from '@common/daily-traffic/daily-traffic.collector';
 import {
+    DAILY_TRAFFIC_LAYOUT,
     DAILY_TRAFFIC_PARSE_MODE,
     dueTrafficReportDate,
     renderDailyTrafficReport,
@@ -31,7 +32,7 @@ async function main() {
     try {
         const date = dueTrafficReportDate(new Date(), '00:00')!;
         const summary = await new DailyTrafficCollector(db, typed).collect(date);
-        const prefix = '*🆕 Markdown 日报预览*\n\n';
+        const prefix = '*🆕 表格版日报预览*\n\n';
         const message = prefix + renderDailyTrafficReport(date, summary, 4096 - prefix.length);
         if (message.length > 4096) throw new Error('Preview exceeds Telegram message limit');
         if (mode === '--send') {
@@ -60,6 +61,8 @@ async function main() {
                     sent: mode === '--send',
                     messageLength: message.length,
                     parseMode: DAILY_TRAFFIC_PARSE_MODE,
+                    layout: DAILY_TRAFFIC_LAYOUT,
+                    tableCount: (message.match(/^```$/gm)?.length ?? 0) / 2,
                     topHosts: summary.topHosts,
                     totals: {
                         users: summary.users,

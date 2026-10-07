@@ -52,9 +52,14 @@ export function trafficBytes(bytes: bigint): string {
 export const escapeTelegramMarkdownV2 = (text: string) =>
     text.replace(/[\\_*\[\]()~`>#+\-=|{}.!]/g, '\\$&');
 
-export const telegramMarkdownCode = (text: string) => '`' + text.replace(/[\\`]/g, '\\$&') + '`';
+const escapeTelegramCode = (text: string) => text.replace(/[\\`]/g, '\\$&');
+
+export const telegramMarkdownCode = (text: string) => '`' + escapeTelegramCode(text) + '`';
+
+export const telegramMarkdownPre = (text: string) => '```\n' + escapeTelegramCode(text) + '\n```';
 
 export const DAILY_TRAFFIC_PARSE_MODE = 'MarkdownV2' as const;
+export const DAILY_TRAFFIC_LAYOUT = 'tables' as const;
 
 const escapeName = (name: string, maxLength: number) => {
     const characters = Array.from(name.replace(/[\u0000-\u001f\u007f]/g, ' ').trim() || '未命名');
@@ -67,14 +72,43 @@ const escapeName = (name: string, maxLength: number) => {
 
 const usageCode = (bytes: bigint) => telegramMarkdownCode(trafficBytes(bytes));
 
-const usageLines = (title: string, usage: DailyTrafficUsage) => {
-    const lines = [
-        `*${title}*  ${usageCode(usage.total)}`,
-        `↑ ${usageCode(usage.upload)}  ｜  ↓ ${usageCode(usage.download)}`,
-    ];
-    const unknown = usage.total - usage.upload - usage.download;
-    if (unknown > 0n) lines.push(`└ 未拆分 ${usageCode(unknown)}`);
-    return lines;
+// Table cells contain only fixed Chinese labels or ASCII numbers/units, never names/emojis.
+const cellWidth = (text: string) =>
+    Array.from(text).reduce(
+        (width, character) => width + (/[\u4e00-\u9fff]/.test(character) ? 2 : 1),
+        0,
+    );
+
+const usageTable = (
+    rows: Array<{ label: string; usage: DailyTrafficUsage }>,
+    labelTitle: string,
+    direction: 'total' | 'upload' = 'total',
+) => {
+    const fields: Array<keyof DailyTrafficUsage> =
+        direction === 'upload' ? ['upload', 'download', 'total'] : ['total', 'upload', 'download'];
+    const titles = { total: '总量', upload: '上传', download: '下载' };
+    const header = [labelTitle, ...fields.map((field) => titles[field])];
+    const values = rows.map(({ label, usage }) => [
+        label,
+        ...fields.map((field) => trafficBytes(usage[field])),
+    ]);
+    const widths = header.map((title, column) =>
+        Math.max(cellWidth(title), ...values.map((row) => cellWidth(row[column]))),
+    );
+    const line = (row: string[]) =>
+        row
+            .map((cell, column) => {
+                const padding = ' '.repeat(widths[column] - cellWidth(cell));
+                return column === 0 ? cell + padding : padding + cell;
+            })
+            .join(' ');
+    return telegramMarkdownPre(
+        [
+            line(header),
+            '-'.repeat(widths.reduce((total, width) => total + width, widths.length - 1)),
+            ...values.map(line),
+        ].join('\n'),
+    );
 };
 
 export function renderDailyTrafficReport(
@@ -91,6 +125,12 @@ export function renderDailyTrafficReport(
         .toISOString()
         .slice(5, 16)
         .replace('T', ' ');
+    const summaryRows = [
+        { label: '用户', usage: summary.users },
+        { label: '节点', usage: summary.nodes },
+        { label: 'Host', usage: summary.hosts },
+        { label: '转发', usage: summary.forwarding },
+    ];
     const render = (maxNameLength: number) => {
         const ranking = (
             title: string,
@@ -99,17 +139,20 @@ export function renderDailyTrafficReport(
         ) => [
             `*${title}*`,
             ...(rows.length
-                ? rows.slice(0, 5).map((row, i) => {
-                      const host = 'aliasCount' in row ? row : undefined;
-                      const context = host
-                          ? ` / ${escapeName(host.nodeName, Math.min(maxNameLength, 14))}${host.aliasCount > 1 ? `（共享×${host.aliasCount}）` : ''}`
-                          : '';
-                      const details =
-                          direction === 'upload'
-                              ? `↓ ${usageCode(row.download)}  ｜  总 ${usageCode(row.total)}`
-                              : `↑ ${usageCode(row.upload)}  ｜  ↓ ${usageCode(row.download)}`;
-                      return `${i + 1}\\. *${escapeName(row.name, maxNameLength)}*${context} · ${usageCode(row[direction])}\n   ${details}`;
-                  })
+                ? [
+                      ...rows.slice(0, 5).map((row, i) => {
+                          const host = 'aliasCount' in row ? row : undefined;
+                          const context = host
+                              ? ` / ${escapeName(host.nodeName, Math.min(maxNameLength, 14))}${host.aliasCount > 1 ? `（共享×${host.aliasCount}）` : ''}`
+                              : '';
+                          return `${i + 1}\\. *${escapeName(row.name, maxNameLength)}*${context}`;
+                      }),
+                      usageTable(
+                          rows.slice(0, 5).map((row, i) => ({ label: String(i + 1), usage: row })),
+                          '#',
+                          direction,
+                      ),
+                  ]
                 : ['暂无用量']),
         ];
         const health = summary.health;
@@ -120,15 +163,13 @@ export function renderDailyTrafficReport(
             '↑ 上传  ｜  ↓ 下载',
             '',
             '*🧾 流量汇总*',
-            ...usageLines('👤 用户消耗', summary.users),
+            usageTable(summaryRows, '类型'),
+            ...summaryRows.flatMap(({ label, usage }) => {
+                const unknown = usage.total - usage.upload - usage.download;
+                return unknown > 0n ? [`└ ${label}未拆分 ${usageCode(unknown)}`] : [];
+            }),
             `活跃用户：${telegramMarkdownCode(String(summary.users.activeUsers))}`,
             ...(summary.userRecordsDisabled ? ['⚠️ 用户记录已停用，统计可能不完整'] : []),
-            '',
-            ...usageLines('🖥 节点代理', summary.nodes),
-            '',
-            ...usageLines('🏷 Host 入口', summary.hosts),
-            '',
-            ...usageLines('🔀 nft 转发', summary.forwarding),
             '',
             ...ranking(
                 `🖥 节点用量 Top ${Math.min(summary.topNodes.length, 5) || 5}`,

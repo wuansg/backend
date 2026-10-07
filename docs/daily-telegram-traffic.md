@@ -1,4 +1,4 @@
-# Telegram 每日流量日报（Backend 3.17.2）
+# Telegram 每日流量日报（Backend 3.17.3）
 
 - Backend scheduler 配置启用，无节点测速、硬件测试或 Agent 升级。
 - 默认 UTC 00:10（北京时间 08:10），统计前一完整 UTC 自然日；启动时补发当日应发但未创建的昨日汇总，不生成此前所有历史日报。
@@ -36,6 +36,16 @@ docker exec remnawave node dist/daily-traffic-preview.js --send
 新日报使用 [Telegram MarkdownV2](https://core.telegram.org/bots/api#markdownv2-style)：标题、分类和排行名称加粗；流量和日期等宽显示；统计口径说明使用引用块。名称中的下划线、括号、星号、反斜杠等保留原文字并按普通文本规则转义，等宽数字使用独立 code 转义规则，不混用 HTML 实体。预览明确标记为“Markdown 日报预览”。
 
 每条 outbox 记录新增 `parse_mode` 并与消息一起冻结。新增日报显式存为 `MarkdownV2`；增量迁移将已有记录默认设为 `HTML`，原消息、状态、发送次数和时间不变，未发送的旧日报按原格式重试。其他 Telegram 通知仍默认使用 HTML，不做全局切换。回退到 3.17.1 时先确认没有待发 Markdown 日报，避免旧 worker 用 HTML 发送 Markdown。
+
+## 等宽表格（3.17.3）
+
+沿用 `sendMessage` + MarkdownV2 通道，将汇总和每项非空排行放入等宽代码块表格，不依赖客户端把 Markdown 管道语法渲染成表格，也不切换到新的 Rich Messages API。
+
+- 汇总按用户消耗、节点代理、Host 入口、nft 转发分行，列为总量/上传/下载。
+- 排行的序号对应表格上方的名称列表；Host 列表保留所属节点和共享数量。中文、旗帜或长名称不进入数值表格，避免挤歪数字列。
+- 上传排行按上传量排序，表格列顺序为上传/下载/总量；其他排行为总量/上传/下载，数据和既有去重统计口径不变。
+- 数字靠右对齐，固定中文列名按双宽字符补齐；不省略字节数据，保留单位，通常表格宽度不超过 40 个等宽单元。异常长名称缩短时保留全部表格、警告、未拆分用量和采集状态。
+- 预览明确标记“表格版日报预览”，只读检查输出 `layout=tables` 和实际 `tableCount`。旧日报内容仍冻结，不重写、不补发。
 
 ## 可靠性与排障
 
