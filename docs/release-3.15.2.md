@@ -10,11 +10,41 @@
   标签未移动，正式 ZIP 由 GitHub 构建；修复的工作流使用自动令牌及 contents:write。
 - Contract `3.15.0-anytls.0`；[Contract Actions](https://github.com/wuansg/backend/actions/runs/37567307020)
   通过，正式资产 integrity 与 Frontend 锁文件一致。
-- 仅 aiyun Agent 升级为 `3.15.0`，源码 `3ef04200`，镜像摘要
+- 初次 aiyun 灰度 Agent 升级为 `3.15.0`，源码 `3ef04200`，镜像摘要
   `sha256:584cec59ee281aaf23ef44419eb7e17fdf6aac51276ccf0949da2d45b188223b`。
   [Agent Actions](https://github.com/wuansg/remnawave-node-go/actions/runs/37567201190) 通过，
   包括竞态、硬件工具、Snell 及用户计数回归。Sing-box 仍为 `1.14.0`。
-- 其他 Agent 镜像未改变。本轮所有应用部署均使用 GitHub 镜像，版本标签附固定摘要。
+- 随后的全节点发布已完成，详见下面的记录。所有应用部署均使用 GitHub 镜像，
+  版本标签附固定摘要。
+
+## 剩余 Agent 发布 — 2026-10-07 04:35 UTC
+
+- 全部 13/13 节点在线、上报 Agent `3.15.0` 并具备 `node_benchmarks_v1`。
+  Sing-box 仍为 `1.14.0`；9 台保持 CORE_ACTIVE，4 台保持 FORWARDING_ONLY。
+- 非香港先更新：DataWave TPE、JamCloud、HostDZire、taipei101、NoLimit、
+  CloudSilk、bero、Oracle Japan；aiyun 已通过初次灰度，不重复重建。
+  香港最后依次更新 AliHK、YH AliHK、DataWave HKG、Hytron。
+- 12 台 x64 使用上述 `3.15.0` 固定摘要。Oracle Japan 使用
+  `ghcr.io/wuansg/remnawave-node-go:3.15.0-arm64@sha256:52583027db1a16027b293ea47564aad6511ce144baa8286f3619e01d8258a131`，
+  程序与 OCI 版本均为 `3.15.0`，发布提交 `26ad5cec` 仅改变独立分支的工作流。
+  [一次性 ARM64 Actions](https://github.com/wuansg/remnawave-node-go/actions/runs/37571323041)
+  通过完整竞态、硬件工具、Snell/流量回归和镜像构建。正式 main 仍只构建 x64；
+  已发布的 `3.15.0` 摘要未覆盖，也未更改 main/latest 别名。
+- 每台只修改 Compose 的 Agent 镜像行；保留项目名、启动命令、数据卷、证书挂载、
+  host 网络及 NET_ADMIN。升级前 Compose 与运行参数保存在各机
+  `/root/remnanode-backups/benchmarks-fleet-3.15.0-20261007/`。
+  各机 Profile、入站及用户数、核心/转发模式、配置/插件/转发哈希与基线逐项一致。
+- 实际路由客户端为 OpenClash。香港批次开始前将 Final 从 `🇭🇰 hkg | ali`
+  切到独立 `🇸🇬 sin | cft`，连接测试 53 ms；DWHK 验收后，原香港 ali
+  连接测试 14 ms 并恢复 Final。未启动或重载 Nikki，未修改客户端订阅配置。
+- AliHK、YH AliHK、DWHK、CloudSilk 共 32 个 nft 命名计数器与升级前逐项比较，
+  上下行累计字节和包数均未倒退；aiyun 原灰度历史 5 条仍与数据库匹配。
+  所有快照 gap/pending 为 0、lastError 为空，公网面板 HTTP 200。
+- 此次扩大发布没有创建新测速或压测任务；没有活动任务，临时操作令牌已清理。
+  无新增流量时 Agent 不产生空快照，序号不增加不能单独判定统计停滞；
+  NoLimit 验收同时核对 lastSuccessAt 更新、收发水位一致和捕获开启。
+- AliHK / YH AliHK 根盘均仅 1.2 GiB，拉取后空闲约 371 / 274 MiB。
+  磁盘性能测试会因低于 1 GiB 安全余量而跳过；不通过删回滚镜像或放宽保护来强行测试。
 
 ## 入口与功能
 

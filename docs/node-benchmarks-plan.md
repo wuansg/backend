@@ -1,9 +1,12 @@
 # 节点硬件与网络测试
 
 状态：Backend `3.15.2-anytls` 和 Frontend `3.15.0` 已部署 HostDZire SG；
-aiyun Agent `3.15.0` 灰度通过。其他 Agent 未更新，所有测试仍仅支持手动触发。
+aiyun 灰度通过后，全部 13 台 Agent 已更新并上报 `3.15.0` / `node_benchmarks_v1`。
+12 台 x64 使用正式镜像，Oracle Japan 使用独立 GitHub ARM64 镜像；所有测试仅手动触发。
 更新日期：2026-10-07（Asia/Shanghai）。已在 aiyun 执行明确预算的小范围测试；
 没有执行全城市满载测速。详见 [发布记录](./release-3.15.2.md)。
+剩余节点升级没有触发新测试；原 Profile、入站、核心/转发模式、配置哈希及数据卷均保留。
+AliHK 和 YH AliHK 为 1.2 GiB 小盘，空闲空间不足 1 GiB，磁盘测试会按安全限制跳过。
 
 ## 目标与入口
 
