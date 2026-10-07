@@ -60,3 +60,12 @@ FROM telegram_daily_traffic_reports ORDER BY report_date DESC LIMIT 7;
 - 首条昨日汇总已记录 `SENT`，一次成功接受，内容与数据库四种口径匹配；13/13 节点在线、配置不变，采集序列持续增长，无积压、无测速任务。
 - 原环境变量完整保留，仅追加日报配置；升级前数据库/配置备份及旧镜像保留，临时 SQL 验证容器与卷已回收。
 - 本地类型检查、生产构建、格式检查、日报单元/三时区 SQL 回归、usage snapshot/forwarding/queue bootstrap 回归均通过。Oxlint 已知宿主环境原生分配器故障，未计为通过。
+
+### 3.17.1 排版与 Host 排行发布
+
+- 代码提交 `653a840d275a1db90adc4c4e14cf5600230907b6`。
+- GitHub [SQL/排版回归](https://github.com/wuansg/backend/actions/runs/37600648515)和 [amd64 镜像构建](https://github.com/wuansg/backend/actions/runs/37600648301)通过。
+- 固定镜像 `ghcr.io/wuansg/backend:3.17.1-anytls@sha256:9c65c4fc89cbaeceeca63076391f22ea0d34e0835f716a39046327a28cd5d133`。
+- 预览使用镜像内真实汇总/渲染代码生成；Host Top 5 与独立数据库查询一致。经用户确认发送一次，Telegram 已接受，消息长度 1764 字符。
+- 原日报内容 hash、状态、发送次数与发送时间保持不变；环境配置逐字节不变。每天北京时间 08:10 定时任务保持启用，之后的新日报自动使用新格式。
+- 13/13 节点在线，版本和配置不变，流量快照无积压或错误，未触发测速。临时 Host 排行 SQL 测试容器及卷已移除。
