@@ -1,7 +1,8 @@
 # 节点硬件与网络测试
 
-状态：首版已实现并通过本地构建、隔离数据库及硬件工具测试；正在按 Contract、
-Frontend、Backend/Agent 顺序通过 GitHub Actions 发布，生产环境尚未更新。
+状态：Contract、Frontend、Agent 3.15.0 已通过 GitHub Actions；Backend 3.15.0
+上线验收发现 REST 模块依赖缺失，已回退旧镜像恢复网站。修复版 Backend 3.15.1
+补上 CqrsModule 和实际模块/控制器/认证 Guard 初始化回归，正在重新发布。
 更新日期：2026-10-07（Asia/Shanghai）。没有在生产节点执行压力测试。
 
 ## 目标与入口
@@ -120,10 +121,16 @@ LibreSpeed 上传接口分别接受了 1 KiB 请求。此核验不等于各生�
   GitHub Actions 已加入 Agent 硬件工具回归、Backend 参数测试。
 - 首轮 Contract 独立构建发现根项目环境掩盖了 WHATWG `URL` 类型缺失，已在两套
   Contract tsconfig 中显式加入 DOM 标准类型并重新发布；以独立 Actions 的结果为准。
+- Frontend 发布补齐 `contents: write` 并使用自动工作流令牌，不再依赖缺失的 PAT；
+  支持对既有版本标签手动重发资产，不移动原版本标签。
+- Backend 启动回归创建真实 Nest 模块、Controller 和 Guards；另外构造去掉
+  CqrsModule 的负例，确认能捕获 QueryBus 注入失败。数据库健康不能代替 REST
+  健康，部署验收必须检查未认证的新接口返回 401 及公网网站返回 200。
 
 ## 发布与灰度待办
 
-- 版本统一为 Backend/Frontend/Agent `3.15.0`，Contract `3.15.0-anytls.0`。
+- Frontend/Agent `3.15.0`，Contract `3.15.0-anytls.0`；Backend 修复版 `3.15.1`。
+  Backend `3.15.0-anytls` 不可用，保留不可变标签但不得部署或覆盖。
 - 先独立完成 Contract 发布，例如用专用发布分支触发 `deploy-lib`，
   核对最终 release 资产和 Frontend 锁文件 integrity，再发布 Frontend，最后构建
   Backend 镜像。不要在新 Contract 资产尚不存在时触发 Frontend CI，也不要让

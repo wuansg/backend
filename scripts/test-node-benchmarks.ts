@@ -1,12 +1,18 @@
 import { PrismaClient } from '@prisma/client';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { Global, Module } from '@nestjs/common';
+import { CqrsModule } from '@nestjs/cqrs';
+import { NestFactory } from '@nestjs/core';
+import { MODULE_METADATA } from '@nestjs/common/constants';
 
 import { AxiosService } from '@common/axios';
 import { PrismaService } from '@common/database/prisma.service';
+import { RawCacheService } from '@common/raw-cache/raw-cache.service';
 import { BenchmarkRequestSchema, BenchmarkTargetSchema } from '@libs/contracts/commands';
 
 import { NodeBenchmarksService } from '../src/modules/node-benchmarks/benchmarks.service';
+import { NodeBenchmarksModule } from '../src/modules/node-benchmarks/benchmarks.module';
 import { DEFAULT_BENCHMARK_TARGETS } from '../src/modules/node-benchmarks/targets';
 
 const input = { kind: 'HARDWARE', items: ['cpu'] };
@@ -30,6 +36,45 @@ assert.equal(
     false,
 );
 async function main() {
+    // Instantiate the real controller and its guards, not only the service with
+    // manual mocks. A missing CqrsModule breaks JwtDefaultGuard at REST startup.
+    @Global()
+    @Module({
+        providers: [
+            { provide: PrismaService, useValue: {} },
+            { provide: RawCacheService, useValue: {} },
+        ],
+        exports: [PrismaService, RawCacheService],
+    })
+    class FixtureDependencies {}
+    @Module({ imports: [FixtureDependencies, NodeBenchmarksModule] })
+    class StartupFixture {}
+    const app = await NestFactory.createApplicationContext(StartupFixture, {
+        logger: false,
+        abortOnError: false,
+    });
+    try {
+        assert.ok(app.get(NodeBenchmarksService));
+    } finally {
+        await app.close();
+    }
+    @Module({
+        imports: (Reflect.getMetadata(MODULE_METADATA.IMPORTS, NodeBenchmarksModule) as unknown[])
+            .filter((module) => module !== CqrsModule),
+        providers: Reflect.getMetadata(MODULE_METADATA.PROVIDERS, NodeBenchmarksModule),
+        controllers: Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, NodeBenchmarksModule),
+    })
+    class MissingCqrsModule {}
+    @Module({ imports: [FixtureDependencies, MissingCqrsModule] })
+    class BrokenStartupFixture {}
+    await assert.rejects(
+        NestFactory.createApplicationContext(BrokenStartupFixture, {
+            logger: false,
+            abortOnError: false,
+        }),
+        /QueryBus/,
+    );
+    console.log('Benchmark module/controller/guard startup regression passed');
     if (!process.env.BENCHMARK_TEST_DATABASE_URL) {
         console.log(
             'Benchmark schema tests passed; set BENCHMARK_TEST_DATABASE_URL for isolated database tests',
