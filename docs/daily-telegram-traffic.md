@@ -75,3 +75,13 @@ FROM telegram_daily_traffic_reports ORDER BY report_date DESC LIMIT 7;
 - 预览使用镜像内真实汇总/渲染代码生成；Host Top 5 与独立数据库查询一致。经用户确认发送一次，Telegram 已接受，消息长度 1764 字符。
 - 原日报内容 hash、状态、发送次数与发送时间保持不变；环境配置逐字节不变。每天北京时间 08:10 定时任务保持启用，之后的新日报自动使用新格式。
 - 13/13 节点在线，版本和配置不变，流量快照无积压或错误，未触发测速。临时 Host 排行 SQL 测试容器及卷已移除。
+
+### 3.17.2 MarkdownV2 发布
+
+- 功能提交 `8e4ac920d04741d5612b9f677a168c85f228151d`。
+- GitHub [Markdown/旧 HTML/真实 SQL 回归](https://github.com/wuansg/backend/actions/runs/37604641533)与 [amd64 镜像构建](https://github.com/wuansg/backend/actions/runs/37604702916)均通过。
+- 固定部署镜像 `ghcr.io/wuansg/backend:3.17.2-anytls@sha256:c762ec7126c40cc9f2d5bb4f650409fc53273ec62f53243c641e2a8c9fb4d528`，Frontend 3.16.0 和 Agent 3.15.0 不变。
+- 增量迁移已应用；原日报仍为 HTML，正文 hash、SENT 状态、attempts=1、sentAt 均未改变。环境文件逐字节不变，UTC 00:10/现有 users 会话不变。
+- 镜像内只读预览确认为 MarkdownV2、1673 字符，Host Top 5 与独立数据库查询一致；未额外发送 Telegram 预览。
+- 网站 HTTP 200，Backend 无重启，13/13 节点在线、配置/版本不变，流量快照无积压、无错误，无测速任务。
+- 升级前数据库/配置备份保存在 `/opt/remnawave/backups/release-3.17.2-20261007/`，旧镜像保留；本次临时 SQL 验证容器与卷已回收。
