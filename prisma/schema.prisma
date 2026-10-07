@@ -225,6 +225,7 @@ model Nodes {
   hosts                        HostsToNodes[]
   connectedUsers               UserTraffic[]
   nodeMetas                    NodeMeta[]
+  benchmarks                   NodeBenchmark[]
   torrentBlockerReports        TorrentBlockerReports[]
   usageSnapshotState           NodeUsageSnapshotState?
   usageSnapshotInbox           NodeUsageSnapshotInbox[]
@@ -233,7 +234,7 @@ model Nodes {
   runtimeInventory             NodeRuntimeInventory?
   geocheckHistory              NodeGeocheckHistory[]
   geocheckDriftEvents          NodeGeocheckDriftEvent[]
-  forwardingUsageHistory      NodeForwardingUsageHistory[]
+  forwardingUsageHistory       NodeForwardingUsageHistory[]
 
   activeConfigProfile ConfigProfiles? @relation(fields: [activeConfigProfileUuid], references: [uuid], onDelete: SetNull)
   provider            InfraProviders? @relation(fields: [providerUuid], references: [uuid], onDelete: SetNull)
@@ -862,6 +863,35 @@ model NodeMeta {
 
   @@id([nodeId])
   @@map("node_meta")
+}
+
+model NodeBenchmark {
+  id         String    @id @db.Uuid
+  nodeUuid   String    @map("node_uuid") @db.Uuid
+  kind       String    @db.VarChar(16)
+  status     String    @db.VarChar(24)
+  request    Json
+  result     Json      @default("{}")
+  message    String?   @db.VarChar(512)
+  leaseOwner String?   @map("lease_owner") @db.Uuid
+  leaseUntil DateTime? @map("lease_until")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+  finishedAt DateTime? @map("finished_at")
+  startedAt  DateTime? @map("started_at")
+  node       Nodes     @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+
+  @@index([nodeUuid, createdAt(sort: Desc)])
+  @@index([status, leaseUntil])
+  @@map("node_benchmarks")
+}
+
+model BenchmarkTarget {
+  id        String   @id @db.VarChar(64)
+  config    Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("benchmark_targets")
 }
 
 model TorrentBlockerReports {

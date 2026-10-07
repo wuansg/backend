@@ -17,6 +17,7 @@ import { InternalSquadModule } from './internal-squads/internal-squad.module';
 import { KeygenModule } from './keygen/keygen.module';
 import { ManagementModule } from './management/management.module';
 import { MetadataModule } from './metadata/metadata.module';
+import { NodeBenchmarksModule } from './node-benchmarks/benchmarks.module';
 import { NodeObservabilityModule } from './node-observability';
 import { NodePluginModule } from './node-plugins';
 import { NodesUsageHistoryModule } from './nodes-usage-history/nodes-usage-history.module';
@@ -62,6 +63,7 @@ import { UsersModule } from './users/users.module';
         ConditionalModule.registerWhen(SubscriptionSettingsModule, () => isRestApi()),
         ConditionalModule.registerWhen(RemnawaveServiceModule, () => isScheduler()),
         ConditionalModule.registerWhen(ConnectionsModule, () => isRestApi()),
+        ConditionalModule.registerWhen(NodeBenchmarksModule, () => isRestApi()),
         ConditionalModule.registerWhen(MetadataModule, () => isRestApi()),
         ConditionalModule.registerWhen(ManagementModule, () => isRestApi()),
     ],

@@ -642,6 +642,19 @@ export class AxiosService {
         });
     }
 
+    public async benchmarkRequest(path: string, opts: INodeConnectionOpts, data?: unknown) {
+        return this.request<{ response: unknown }>({
+            label: 'NODE BENCHMARK',
+            path: '/node/benchmarks/' + path,
+            opts,
+            data,
+            method: data === undefined ? 'get' : 'post',
+            handle500: true,
+            logAxiosError: false,
+            timeout: 10_000,
+        });
+    }
+
     public async getUsageSnapshotStatus(
         opts: INodeConnectionOpts,
     ): Promise<UsageSnapshotStatus | null> {

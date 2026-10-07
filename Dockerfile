@@ -36,9 +36,11 @@ COPY tsconfig*.json ./
 COPY src ./src
 COPY libs ./libs
 COPY scripts/test-snell.ts ./scripts/test-snell.ts
+COPY scripts/test-node-benchmarks.ts ./scripts/test-node-benchmarks.ts
 
 RUN npm run migrate:generate \
     && npm run test:snell \
+    && npm run test:node-benchmarks \
     && npm run build \
     && npm prune --omit=dev \
     && npm cache clean --force

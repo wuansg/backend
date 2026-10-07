@@ -27,6 +27,8 @@ export const OPAQUE_JSON_FIELDS = new Set([
     'pluginConfig',
     'rawInbound',
     'report',
+    'request',
+    'result',
     'responseHeadersAdd',
     'responseRules',
     'snippet',

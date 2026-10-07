@@ -1,6 +1,6 @@
 {
   "name": "@remnawave/backend",
-  "version": "3.14.1",
+  "version": "3.15.0",
   "private": false,
   "description": "Remnawave Panel Backend",
   "homepage": "https://github.com/remnawave",
@@ -15,6 +15,7 @@
   },
   "type": "commonjs",
   "scripts": {
+    "test:node-benchmarks": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-node-benchmarks.ts",
     "postinstall": "patch-package",
     "dev": "cross-env NODE_ENV=development INSTANCE_TYPE=api rspack --watch --mode development",
     "dev:worker": "NODE_ENV=development INSTANCE_TYPE=processor rspack --watch --mode development",
