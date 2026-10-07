@@ -1,0 +1,46 @@
+name: Daily Telegram traffic regression
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/common/daily-traffic/**'
+      - 'src/common/config/app-config/config.schema.ts'
+      - 'src/scheduler/tasks/daily-traffic/**'
+      - 'src/queue/notifications/telegram-bot-logger/**'
+      - 'prisma/migrations/*telegram_daily_traffic*/**'
+      - 'scripts/test-daily-traffic.ts'
+      - '.github/workflows/daily-traffic.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: remnawave_daily_traffic_test
+          POSTGRES_USER: daily_traffic_test
+          POSTGRES_PASSWORD: isolated-fixture-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U daily_traffic_test -d remnawave_daily_traffic_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DAILY_TRAFFIC_TEST_DATABASE_URL: postgresql://daily_traffic_test:isolated-fixture-only@127.0.0.1:5432/remnawave_daily_traffic_test?connection_limit=1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.x'
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx tsc --noEmit --incremental false
+      - run: npm run test:daily-traffic
+      - run: npm run test:usage-snapshots && npm run test:forwarding-usage

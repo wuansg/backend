@@ -285,6 +285,26 @@ model NodeUsageSnapshotInbox {
   @@map("node_usage_snapshot_inbox")
 }
 
+model TelegramDailyTrafficReport {
+  reportDate    DateTime  @id @map("report_date") @db.Date
+  target        String    @db.VarChar(16)
+  chatId        String    @map("chat_id")
+  threadId      String?   @map("thread_id")
+  message       String
+  status        String    @default("PENDING") @db.VarChar(16)
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  leaseToken    String?   @map("lease_token") @db.Uuid
+  leasedUntil   DateTime? @map("leased_until") @db.Timestamptz(3)
+  sentAt        DateTime? @map("sent_at") @db.Timestamptz(3)
+  lastError     String?   @map("last_error") @db.VarChar(128)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([status, nextAttemptAt])
+  @@map("telegram_daily_traffic_reports")
+}
+
 model NodeForwardingUsageHistory {
   nodeUuid      String   @map("node_uuid") @db.Uuid
   ruleId        String   @map("rule_id") @db.Uuid

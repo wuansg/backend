@@ -54,6 +54,13 @@ export const configSchema = z
         TELEGRAM_NOTIFY_CRM: z.string().optional(),
         TELEGRAM_NOTIFY_SERVICE: z.string().optional(),
         TELEGRAM_NOTIFY_TBLOCKER: z.string().optional(),
+        TELEGRAM_DAILY_TRAFFIC_ENABLED: booleanString('false'),
+        TELEGRAM_DAILY_TRAFFIC_TIME_UTC: z
+            .string()
+            .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use HH:mm in UTC')
+            .default('00:10'),
+        TELEGRAM_DAILY_TRAFFIC_TARGET: z.enum(['service', 'users']).default('service'),
+        TELEGRAM_DAILY_TRAFFIC_TOP_N: z.coerce.number().int().min(1).max(5).default(5),
 
         FRONT_END_DOMAIN: z.string(),
         PANEL_DOMAIN: z.string().optional(),
@@ -151,6 +158,27 @@ export const configSchema = z
             .pipe(z.array(z.number()).optional()),
     })
     .superRefine((data, ctx) => {
+        if (data.TELEGRAM_DAILY_TRAFFIC_ENABLED) {
+            const key =
+                data.TELEGRAM_DAILY_TRAFFIC_TARGET === 'users'
+                    ? 'TELEGRAM_NOTIFY_USERS'
+                    : 'TELEGRAM_NOTIFY_SERVICE';
+            if (!data.IS_TELEGRAM_NOTIFICATIONS_ENABLED) {
+                ctx.addIssue({
+                    code: 'custom',
+                    message: 'Telegram notifications must be enabled for daily traffic reports',
+                    path: ['TELEGRAM_DAILY_TRAFFIC_ENABLED'],
+                });
+            }
+            if (!/^-?\d+(?::[1-9]\d*)?$/.test(data[key] ?? '')) {
+                ctx.addIssue({
+                    code: 'custom',
+                    message:
+                        'Daily traffic target must be a numeric chat_id with an optional positive :thread_id',
+                    path: [key],
+                });
+            }
+        }
         if (!data.REDIS_SOCKET && (!data.REDIS_HOST || !data.REDIS_PORT)) {
             ctx.issues.push({
                 input: data,

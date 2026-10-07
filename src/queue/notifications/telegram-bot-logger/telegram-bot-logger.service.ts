@@ -47,4 +47,18 @@ export class TelegramBotLoggerQueueService
     public async rateLimit(seconds: number) {
         return this.queue.rateLimit(seconds * 1000);
     }
+
+    public async addDailyTrafficReport(reportDate: string) {
+        return this.addJob(
+            TelegramBotLoggerJobNames.sendDailyTrafficReport,
+            { reportDate },
+            {
+                jobId: `daily-traffic-${reportDate}`,
+                attempts: 1,
+                // DB outbox owns retries; Redis loss does not lose a report.
+                removeOnComplete: true,
+                removeOnFail: true,
+            },
+        );
+    }
 }

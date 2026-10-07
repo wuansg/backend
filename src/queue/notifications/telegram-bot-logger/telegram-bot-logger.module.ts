@@ -6,6 +6,7 @@ import { Module } from '@nestjs/common';
 import { ConditionalModule } from '@nestjs/config';
 import { CqrsModule } from '@nestjs/cqrs';
 
+import { DailyTrafficModule } from '@common/daily-traffic/daily-traffic.module';
 import { useBullBoard, useQueueProcessor } from '@common/utils/startup-app';
 
 import { TelegramBotModule } from '@integration-modules/notifications/telegram-bot/telegram-bot.module';
@@ -15,6 +16,7 @@ import { TelegramBotLoggerQueueProcessor } from './telegram-bot-logger.processor
 import { TelegramBotLoggerQueueService } from './telegram-bot-logger.service';
 
 const requiredModules = [
+    DailyTrafficModule,
     CqrsModule,
     ConditionalModule.registerWhen(TelegramBotModule, 'IS_TELEGRAM_NOTIFICATIONS_ENABLED'),
 ];

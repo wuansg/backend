@@ -1,6 +1,6 @@
 {
   "name": "@remnawave/backend",
-  "version": "3.16.0",
+  "version": "3.17.0",
   "private": false,
   "description": "Remnawave Panel Backend",
   "homepage": "https://github.com/remnawave",
@@ -15,6 +15,7 @@
   },
   "type": "commonjs",
   "scripts": {
+    "test:daily-traffic": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-daily-traffic.ts",
     "test:directional-usage": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-directional-usage.ts",
     "test:node-benchmarks": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-node-benchmarks.ts",
     "postinstall": "patch-package",

@@ -4,6 +4,8 @@ import { Worker } from 'bullmq';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger, Optional } from '@nestjs/common';
 
+import { DailyTrafficReportService } from '@common/daily-traffic/daily-traffic-report.service';
+
 import { TelegramApiError } from '@integration-modules/notifications/telegram-bot/telegram-api.error';
 import { TelegramApiService } from '@integration-modules/notifications/telegram-bot/telegram-api.service';
 import { TelegramTargetHealthService } from '@integration-modules/notifications/telegram-bot/telegram-target-health.service';
@@ -11,7 +13,7 @@ import { TelegramTargetHealthService } from '@integration-modules/notifications/
 import { QueueWorkerStartGuard } from '../../queue-worker-lifecycle.service';
 import { QUEUES_NAMES } from '../../queue.enum';
 import { TelegramBotLoggerJobNames } from './enums';
-import { IMessageEventPayload } from './interfaces';
+import { IMessageEventPayload, TTelegramTarget } from './interfaces';
 import { TelegramBotLoggerQueueService } from './telegram-bot-logger.service';
 
 @Processor(QUEUES_NAMES.NOTIFICATIONS.TELEGRAM, {
@@ -31,6 +33,7 @@ export class TelegramBotLoggerQueueProcessor extends WorkerHost implements Queue
         @Optional()
         private readonly telegramTargetHealthService: TelegramTargetHealthService,
         private readonly telegramBotLoggerQueueService: TelegramBotLoggerQueueService,
+        private readonly dailyTrafficReports: DailyTrafficReportService,
     ) {
         super();
     }
@@ -40,6 +43,12 @@ export class TelegramBotLoggerQueueProcessor extends WorkerHost implements Queue
 
         const isHealthy = await this.telegramApiService.healthcheck();
         if (!isHealthy) {
+            if (this.dailyTrafficReports.enabled()) {
+                this.logger.warn(
+                    'Telegram API is unavailable at startup; starting worker for durable daily report retries.',
+                );
+                return true;
+            }
             this.logger.error('Telegram API is not healthy. Worker will not start.');
             return false;
         }
@@ -49,6 +58,44 @@ export class TelegramBotLoggerQueueProcessor extends WorkerHost implements Queue
     }
 
     async process(job: Job) {
+        if (job.name === TelegramBotLoggerJobNames.sendDailyTrafficReport) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(job.data.reportDate ?? ''))
+                throw new Error('Invalid daily traffic report date');
+            let deliveredTarget: TTelegramTarget | undefined;
+            const delivered = await this.dailyTrafficReports.deliver(
+                new Date(`${job.data.reportDate}T00:00:00.000Z`),
+                async (report) => {
+                    if (!this.telegramApiService) throw new Error('Telegram unavailable');
+                    const target = report.target as TTelegramTarget;
+                    if (
+                        this.telegramTargetHealthService &&
+                        !(await this.telegramTargetHealthService.canSend(target))
+                    ) {
+                        throw new Error('Telegram target circuit is open');
+                    }
+                    try {
+                        await this.telegramApiService.sendMessage(report.chatId, report.message, {
+                            threadId: report.threadId ? parseInt(report.threadId, 10) : undefined,
+                        });
+                    } catch (error) {
+                        if (error instanceof TelegramApiError) {
+                            await this.telegramTargetHealthService
+                                ?.markFailure(target, error)
+                                .catch(() => undefined);
+                        }
+                        throw error;
+                    }
+                    deliveredTarget = target;
+                },
+            );
+            if (delivered && deliveredTarget) {
+                // SENT is durable before metrics/cache writes, even during a Redis outage.
+                await this.telegramTargetHealthService
+                    ?.markSuccess(deliveredTarget)
+                    .catch(() => undefined);
+            }
+            return delivered;
+        }
         if (!this.telegramApiService) {
             this.logger.error('Telegram API is not healthy. Skipping job.');
             return;
