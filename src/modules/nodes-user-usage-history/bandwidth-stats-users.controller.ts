@@ -55,6 +55,7 @@ export class BandwidthStatsUsersController {
             query.start,
             query.end,
             query.topUsersLimit,
+            query.trafficDirection,
         );
 
         return { response: errorHandler(result) };
@@ -74,6 +75,7 @@ export class BandwidthStatsUsersController {
             query.start,
             query.end,
             query.topHostsLimit,
+            query.trafficDirection,
         );
 
         return { response: errorHandler(result) };
@@ -93,6 +95,7 @@ export class BandwidthStatsUsersController {
             query.start,
             query.end,
             query.topNodesLimit,
+            query.trafficDirection,
         );
 
         return { response: errorHandler(result) };

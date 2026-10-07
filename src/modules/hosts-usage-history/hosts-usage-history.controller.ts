@@ -76,6 +76,7 @@ export class HostsUsageHistoryController {
             start,
             end,
             topHostsLimit,
+            query.trafficDirection,
         );
 
         const data = errorHandler(result);
@@ -128,6 +129,7 @@ export class HostsUsageHistoryController {
             query.start,
             query.end,
             query.topUsersLimit,
+            query.trafficDirection,
         );
 
         const data = errorHandler(result);

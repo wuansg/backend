@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { BANDWIDTH_STATS_ROUTES, REST_API } from '../../../api';
 import { getEndpointDetails } from '../../../constants';
-import { numberParamSchema } from '../../../models';
+import { numberParamSchema, trafficDirectionSchema } from '../../../models';
 
 export namespace GetStatsUserUsageCommand {
     export const url = REST_API.BANDWIDTH_STATS.USERS.GET_BY_ID;
@@ -23,6 +23,7 @@ export namespace GetStatsUserUsageCommand {
         start: z.iso.date().describe('Start date (YYYY-MM-DD)'),
         end: z.iso.date().describe('End date (YYYY-MM-DD)'),
         topNodesLimit: z.coerce.number().min(1).default(20),
+        trafficDirection: trafficDirectionSchema.optional(),
     });
 
     export const ResponseSchema = z.object({

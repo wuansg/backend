@@ -3,7 +3,11 @@ export interface IGetNodesUsageByRange {
     name: string;
     countryCode: string;
     total: bigint;
+    upload: bigint;
+    download: bigint;
     data: bigint[];
+    uploadData: bigint[];
+    downloadData: bigint[];
 }
 
 export interface ITopNode {
@@ -11,4 +15,6 @@ export interface ITopNode {
     name: string;
     countryCode: string;
     total: bigint;
+    upload: bigint;
+    download: bigint;
 }

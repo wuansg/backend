@@ -71,6 +71,7 @@ export class BandwidthStatsNodesController {
             query.start,
             query.end,
             query.topUsersLimit,
+            query.trafficDirection,
         );
         const data = errorHandler(result);
         return {
@@ -92,6 +93,7 @@ export class BandwidthStatsNodesController {
             query.start,
             query.end,
             query.topUsersLimit,
+            query.trafficDirection,
         );
         const data = errorHandler(result);
         return {

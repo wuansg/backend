@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { BANDWIDTH_STATS_ROUTES, REST_API } from '../../../api';
 import { getEndpointDetails } from '../../../constants';
+import { trafficDirectionSchema } from '../../../models';
 
 export namespace GetStatsHostUsersUsageCommand {
     export const url = REST_API.BANDWIDTH_STATS.HOSTS.GET_USERS;
@@ -18,6 +19,7 @@ export namespace GetStatsHostUsersUsageCommand {
         start: z.string().date(),
         end: z.string().date(),
         topUsersLimit: z.coerce.number().min(1).default(100),
+        trafficDirection: trafficDirectionSchema.optional(),
     });
 
     export type RequestQuery = z.infer<typeof RequestQuerySchema>;

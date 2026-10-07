@@ -5,6 +5,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { fail, ok, TResult } from '@common/types';
 import { getDateRangeArrayUtil } from '@common/utils';
 import { ERRORS } from '@libs/contracts/constants';
+import { TrafficDirection } from '@libs/contracts/models';
 
 import { GetStatsNodesUsageResponseModel } from './models';
 import { NodesUsageHistoryRepository } from './repositories/nodes-usage-history.repository';
@@ -18,6 +19,7 @@ export class NodesUsageHistoryService {
         start: string,
         end: string,
         topNodesLimit: number,
+        direction: TrafficDirection = 'total',
     ): Promise<TResult<GetStatsNodesUsageResponseModel>> {
         try {
             const { startDate, endDate, dates } = getDateRangeArrayUtil(
@@ -25,29 +27,34 @@ export class NodesUsageHistoryService {
                 dayjs.utc(end).endOf('day').toDate(),
             );
 
-            const dailyTraffic = await this.nodeUsageHistoryRepository.getDailyTrafficSum(
-                startDate,
-                endDate,
-                dates,
-            );
+            const dailyTraffic =
+                await this.nodeUsageHistoryRepository.getDirectionalDailyTrafficSum(
+                    startDate,
+                    endDate,
+                    dates,
+                );
 
             const topNodes = await this.nodeUsageHistoryRepository.getTopNodesByTraffic(
                 startDate,
                 endDate,
                 topNodesLimit,
+                direction,
             );
 
             const nodesUsage = await this.nodeUsageHistoryRepository.getNodesUsageByRange(
                 startDate,
                 endDate,
                 dates,
+                direction,
             );
 
             return ok(
                 new GetStatsNodesUsageResponseModel({
                     categories: dates,
                     series: nodesUsage,
-                    sparklineData: dailyTraffic,
+                    sparklineData: dailyTraffic.total,
+                    uploadSparklineData: dailyTraffic.upload,
+                    downloadSparklineData: dailyTraffic.download,
                     topNodes: topNodes,
                 }),
             );

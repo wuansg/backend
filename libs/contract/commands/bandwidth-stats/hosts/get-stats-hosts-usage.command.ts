@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { BANDWIDTH_STATS_ROUTES, REST_API } from '../../../api';
 import { getEndpointDetails } from '../../../constants';
+import { trafficDirectionSchema } from '../../../models';
 
 export namespace GetStatsHostsUsageCommand {
     export const url = REST_API.BANDWIDTH_STATS.HOSTS.GET;
@@ -18,6 +19,7 @@ export namespace GetStatsHostsUsageCommand {
         start: z.string().date(),
         end: z.string().date(),
         topHostsLimit: z.coerce.number().min(1).default(20),
+        trafficDirection: trafficDirectionSchema.optional(),
     });
 
     export type RequestQuery = z.infer<typeof RequestQuerySchema>;
@@ -42,16 +44,22 @@ export namespace GetStatsHostsUsageCommand {
         isShared: z.boolean(),
         hosts: z.array(HostUsageMemberSchema),
         total: z.number(),
+        upload: z.number(),
+        download: z.number(),
     });
 
     export const ResponseSchema = z.object({
         response: z.object({
             categories: z.array(z.string()),
             sparklineData: z.array(z.number()),
+            uploadSparklineData: z.array(z.number()),
+            downloadSparklineData: z.array(z.number()),
             topHosts: z.array(HostUsageItemSchema),
             series: z.array(
                 HostUsageItemSchema.extend({
                     data: z.array(z.number()),
+                    uploadData: z.array(z.number()),
+                    downloadData: z.array(z.number()),
                 }),
             ),
         }),

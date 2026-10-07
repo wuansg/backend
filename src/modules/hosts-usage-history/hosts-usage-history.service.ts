@@ -6,6 +6,7 @@ import { QueryBus } from '@nestjs/cqrs';
 import { fail, ok, TResult } from '@common/types';
 import { getDateRangeArrayUtil } from '@common/utils';
 import { ERRORS } from '@libs/contracts/constants';
+import { TrafficDirection } from '@libs/contracts/models';
 
 import { HostsRepository } from '@modules/hosts/repositories/hosts.repository';
 import { GetUserByUniqueFieldQuery } from '@modules/users/queries/get-user-by-unique-field';
@@ -26,6 +27,7 @@ export class HostsUsageHistoryService {
         start: string,
         end: string,
         topHostsLimit: number,
+        direction: TrafficDirection = 'total',
     ): Promise<TResult<GetStatsHostsUsageResponseModel>> {
         try {
             const { startDate, endDate, dates } = getDateRangeArrayUtil(
@@ -33,29 +35,34 @@ export class HostsUsageHistoryService {
                 dayjs.utc(end).endOf('day').toDate(),
             );
 
-            const dailyTraffic = await this.hostsUsageHistoryRepository.getDailyTrafficSum(
-                startDate,
-                endDate,
-                dates,
-            );
+            const dailyTraffic =
+                await this.hostsUsageHistoryRepository.getDirectionalDailyTrafficSum(
+                    startDate,
+                    endDate,
+                    dates,
+                );
 
             const topHosts = await this.hostsUsageHistoryRepository.getTopHostsByTraffic(
                 startDate,
                 endDate,
                 topHostsLimit,
+                direction,
             );
 
             const hostsUsage = await this.hostsUsageHistoryRepository.getHostsUsageByRange(
                 startDate,
                 endDate,
                 dates,
+                direction,
             );
 
             return ok(
                 new GetStatsHostsUsageResponseModel({
                     categories: dates,
                     series: hostsUsage,
-                    sparklineData: dailyTraffic,
+                    sparklineData: dailyTraffic.total,
+                    uploadSparklineData: dailyTraffic.upload,
+                    downloadSparklineData: dailyTraffic.download,
                     topHosts,
                 }),
             );
@@ -70,6 +77,7 @@ export class HostsUsageHistoryService {
         start: string,
         end: string,
         topHostsLimit: number,
+        direction: TrafficDirection = 'total',
     ): Promise<TResult<GetStatsHostsUsageResponseModel>> {
         try {
             const user = await this.queryBus.execute(
@@ -96,6 +104,7 @@ export class HostsUsageHistoryService {
                 startDate,
                 endDate,
                 topHostsLimit,
+                direction,
             );
 
             const hostsUsage = await this.hostsUsageHistoryRepository.getUserHostsUsageByRange(
@@ -103,6 +112,7 @@ export class HostsUsageHistoryService {
                 startDate,
                 endDate,
                 dates,
+                direction,
             );
 
             return ok(
@@ -126,6 +136,7 @@ export class HostsUsageHistoryService {
         start: string,
         end: string,
         topUsersLimit: number,
+        direction: TrafficDirection = 'total',
     ): Promise<TResult<GetStatsHostUsersUsageResponseModel>> {
         try {
             const host = await this.hostsRepository.findByUUID(uuid);
@@ -150,6 +161,7 @@ export class HostsUsageHistoryService {
                 startDate,
                 endDate,
                 topUsersLimit,
+                direction,
             );
 
             return ok(

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { BANDWIDTH_STATS_ROUTES, REST_API } from '../../../api';
 import { getEndpointDetails } from '../../../constants';
+import { trafficDirectionSchema } from '../../../models';
 
 export namespace GetStatsNodesUsageCommand {
     export const url = REST_API.BANDWIDTH_STATS.NODES.GET;
@@ -22,12 +23,15 @@ export namespace GetStatsNodesUsageCommand {
             .min(1)
             .default(20)
             .describe('Limit of top nodes to return'),
+        trafficDirection: trafficDirectionSchema.optional(),
     });
 
     export const ResponseSchema = z.object({
         response: z.object({
             categories: z.array(z.string()),
             sparklineData: z.array(z.number()),
+            uploadSparklineData: z.array(z.number()),
+            downloadSparklineData: z.array(z.number()),
             topNodes: z.array(
                 z.object({
                     uuid: z.uuid(),
@@ -35,6 +39,8 @@ export namespace GetStatsNodesUsageCommand {
                     name: z.string(),
                     countryCode: z.string(),
                     total: z.number(),
+                    upload: z.number(),
+                    download: z.number(),
                 }),
             ),
             series: z.array(
@@ -44,7 +50,11 @@ export namespace GetStatsNodesUsageCommand {
                     color: z.string(),
                     countryCode: z.string(),
                     total: z.number(),
+                    upload: z.number(),
+                    download: z.number(),
                     data: z.array(z.number()),
+                    uploadData: z.array(z.number()),
+                    downloadData: z.array(z.number()),
                 }),
             ),
         }),

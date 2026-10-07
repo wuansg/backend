@@ -22,7 +22,11 @@ export class GetStatsHostsUsageResponseModel {
         }[];
         color: string;
         total: number;
+        upload: number;
+        download: number;
         data: number[];
+        uploadData: number[];
+        downloadData: number[];
     }[];
     public readonly sparklineData: number[];
     public readonly uploadSparklineData: number[];
@@ -45,6 +49,8 @@ export class GetStatsHostsUsageResponseModel {
         }[];
         color: string;
         total: number;
+        upload: number;
+        download: number;
     }[];
 
     constructor(data: {
@@ -69,7 +75,11 @@ export class GetStatsHostsUsageResponseModel {
             hosts: item.hosts,
             color: colorFromUuid(item.uuid),
             total: Number(item.total),
+            upload: Number(item.upload),
+            download: Number(item.download),
             data: item.data.map((item) => Number(item)),
+            uploadData: item.uploadData.map((item) => Number(item)),
+            downloadData: item.downloadData.map((item) => Number(item)),
         }));
         this.sparklineData = data.sparklineData;
         this.uploadSparklineData = data.uploadSparklineData ?? [];
@@ -87,6 +97,8 @@ export class GetStatsHostsUsageResponseModel {
             hosts: item.hosts,
             color: colorFromUuid(item.uuid),
             total: Number(item.total),
+            upload: Number(item.upload),
+            download: Number(item.download),
         }));
     }
 }

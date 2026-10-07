@@ -6,6 +6,7 @@ import { QueryBus } from '@nestjs/cqrs';
 import { fail, ok, TResult } from '@common/types';
 import { getDateRangeArrayUtil } from '@common/utils/get-date-range-array.util';
 import { ERRORS } from '@libs/contracts/constants';
+import { TrafficDirection } from '@libs/contracts/models';
 
 import { GetAllNodesQuery } from '@modules/nodes/queries/get-all-nodes';
 import { GetNodeByUuidQuery } from '@modules/nodes/queries/get-node-by-uuid';
@@ -32,6 +33,7 @@ export class NodesUserUsageHistoryService {
         start: string,
         end: string,
         topNodesLimit: number,
+        direction: TrafficDirection = 'total',
     ): Promise<TResult<GetStatsUserUsageResponseModel>> {
         try {
             const { startDate, endDate, dates } = getDateRangeArrayUtil(
@@ -51,6 +53,7 @@ export class NodesUserUsageHistoryService {
                 startDate,
                 endDate,
                 topNodesLimit,
+                direction,
             );
 
             const nodesUsage = await this.nodeUserUsageHistoryRepository.getUserNodesUsageByRange(
@@ -58,6 +61,7 @@ export class NodesUserUsageHistoryService {
                 startDate,
                 endDate,
                 dates,
+                direction,
             );
 
             return ok(
@@ -81,6 +85,7 @@ export class NodesUserUsageHistoryService {
         start: string,
         end: string,
         topUsersLimit: number,
+        direction: TrafficDirection = 'total',
     ): Promise<TResult<GetStatsNodesUsersUsageResponseModel>> {
         try {
             const node = await this.queryBus.execute(new GetNodeByUuidQuery(nodeUuid));
@@ -105,6 +110,7 @@ export class NodesUserUsageHistoryService {
                 startDate,
                 endDate,
                 topUsersLimit,
+                direction,
             );
 
             return ok(
@@ -127,6 +133,7 @@ export class NodesUserUsageHistoryService {
         start: string,
         end: string,
         topUsersLimit: number,
+        direction: TrafficDirection = 'total',
     ): Promise<TResult<GetStatsNodesUsersUsageResponseModel>> {
         try {
             const nodeIds = new Set<bigint>();
@@ -159,6 +166,7 @@ export class NodesUserUsageHistoryService {
                 startDate,
                 endDate,
                 topUsersLimit,
+                direction,
             );
 
             return ok(
@@ -180,6 +188,7 @@ export class NodesUserUsageHistoryService {
         start: string,
         end: string,
         topUsersLimit: number,
+        direction: TrafficDirection = 'total',
     ): Promise<TResult<GetStatsUsersUsageResponseModel>> {
         try {
             const { startDate, endDate, dates } = getDateRangeArrayUtil(
@@ -197,6 +206,7 @@ export class NodesUserUsageHistoryService {
                 startDate,
                 endDate,
                 topUsersLimit,
+                direction,
             );
 
             const usersUsage = await this.nodeUserUsageHistoryRepository.getUsersUsageByRange(
@@ -204,6 +214,7 @@ export class NodesUserUsageHistoryService {
                 endDate,
                 dates,
                 topUsersLimit,
+                direction,
             );
 
             return ok(

@@ -8,6 +8,9 @@ import { Injectable } from '@nestjs/common';
 import { TxKyselyService } from '@common/database/tx-kysely.service';
 import { getKyselyUuid } from '@common/helpers';
 import { ICrudHistoricalRecords } from '@common/types/crud-port';
+import { trafficColumn, trafficSqlColumn } from '@common/utils/traffic-direction.util';
+import { getUtcUsageDateSql, getUtcUsageDateExpression } from '@common/utils/utc-usage-range.util';
+import { TrafficDirection } from '@libs/contracts/models';
 
 import { BulkUpsertHistoryEntryBuilder } from '../builders/bulk-upsert-history-entry/bulk-upsert-history-entry.builder';
 import { NodesUserUsageHistoryEntity } from '../entities/nodes-user-usage-history.entity';
@@ -88,6 +91,7 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         start: Date,
         end: Date,
         dates: string[],
+        direction: TrafficDirection = 'total',
     ): Promise<IGetUniversalSeries[]> {
         const query = Prisma.sql`
             WITH daily_usage AS (
@@ -103,8 +107,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 INNER JOIN nodes_user_usage_history nuh ON nuh.node_id = n.id
                 WHERE
                     nuh.user_id = ${userId}
-                    AND nuh.created_at >= ${start}::date
-                    AND nuh.created_at <= ${end}::date
+                    AND nuh.created_at >= ${getUtcUsageDateSql(start)}
+                    AND nuh.created_at <= ${getUtcUsageDateSql(end)}
                 GROUP BY n.uuid, n.name, n.country_code, nuh.created_at
             ),
             nodes_with_totals AS (
@@ -143,7 +147,7 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 ON du.uuid = nt.uuid
                 AND du.date = d.date::date
             GROUP BY nt.uuid, nt.name, nt.country_code, nt.upload_bytes, nt.download_bytes, nt.total_bytes
-            ORDER BY nt.total_bytes DESC;
+            ORDER BY nt.${trafficSqlColumn(direction)} DESC, nt.uuid;
         `;
 
         return await this.prisma.tx.$queryRaw<IGetUniversalSeries[]>(query);
@@ -154,6 +158,7 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         start: Date,
         end: Date,
         limit: number = 5,
+        direction: TrafficDirection = 'total',
     ): Promise<IGetUniversalTopNode[]> {
         return await this.qb.kysely
             .selectFrom('nodes as n')
@@ -167,10 +172,11 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 (eb) => eb.fn.sum<bigint>('nuh.totalBytes').as('total'),
             ])
             .where('nuh.userId', '=', userId)
-            .where('nuh.createdAt', '>=', start)
-            .where('nuh.createdAt', '<=', end)
+            .where('nuh.createdAt', '>=', getUtcUsageDateExpression(start))
+            .where('nuh.createdAt', '<=', getUtcUsageDateExpression(end))
             .groupBy(['n.uuid', 'n.name', 'n.countryCode'])
-            .orderBy((eb) => eb.fn.sum<bigint>('nuh.totalBytes'), 'desc')
+            .orderBy((eb) => eb.fn.sum<bigint>(`nuh.${trafficColumn(direction)}`), 'desc')
+            .orderBy('n.uuid')
             .limit(limit)
             .execute();
     }
@@ -191,8 +197,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 FROM nodes_user_usage_history
                 WHERE 
                     user_id = ${userId}
-                    AND created_at >= ${start}::date
-                    AND created_at <= ${end}::date
+                    AND created_at >= ${getUtcUsageDateSql(start)}
+                    AND created_at <= ${getUtcUsageDateSql(end)}
                 GROUP BY created_at
             )
             SELECT 
@@ -215,8 +221,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         const result = await this.qb.kysely
             .selectFrom('nodesUserUsageHistory as nuh')
             .select([sql<bigint>`coalesce(sum(nuh.total_bytes), 0)`.as('totalBytes')])
-            .where('nuh.createdAt', '>=', start)
-            .where('nuh.createdAt', '<', endExclusive)
+            .where('nuh.createdAt', '>=', getUtcUsageDateExpression(start))
+            .where('nuh.createdAt', '<', getUtcUsageDateExpression(endExclusive))
             .where('nuh.userId', 'in', (eb) =>
                 eb
                     .selectFrom('users')
@@ -234,6 +240,7 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         start: Date,
         end: Date,
         limit: number = 5,
+        direction: TrafficDirection = 'total',
     ): Promise<IGetUniversalTopUser[]> {
         return await this.qb.kysely
             .selectFrom('users as u')
@@ -246,10 +253,11 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 (eb) => eb.fn.sum<bigint>('nuh.totalBytes').as('total'),
             ])
             .where('nuh.nodeId', '=', nodeId)
-            .where('nuh.createdAt', '>=', start)
-            .where('nuh.createdAt', '<=', end)
+            .where('nuh.createdAt', '>=', getUtcUsageDateExpression(start))
+            .where('nuh.createdAt', '<=', getUtcUsageDateExpression(end))
             .groupBy(['u.id', 'u.username'])
-            .orderBy((eb) => eb.fn.sum<bigint>('nuh.totalBytes'), 'desc')
+            .orderBy((eb) => eb.fn.sum<bigint>(`nuh.${trafficColumn(direction)}`), 'desc')
+            .orderBy('u.id')
             .limit(limit)
             .execute();
     }
@@ -270,8 +278,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
             FROM nodes_user_usage_history
             WHERE 
                 node_id = ${nodeId}
-                AND created_at >= ${start}::date
-                AND created_at <= ${end}::date
+                AND created_at >= ${getUtcUsageDateSql(start)}
+                AND created_at <= ${getUtcUsageDateSql(end)}
             GROUP BY created_at
         )
         SELECT 
@@ -296,6 +304,13 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         end: Date,
         dates: string[],
     ): Promise<{ total: number[]; upload: number[]; download: number[] }> {
+        if (nodeIds.length === 0) {
+            return {
+                total: dates.map(() => 0),
+                upload: dates.map(() => 0),
+                download: dates.map(() => 0),
+            };
+        }
         const query = Prisma.sql`
         WITH daily_traffic AS (
             SELECT 
@@ -306,8 +321,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
             FROM nodes_user_usage_history
             WHERE 
                 node_id IN (${Prisma.join(nodeIds)})
-                AND created_at >= ${start}::date
-                AND created_at <= ${end}::date
+                AND created_at >= ${getUtcUsageDateSql(start)}
+                AND created_at <= ${getUtcUsageDateSql(end)}
             GROUP BY created_at
         )
         SELECT 
@@ -331,6 +346,7 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         start: Date,
         end: Date,
         limit: number = 5,
+        direction: TrafficDirection = 'total',
     ): Promise<IGetUniversalTopUser[]> {
         return await this.qb.kysely
             .selectFrom('users as u')
@@ -343,10 +359,11 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 (eb) => eb.fn.sum<bigint>('nuh.totalBytes').as('total'),
             ])
             .where('nuh.nodeId', 'in', nodeIds)
-            .where('nuh.createdAt', '>=', start)
-            .where('nuh.createdAt', '<=', end)
+            .where('nuh.createdAt', '>=', getUtcUsageDateExpression(start))
+            .where('nuh.createdAt', '<=', getUtcUsageDateExpression(end))
             .groupBy(['u.id', 'u.username'])
-            .orderBy((eb) => eb.fn.sum<bigint>('nuh.totalBytes'), 'desc')
+            .orderBy((eb) => eb.fn.sum<bigint>(`nuh.${trafficColumn(direction)}`), 'desc')
+            .orderBy('u.id')
             .limit(limit)
             .execute();
     }
@@ -365,8 +382,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                     SUM(total_bytes) AS total_bytes
                 FROM nodes_user_usage_history
                 WHERE
-                    created_at >= ${start}::date
-                    AND created_at <= ${end}::date
+                    created_at >= ${getUtcUsageDateSql(start)}
+                    AND created_at <= ${getUtcUsageDateSql(end)}
                 GROUP BY created_at::date
             )
             SELECT
@@ -389,6 +406,7 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         start: Date,
         end: Date,
         limit: number = 100,
+        direction: TrafficDirection = 'total',
     ): Promise<IGetUniversalTopUser[]> {
         return await this.qb.kysely
             .selectFrom('users as u')
@@ -400,10 +418,11 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 (eb) => eb.fn.sum<bigint>('nuh.downloadBytes').as('download'),
                 (eb) => eb.fn.sum<bigint>('nuh.totalBytes').as('total'),
             ])
-            .where('nuh.createdAt', '>=', start)
-            .where('nuh.createdAt', '<=', end)
+            .where('nuh.createdAt', '>=', getUtcUsageDateExpression(start))
+            .where('nuh.createdAt', '<=', getUtcUsageDateExpression(end))
             .groupBy(['u.id', 'u.username'])
-            .orderBy((eb) => eb.fn.sum<bigint>('nuh.totalBytes'), 'desc')
+            .orderBy((eb) => eb.fn.sum<bigint>(`nuh.${trafficColumn(direction)}`), 'desc')
+            .orderBy('u.id')
             .limit(limit)
             .execute();
     }
@@ -413,6 +432,7 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         end: Date,
         dates: string[],
         limit: number = 100,
+        direction: TrafficDirection = 'total',
     ): Promise<IGetUniversalUserSeries[]> {
         const query = Prisma.sql`
             WITH daily_usage AS (
@@ -426,8 +446,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 FROM users u
                 INNER JOIN nodes_user_usage_history nuh ON nuh.user_id = u.id
                 WHERE
-                    nuh.created_at >= ${start}::date
-                    AND nuh.created_at <= ${end}::date
+                    nuh.created_at >= ${getUtcUsageDateSql(start)}
+                    AND nuh.created_at <= ${getUtcUsageDateSql(end)}
                 GROUP BY u.id, u.username, nuh.created_at::date
             ),
             users_with_totals AS (
@@ -448,7 +468,7 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                     download_bytes,
                     total_bytes
                 FROM users_with_totals
-                ORDER BY total_bytes DESC
+                ORDER BY ${trafficSqlColumn(direction)} DESC, id
                 LIMIT ${limit}
             )
             SELECT
@@ -475,7 +495,7 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
                 ON du.id = lu.id
                 AND du.date = d.date::date
             GROUP BY lu.id, lu.username, lu.upload_bytes, lu.download_bytes, lu.total_bytes
-            ORDER BY lu.total_bytes DESC;
+            ORDER BY lu.${trafficSqlColumn(direction)} DESC, lu.id;
         `;
 
         return await this.prisma.tx.$queryRaw<IGetUniversalUserSeries[]>(query);
@@ -506,8 +526,8 @@ export class NodesUserUsageHistoryRepository implements ICrudHistoricalRecords<N
         const rows = await this.qb.kysely
             .selectFrom('nodesUserUsageHistory as h')
             .where('h.nodeId', 'in', nodeIds)
-            .where('h.createdAt', '>=', start)
-            .where('h.createdAt', '<=', end)
+            .where('h.createdAt', '>=', getUtcUsageDateExpression(start))
+            .where('h.createdAt', '<=', getUtcUsageDateExpression(end))
             .groupBy(['h.nodeId', 'h.userId'])
             .having((eb) => eb(eb.fn.sum('h.totalBytes'), '>=', BigInt(minTotalBytes)))
             .select((eb) => [

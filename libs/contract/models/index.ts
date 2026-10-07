@@ -39,3 +39,4 @@ export * from './users.schema';
 export * from './webhook';
 export * from './template-injector';
 export * from './path-params.schema';
+export * from './traffic-direction.schema';

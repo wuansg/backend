@@ -10,7 +10,11 @@ export interface IGetHostsUsageByRange {
     isShared: boolean;
     hosts: IHostUsageMember[];
     total: bigint;
+    upload: bigint;
+    download: bigint;
     data: bigint[];
+    uploadData: bigint[];
+    downloadData: bigint[];
 }
 
 export interface ITopHost {
@@ -25,6 +29,8 @@ export interface ITopHost {
     isShared: boolean;
     hosts: IHostUsageMember[];
     total: bigint;
+    upload: bigint;
+    download: bigint;
 }
 
 export interface IHostUsageMember {

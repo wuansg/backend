@@ -5,6 +5,9 @@ import { Prisma } from '@prisma/client';
 import { Injectable } from '@nestjs/common';
 
 import { ICrudHistoricalRecords } from '@common/types/crud-port';
+import { trafficSqlColumn } from '@common/utils/traffic-direction.util';
+import { getUtcUsageTimestampSql } from '@common/utils/utc-usage-range.util';
+import { TrafficDirection } from '@libs/contracts/models';
 
 import { HostsUsageHistoryEntity } from '../entities';
 import { HostsUsageHistoryConverter } from '../hosts-usage-history.converter';
@@ -289,8 +292,9 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         start: Date,
         end: Date,
         dates: string[],
+        direction: TrafficDirection = 'total',
     ): Promise<IGetHostsUsageByRange[]> {
-        return await this.getHostsUsageByRangeFiltered(start, end, dates);
+        return await this.getHostsUsageByRangeFiltered(start, end, dates, undefined, direction);
     }
 
     public async getHostsUsageByRangeForHostUuids(
@@ -307,6 +311,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         start: Date,
         end: Date,
         dates: string[],
+        direction: TrafficDirection = 'total',
     ): Promise<IGetHostsUsageByRange[]> {
         const query = Prisma.sql`
             WITH selected_groups AS (
@@ -316,8 +321,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 FROM user_hosts_usage_history uhuh
                 WHERE
                     uhuh.user_id = ${userId}
-                    AND uhuh.created_at >= ${start}
-                    AND uhuh.created_at <= ${end}
+                    AND uhuh.created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND uhuh.created_at <= ${getUtcUsageTimestampSql(end)}
             ),
             host_rows AS (
                 SELECT
@@ -337,8 +342,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 INNER JOIN hosts h ON h.uuid = uhuh.host_uuid
                 WHERE
                     uhuh.user_id = ${userId}
-                    AND uhuh.created_at >= ${start}
-                    AND uhuh.created_at <= ${end}
+                    AND uhuh.created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND uhuh.created_at <= ${getUtcUsageTimestampSql(end)}
                 GROUP BY
                     uhuh.node_uuid,
                     uhuh.inbound_tag,
@@ -379,6 +384,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     uhuh.node_uuid,
                     uhuh.inbound_tag,
                     uhuh.created_at,
+                    MAX(uhuh.upload_bytes) AS upload_bytes,
+                    MAX(uhuh.download_bytes) AS download_bytes,
                     MAX(uhuh.total_bytes) AS total_bytes
                 FROM user_hosts_usage_history uhuh
                 INNER JOIN selected_groups sg
@@ -386,23 +393,27 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     AND sg.inbound_tag = uhuh.inbound_tag
                 WHERE
                     uhuh.user_id = ${userId}
-                    AND uhuh.created_at >= ${start}
-                    AND uhuh.created_at <= ${end}
+                    AND uhuh.created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND uhuh.created_at <= ${getUtcUsageTimestampSql(end)}
                 GROUP BY uhuh.node_uuid, uhuh.inbound_tag, uhuh.created_at
             ),
             daily_usage AS (
                 SELECT
                     node_uuid,
                     inbound_tag,
-                    DATE_TRUNC('day', created_at)::date AS date,
+                    created_at::date AS date,
+                    SUM(upload_bytes) AS upload_bytes,
+                    SUM(download_bytes) AS download_bytes,
                     SUM(total_bytes) AS bytes
                 FROM dedup_hourly
-                GROUP BY node_uuid, inbound_tag, DATE_TRUNC('day', created_at)
+                GROUP BY node_uuid, inbound_tag, created_at::date
             ),
             groups_with_totals AS (
                 SELECT
                     node_uuid,
                     inbound_tag,
+                    SUM(upload_bytes) AS upload_bytes,
+                    SUM(download_bytes) AS download_bytes,
                     SUM(bytes) AS total_bytes
                 FROM daily_usage
                 GROUP BY node_uuid, inbound_tag
@@ -419,6 +430,10 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 gh.is_shared as "isShared",
                 gh.hosts as "hosts",
                 gt.total_bytes as "total",
+                gt.upload_bytes as "upload",
+                gt.download_bytes as "download",
+                ARRAY_AGG(COALESCE(du.upload_bytes, 0) ORDER BY d.ord) AS "uploadData",
+                ARRAY_AGG(COALESCE(du.download_bytes, 0) ORDER BY d.ord) AS "downloadData",
                 ARRAY_AGG(
                     COALESCE(du.bytes, 0)
                     ORDER BY d.ord
@@ -442,8 +457,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 gh.tag,
                 gh.is_shared,
                 gh.hosts,
-                gt.total_bytes
-            ORDER BY gt.total_bytes DESC;
+                gt.total_bytes, gt.upload_bytes, gt.download_bytes
+            ORDER BY gt.${trafficSqlColumn(direction)} DESC, gh.node_uuid, gh.inbound_tag;
         `;
 
         return await this.prisma.tx.$queryRaw<IGetHostsUsageByRange[]>(query);
@@ -454,7 +469,9 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         end: Date,
         dates: string[],
         hostUuids?: string[],
+        direction: TrafficDirection = 'total',
     ): Promise<IGetHostsUsageByRange[]> {
+        if (hostUuids?.length === 0) return [];
         const hostUuidFilter = hostUuids
             ? Prisma.sql`AND huh.host_uuid IN (${Prisma.join(
                   hostUuids.map((hostUuid) => Prisma.sql`${hostUuid}::uuid`),
@@ -468,8 +485,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     huh.inbound_tag
                 FROM hosts_usage_history huh
                 WHERE
-                    huh.created_at >= ${start}
-                    AND huh.created_at <= ${end}
+                    huh.created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND huh.created_at <= ${getUtcUsageTimestampSql(end)}
                     ${hostUuidFilter}
             ),
             host_rows AS (
@@ -489,8 +506,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     AND sg.inbound_tag = huh.inbound_tag
                 INNER JOIN hosts h ON h.uuid = huh.host_uuid
                 WHERE
-                    huh.created_at >= ${start}
-                    AND huh.created_at <= ${end}
+                    huh.created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND huh.created_at <= ${getUtcUsageTimestampSql(end)}
                 GROUP BY
                     huh.node_uuid,
                     huh.inbound_tag,
@@ -531,29 +548,35 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     huh.node_uuid,
                     huh.inbound_tag,
                     huh.created_at,
+                    MAX(huh.upload_bytes) AS upload_bytes,
+                    MAX(huh.download_bytes) AS download_bytes,
                     MAX(huh.total_bytes) AS total_bytes
                 FROM hosts_usage_history huh
                 INNER JOIN selected_groups sg
                     ON sg.node_uuid = huh.node_uuid
                     AND sg.inbound_tag = huh.inbound_tag
                 WHERE
-                    huh.created_at >= ${start}
-                    AND huh.created_at <= ${end}
+                    huh.created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND huh.created_at <= ${getUtcUsageTimestampSql(end)}
                 GROUP BY huh.node_uuid, huh.inbound_tag, huh.created_at
             ),
             daily_usage AS (
                 SELECT
                     node_uuid,
                     inbound_tag,
-                    DATE_TRUNC('day', created_at)::date AS date,
+                    created_at::date AS date,
+                    SUM(upload_bytes) AS upload_bytes,
+                    SUM(download_bytes) AS download_bytes,
                     SUM(total_bytes) AS bytes
                 FROM dedup_hourly
-                GROUP BY node_uuid, inbound_tag, DATE_TRUNC('day', created_at)
+                GROUP BY node_uuid, inbound_tag, created_at::date
             ),
             groups_with_totals AS (
                 SELECT
                     node_uuid,
                     inbound_tag,
+                    SUM(upload_bytes) AS upload_bytes,
+                    SUM(download_bytes) AS download_bytes,
                     SUM(bytes) AS total_bytes
                 FROM daily_usage
                 GROUP BY node_uuid, inbound_tag
@@ -570,6 +593,10 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 gh.is_shared as "isShared",
                 gh.hosts as "hosts",
                 gt.total_bytes as "total",
+                gt.upload_bytes as "upload",
+                gt.download_bytes as "download",
+                ARRAY_AGG(COALESCE(du.upload_bytes, 0) ORDER BY d.ord) AS "uploadData",
+                ARRAY_AGG(COALESCE(du.download_bytes, 0) ORDER BY d.ord) AS "downloadData",
                 ARRAY_AGG(
                     COALESCE(du.bytes, 0)
                     ORDER BY d.ord
@@ -593,8 +620,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 gh.tag,
                 gh.is_shared,
                 gh.hosts,
-                gt.total_bytes
-            ORDER BY gt.total_bytes DESC;
+                gt.total_bytes, gt.upload_bytes, gt.download_bytes
+            ORDER BY gt.${trafficSqlColumn(direction)} DESC, gh.node_uuid, gh.inbound_tag;
         `;
 
         return await this.prisma.tx.$queryRaw<IGetHostsUsageByRange[]>(query);
@@ -604,8 +631,9 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         start: Date,
         end: Date,
         limit: number = 5,
+        direction: TrafficDirection = 'total',
     ): Promise<ITopHost[]> {
-        return await this.getTopHostsByTrafficFiltered(start, end, limit);
+        return await this.getTopHostsByTrafficFiltered(start, end, limit, undefined, direction);
     }
 
     public async getTopHostsByTrafficForHostUuids(
@@ -622,7 +650,9 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         end: Date,
         limit: number = 5,
         hostUuids?: string[],
+        direction: TrafficDirection = 'total',
     ): Promise<ITopHost[]> {
+        if (hostUuids?.length === 0) return [];
         const hostUuidFilter = hostUuids
             ? Prisma.sql`AND huh.host_uuid IN (${Prisma.join(
                   hostUuids.map((hostUuid) => Prisma.sql`${hostUuid}::uuid`),
@@ -636,8 +666,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     huh.inbound_tag
                 FROM hosts_usage_history huh
                 WHERE
-                    huh.created_at >= ${start}
-                    AND huh.created_at <= ${end}
+                    huh.created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND huh.created_at <= ${getUtcUsageTimestampSql(end)}
                     ${hostUuidFilter}
             ),
             host_rows AS (
@@ -657,8 +687,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     AND sg.inbound_tag = huh.inbound_tag
                 INNER JOIN hosts h ON h.uuid = huh.host_uuid
                 WHERE
-                    huh.created_at >= ${start}
-                    AND huh.created_at <= ${end}
+                    huh.created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND huh.created_at <= ${getUtcUsageTimestampSql(end)}
                 GROUP BY
                     huh.node_uuid,
                     huh.inbound_tag,
@@ -699,20 +729,24 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     huh.node_uuid,
                     huh.inbound_tag,
                     huh.created_at,
+                    MAX(huh.upload_bytes) AS upload_bytes,
+                    MAX(huh.download_bytes) AS download_bytes,
                     MAX(huh.total_bytes) AS total_bytes
                 FROM hosts_usage_history huh
                 INNER JOIN selected_groups sg
                     ON sg.node_uuid = huh.node_uuid
                     AND sg.inbound_tag = huh.inbound_tag
                 WHERE
-                    huh.created_at >= ${start}
-                    AND huh.created_at <= ${end}
+                    huh.created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND huh.created_at <= ${getUtcUsageTimestampSql(end)}
                 GROUP BY huh.node_uuid, huh.inbound_tag, huh.created_at
             ),
             group_totals AS (
                 SELECT
                     node_uuid,
                     inbound_tag,
+                    SUM(upload_bytes) AS upload_bytes,
+                    SUM(download_bytes) AS download_bytes,
                     SUM(total_bytes) AS total_bytes
                 FROM dedup_hourly
                 GROUP BY node_uuid, inbound_tag
@@ -728,12 +762,14 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 gh.tag as "tag",
                 gh.is_shared as "isShared",
                 gh.hosts as "hosts",
-                gt.total_bytes as "total"
+                gt.total_bytes as "total",
+                gt.upload_bytes as "upload",
+                gt.download_bytes as "download"
             FROM group_totals gt
             INNER JOIN group_hosts gh
                 ON gh.node_uuid = gt.node_uuid
                 AND gh.inbound_tag = gt.inbound_tag
-            ORDER BY gt.total_bytes DESC
+            ORDER BY gt.${trafficSqlColumn(direction)} DESC, gh.node_uuid, gh.inbound_tag
             LIMIT ${limit};
         `;
 
@@ -745,6 +781,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         start: Date,
         end: Date,
         limit: number = 5,
+        direction: TrafficDirection = 'total',
     ): Promise<ITopHost[]> {
         const query = Prisma.sql`
             WITH selected_groups AS (
@@ -754,8 +791,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 FROM user_hosts_usage_history uhuh
                 WHERE
                     uhuh.user_id = ${userId}
-                    AND uhuh.created_at >= ${start}
-                    AND uhuh.created_at <= ${end}
+                    AND uhuh.created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND uhuh.created_at <= ${getUtcUsageTimestampSql(end)}
             ),
             host_rows AS (
                 SELECT
@@ -775,8 +812,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 INNER JOIN hosts h ON h.uuid = uhuh.host_uuid
                 WHERE
                     uhuh.user_id = ${userId}
-                    AND uhuh.created_at >= ${start}
-                    AND uhuh.created_at <= ${end}
+                    AND uhuh.created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND uhuh.created_at <= ${getUtcUsageTimestampSql(end)}
                 GROUP BY
                     uhuh.node_uuid,
                     uhuh.inbound_tag,
@@ -817,6 +854,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     uhuh.node_uuid,
                     uhuh.inbound_tag,
                     uhuh.created_at,
+                    MAX(uhuh.upload_bytes) AS upload_bytes,
+                    MAX(uhuh.download_bytes) AS download_bytes,
                     MAX(uhuh.total_bytes) AS total_bytes
                 FROM user_hosts_usage_history uhuh
                 INNER JOIN selected_groups sg
@@ -824,14 +863,16 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     AND sg.inbound_tag = uhuh.inbound_tag
                 WHERE
                     uhuh.user_id = ${userId}
-                    AND uhuh.created_at >= ${start}
-                    AND uhuh.created_at <= ${end}
+                    AND uhuh.created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND uhuh.created_at <= ${getUtcUsageTimestampSql(end)}
                 GROUP BY uhuh.node_uuid, uhuh.inbound_tag, uhuh.created_at
             ),
             group_totals AS (
                 SELECT
                     node_uuid,
                     inbound_tag,
+                    SUM(upload_bytes) AS upload_bytes,
+                    SUM(download_bytes) AS download_bytes,
                     SUM(total_bytes) AS total_bytes
                 FROM dedup_hourly
                 GROUP BY node_uuid, inbound_tag
@@ -847,12 +888,14 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 gh.tag as "tag",
                 gh.is_shared as "isShared",
                 gh.hosts as "hosts",
-                gt.total_bytes as "total"
+                gt.total_bytes as "total",
+                gt.upload_bytes as "upload",
+                gt.download_bytes as "download"
             FROM group_totals gt
             INNER JOIN group_hosts gh
                 ON gh.node_uuid = gt.node_uuid
                 AND gh.inbound_tag = gt.inbound_tag
-            ORDER BY gt.total_bytes DESC
+            ORDER BY gt.${trafficSqlColumn(direction)} DESC, gh.node_uuid, gh.inbound_tag
             LIMIT ${limit};
         `;
 
@@ -864,6 +907,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         start: Date,
         end: Date,
         limit: number = 100,
+        direction: TrafficDirection = 'total',
     ): Promise<ITopHostUser[]> {
         const query = Prisma.sql`
             SELECT
@@ -876,10 +920,10 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
             INNER JOIN user_hosts_usage_history uhuh ON uhuh.user_id = u.id
             WHERE
                 uhuh.host_uuid = ${hostUuid}::uuid
-                AND uhuh.created_at >= ${start}
-                AND uhuh.created_at <= ${end}
+                AND uhuh.created_at >= ${getUtcUsageTimestampSql(start)}
+                AND uhuh.created_at <= ${getUtcUsageTimestampSql(end)}
             GROUP BY u.id, u.username
-            ORDER BY SUM(uhuh.total_bytes) DESC
+            ORDER BY SUM(uhuh.${trafficSqlColumn(direction)}) DESC, u.id
             LIMIT ${limit};
         `;
 
@@ -888,6 +932,14 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
 
     public async getDailyTrafficSum(start: Date, end: Date, dates: string[]): Promise<number[]> {
         return await this.getDailyTrafficSumFiltered(start, end, dates);
+    }
+
+    public async getDirectionalDailyTrafficSum(
+        start: Date,
+        end: Date,
+        dates: string[],
+    ): Promise<{ total: number[]; upload: number[]; download: number[] }> {
+        return this.getDirectionalDailyTrafficSumFiltered(start, end, dates);
     }
 
     public async getDailyTrafficSumForHostUuids(
@@ -917,18 +969,18 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 FROM user_hosts_usage_history
                 WHERE
                     user_id = ${userId}
-                    AND created_at >= ${start}
-                    AND created_at <= ${end}
+                    AND created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND created_at <= ${getUtcUsageTimestampSql(end)}
                 GROUP BY node_uuid, inbound_tag, created_at
             ),
             daily_traffic AS (
                 SELECT
-                    DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
+                    created_at::date AS date,
                     SUM(upload_bytes) AS upload_bytes,
                     SUM(download_bytes) AS download_bytes,
                     SUM(total_bytes) AS total_bytes
                 FROM dedup_hourly
-                GROUP BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
+                GROUP BY created_at::date
             )
             SELECT
                 COALESCE(dt.upload_bytes, 0) AS upload,
@@ -955,16 +1007,16 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         const query = Prisma.sql`
             WITH daily_traffic AS (
                 SELECT
-                    DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
+                    created_at::date AS date,
                     SUM(upload_bytes) AS upload_bytes,
                     SUM(download_bytes) AS download_bytes,
                     SUM(total_bytes) AS total_bytes
                 FROM user_hosts_usage_history
                 WHERE
                     host_uuid = ${hostUuid}::uuid
-                    AND created_at >= ${start}
-                    AND created_at <= ${end}
-                GROUP BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
+                    AND created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND created_at <= ${getUtcUsageTimestampSql(end)}
+                GROUP BY created_at::date
             )
             SELECT
                 COALESCE(dt.upload_bytes, 0) AS upload,
@@ -988,6 +1040,23 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         dates: string[],
         hostUuids?: string[],
     ): Promise<number[]> {
+        return (await this.getDirectionalDailyTrafficSumFiltered(start, end, dates, hostUuids))
+            .total;
+    }
+
+    private async getDirectionalDailyTrafficSumFiltered(
+        start: Date,
+        end: Date,
+        dates: string[],
+        hostUuids?: string[],
+    ): Promise<{ total: number[]; upload: number[]; download: number[] }> {
+        if (hostUuids?.length === 0) {
+            return {
+                total: dates.map(() => 0),
+                upload: dates.map(() => 0),
+                download: dates.map(() => 0),
+            };
+        }
         const hostUuidFilter = hostUuids
             ? Prisma.sql`AND host_uuid IN (${Prisma.join(
                   hostUuids.map((hostUuid) => Prisma.sql`${hostUuid}::uuid`),
@@ -1001,8 +1070,8 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     inbound_tag
                 FROM hosts_usage_history
                 WHERE
-                    created_at >= ${start}
-                    AND created_at <= ${end}
+                    created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND created_at <= ${getUtcUsageTimestampSql(end)}
                     ${hostUuidFilter}
             ),
             dedup_hourly AS (
@@ -1010,32 +1079,41 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                     huh.node_uuid,
                     huh.inbound_tag,
                     huh.created_at,
+                    MAX(huh.upload_bytes) AS upload_bytes,
+                    MAX(huh.download_bytes) AS download_bytes,
                     MAX(huh.total_bytes) AS total_bytes
                 FROM hosts_usage_history huh
                 INNER JOIN selected_groups sg
                     ON sg.node_uuid = huh.node_uuid
                     AND sg.inbound_tag = huh.inbound_tag
                 WHERE
-                    huh.created_at >= ${start}
-                    AND huh.created_at <= ${end}
+                    huh.created_at >= ${getUtcUsageTimestampSql(start)}
+                    AND huh.created_at <= ${getUtcUsageTimestampSql(end)}
                 GROUP BY huh.node_uuid, huh.inbound_tag, huh.created_at
             ),
             daily_traffic AS (
                 SELECT
-                    DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')::date AS date,
+                    created_at::date AS date,
+                    SUM(upload_bytes) AS upload_bytes,
+                    SUM(download_bytes) AS download_bytes,
                     SUM(total_bytes) AS bytes
                 FROM dedup_hourly
-                GROUP BY DATE_TRUNC('day', created_at AT TIME ZONE 'UTC')
+                GROUP BY created_at::date
             )
             SELECT
-                COALESCE(dt.bytes, 0) AS value
+                COALESCE(dt.bytes, 0) AS total,
+                COALESCE(dt.upload_bytes, 0) AS upload,
+                COALESCE(dt.download_bytes, 0) AS download
             FROM unnest(${dates}::date[]) WITH ORDINALITY AS d(date, ord)
             LEFT JOIN daily_traffic dt ON dt.date = d.date
             ORDER BY d.ord;
         `;
 
-        const result = await this.prisma.tx.$queryRaw<Array<{ value: bigint }>>(query);
-        return result.map((item) => Number(item.value));
+        const result =
+            await this.prisma.tx.$queryRaw<
+                Array<{ total: bigint; upload: bigint; download: bigint }>
+            >(query);
+        return mapDirectionalDailyUsage(result);
     }
 }
 

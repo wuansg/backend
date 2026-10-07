@@ -40,6 +40,7 @@ export class NodesUsageHistoryController {
             start,
             end,
             topNodesLimit,
+            query.trafficDirection,
         );
 
         const data = errorHandler(result);
