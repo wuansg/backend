@@ -117,3 +117,13 @@ FROM telegram_daily_traffic_reports ORDER BY report_date DESC LIMIT 7;
 - 经用户确认发送一次表格版预览，Telegram 已接受；发送前后原日报内容 hash、格式、状态、发送次数和发送时间均不变。定时 UTC 00:10/现有 users 会话保持不变。
 - 网站 HTTP 200，Backend 无重启，13/13 节点在线且版本/配置不变，流量快照无积压或错误，无测速任务。
 - 升级前数据库/配置备份保存在 `/opt/remnawave/backups/release-3.17.3-20261007/`，环境文件逐字节保留，旧镜像可回退。本次没有新的数据库迁移。
+
+### 3.17.4 真正 Markdown 表格更正
+
+- 功能提交 `fd7e4dba86b6be0b80a3b4966df0e16333949403`；更正 3.17.3 把代码块当作 Markdown 表格的错误实现。
+- GitHub [真实表格/新旧通道/SQL 回归](https://github.com/wuansg/backend/actions/runs/37608315785)和 [amd64 镜像构建](https://github.com/wuansg/backend/actions/runs/37608341466)通过。
+- 固定镜像 `ghcr.io/wuansg/backend:3.17.4-anytls@sha256:9cafc3a92ff40f64070c00832e89dbfc73eecdef26b65055df713b2371d0ee83`，Frontend 3.16.0 和 Agent 3.15.0 不变。
+- RichMarkdown 格式约束迁移已应用，旧 HTML 日报正文 hash、状态、发送次数和时间不变；环境逐字节不变。
+- 正式镜像预览为真正 GFM 表格，1741 字符，汇总及 Host 排名与上一版一致。发送了一条更正预览，Telegram 回执 `returnedRichMessage=true`、`nativeTableCount=5`，确认是原生表格而非代码块。
+- 网站 HTTP 200，13/13 节点在线、版本/配置不变，流量快照无积压或错误，无测速任务。每日 UTC 00:10/现有 users 会话不变。
+- 升级前数据库和配置备份保存在 `/opt/remnawave/backups/release-3.17.4-20261007/`，旧镜像保留。
