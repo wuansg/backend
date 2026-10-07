@@ -1,6 +1,6 @@
 # 上传流量统计与查看优化
 
-状态：本地实现及回归完成，等待 GitHub 发布和面板升级；2026-10-07。
+状态：已发布并部署，线上核验通过；2026-10-07。
 
 ## 范围
 
@@ -32,3 +32,16 @@
 - Backend 类型和生产构建、Contract 两种构建、快照及转发写入回归通过；Frontend 类型、生产构建及方向显示纯函数回归通过。
 - 本地 Oxlint 在 allocator 原生模块中异常退出（exit 134），未声称 lint 通过；TS 和构建未报错。
 - 发布前只读检查：13/13 节点在线，Agent 均为 3.15.0，快照 pending=0、lastError=null，无活动测试任务。
+
+## 发布与线上验收
+
+- Backend 源码：`b0c33301fea464fde9d4794612f59675dccf939b`；Frontend 源码及标签 `3.16.0`：`fac01cace13406397a58ec7ed11627bff4e7164d`。
+- [Contract 发布](https://github.com/wuansg/backend/actions/runs/37580927560)、[SQL 回归](https://github.com/wuansg/backend/actions/runs/37580927524)、[Frontend 发布](https://github.com/wuansg/frontend/actions/runs/37581367913)、[Backend 镜像](https://github.com/wuansg/backend/actions/runs/37581419728) 全部成功。
+- 面板使用 `ghcr.io/wuansg/backend:3.16.0-anytls@sha256:3f49dcc0aed53c93a19b050e908e6e86cfcd6b8d7913b3e098bcd968f6bc7be2`；镜像标签、amd64 架构、Backend/Frontend commit 标签已核对。
+- 更新前备份：面板 `/opt/remnawave/backups/release-3.16.0-20261007/`，数据库备份约 6.5 MiB；原 `.env` 原样保留，APP_SECRET 未修改。
+- 面板首页 HTTP 200，未授权统计接口 HTTP 401，容器运行且重启次数 0。
+- 2026-10-06 完整日：节点、用户、Host 三组接口各方向的汇总均与数据库相符；Top 1 与 Top 50 汇总一致，排行榜按所选方向降序。
+- 当天上传/下载查询正常；单节点/节点组用户 Usage、用户节点/Host Usage、Host 用户 Usage 均通过三个方向的 HTTP 核验；非法方向返回 400。
+- 新前端中文文案与统计组件标记存在；未伪造回填旧记录。
+- 发布后 13/13 节点在线，Agent 仍为 3.15.0；profile、核心及转发配置哈希未变，快照序号单调增长，pending=0、lastError=null，无活动测试任务。
+- 临时只读 API 核验令牌和鉴权缓存已删除；本地隔离 PostgreSQL、运行容器及测试卷已清理。未运行线上节点测速/硬件测试。
