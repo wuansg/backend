@@ -6,7 +6,12 @@ import { TypedConfigService } from '@common/config/app-config';
 import { PrismaService } from '@common/database/prisma.service';
 import { getUtcUsageDateSql, getUtcUsageTimestampSql } from '@common/utils/utc-usage-range.util';
 
-import { DailyTrafficNode, DailyTrafficSummary, DailyTrafficUsage } from './daily-traffic.util';
+import {
+    DailyTrafficHost,
+    DailyTrafficNode,
+    DailyTrafficSummary,
+    DailyTrafficUsage,
+} from './daily-traffic.util';
 
 @Injectable()
 export class DailyTrafficCollector {
@@ -50,6 +55,33 @@ export class DailyTrafficCollector {
                        COALESCE(SUM(total_bytes),0)::bigint AS total
                 FROM node_forwarding_usage_history
                 WHERE created_at >= ${date}::timestamptz AND created_at < ${end}::timestamptz`;
+                const topHosts = await tx.$queryRaw<DailyTrafficHost[]>`
+                WITH scoped AS (
+                    SELECT host_uuid, node_uuid, inbound_tag, created_at, upload_bytes, download_bytes, total_bytes
+                    FROM hosts_usage_history WHERE created_at >= ${startSql} AND created_at < ${endSql}
+                ), hourly AS (
+                    SELECT node_uuid, inbound_tag, created_at, MAX(upload_bytes) AS upload,
+                           MAX(download_bytes) AS download, MAX(total_bytes) AS total
+                    FROM scoped GROUP BY node_uuid, inbound_tag, created_at
+                ), totals AS (
+                    SELECT node_uuid, inbound_tag, SUM(upload)::bigint AS upload,
+                           SUM(download)::bigint AS download, SUM(total)::bigint AS total
+                    FROM hourly GROUP BY node_uuid, inbound_tag
+                ), members AS (
+                    SELECT DISTINCT node_uuid, inbound_tag, host_uuid FROM scoped
+                ), labels AS (
+                    SELECT m.node_uuid, m.inbound_tag,
+                           (ARRAY_AGG(h.remark ORDER BY h.view_position, h.remark, h.uuid))[1] AS name,
+                           COUNT(*)::int AS "aliasCount"
+                    FROM members m JOIN hosts h ON h.uuid = m.host_uuid
+                    GROUP BY m.node_uuid, m.inbound_tag
+                )
+                SELECT t.node_uuid::text || ':' || t.inbound_tag AS "groupKey",
+                       COALESCE(l.name, t.inbound_tag) AS name, n.name AS "nodeName",
+                       COALESCE(l."aliasCount", 1)::int AS "aliasCount", t.upload, t.download, t.total
+                FROM totals t JOIN nodes n ON n.uuid = t.node_uuid
+                LEFT JOIN labels l ON l.node_uuid = t.node_uuid AND l.inbound_tag = t.inbound_tag
+                WHERE t.total > 0 ORDER BY t.total DESC, t.node_uuid, t.inbound_tag LIMIT ${limit}`;
                 const topNodes = await this.topNodes(tx, startSql, endSql, limit, 'total_bytes');
                 const topUploadNodes = await this.topNodes(
                     tx,
@@ -80,6 +112,7 @@ export class DailyTrafficCollector {
                     forwarding,
                     topNodes,
                     topUploadNodes,
+                    topHosts,
                     topForwardingNodes,
                     health,
                     userRecordsDisabled: this.config.get('SERVICE_DISABLE_USER_USAGE_RECORDS'),

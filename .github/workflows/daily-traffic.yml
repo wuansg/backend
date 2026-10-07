@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - 'src/common/daily-traffic/**'
+      - 'src/bin/daily-traffic-preview.ts'
+      - 'rspack.config.mjs'
       - 'src/common/config/app-config/config.schema.ts'
       - 'src/scheduler/tasks/daily-traffic/**'
       - 'src/queue/notifications/telegram-bot-logger/**'

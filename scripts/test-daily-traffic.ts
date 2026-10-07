@@ -25,6 +25,7 @@ const summary: DailyTrafficSummary = {
     forwarding: empty,
     topNodes: [],
     topUploadNodes: [],
+    topHosts: [],
     topForwardingNodes: [],
     health: { enabled: 13, connected: 13, pending: 0, errors: 0, stale: 0 },
     userRecordsDisabled: false,
@@ -82,8 +83,32 @@ async function unitTests() {
         topNodes: [{ ...empty, name: '<b>&bad\nname', uuid: 'fixture' }],
     });
     assert.ok(rendered.includes('&lt;b&gt;&amp;bad name'));
-    assert.ok(rendered.includes('其中未拆分 100 B'));
-    assert.ok(rendered.includes('无流量记录'));
+    assert.ok(rendered.includes('未拆分 100 B'));
+    assert.ok(rendered.includes('暂无用量'));
+    assert.ok(rendered.includes('北京时间：10-06 08:00 → 10-07 08:00'));
+    const hostRendered = renderDailyTrafficReport(new Date('2026-10-06T00:00:00Z'), {
+        ...summary,
+        topHosts: [
+            {
+                upload: 10n,
+                download: 90n,
+                total: 100n,
+                name: 'Host <&>',
+                nodeName: 'Node <&>',
+                aliasCount: 2,
+                groupKey: 'group',
+            },
+        ],
+        topUploadNodes: [
+            { upload: 90n, download: 10n, total: 100n, name: 'upload-winner', uuid: 'node' },
+        ],
+    });
+    assert.ok(hostRendered.includes('Host &lt;&amp;&gt;'));
+    assert.ok(hostRendered.includes('Node &lt;&amp;&gt;（共享×2）'));
+    assert.ok(
+        hostRendered.includes('upload-winner</b> · <b>90 B</b>'),
+        'Upload ranking highlights upload, not total',
+    );
     const worstRows = Array.from({ length: 5 }, () => ({
         name: '&'.repeat(400),
         uuid: 'fixture',
@@ -95,11 +120,19 @@ async function unitTests() {
         ...summary,
         topNodes: worstRows,
         topUploadNodes: worstRows,
+        topHosts: worstRows.map((row) => ({
+            ...row,
+            nodeName: '&'.repeat(400),
+            aliasCount: 100,
+            groupKey: 'fixture',
+        })),
         topForwardingNodes: worstRows,
         health: { ...summary.health, pending: 1, stale: 2, errors: 1 },
         userRecordsDisabled: true,
     });
     assert.ok(worst.length < 4096, `Worst escaped message: ${worst.length}`);
+    assert.ok(worst.includes('Host 用量 Top 5'), 'Length budgeting must retain Host ranking');
+    assert.ok(worst.includes('🔀 转发节点排行'), 'Length budgeting must retain every section');
     let capturedOptions: any;
     const queue = new TelegramBotLoggerQueueService({
         add: async (_name: string, data: unknown, options: unknown) => {
@@ -186,13 +219,17 @@ async function databaseTests(testUrl: string) {
             'CREATE TABLE nodes (uuid UUID PRIMARY KEY, name TEXT, is_connected BOOLEAN, is_disabled BOOLEAN)',
             'CREATE TABLE nodes_usage_history (node_uuid UUID, created_at TIMESTAMP(3), upload_bytes BIGINT, download_bytes BIGINT, total_bytes BIGINT)',
             'CREATE TABLE nodes_user_usage_history (user_id BIGINT, created_at DATE, upload_bytes BIGINT, download_bytes BIGINT, total_bytes BIGINT)',
-            'CREATE TABLE hosts_usage_history (node_uuid UUID, inbound_tag TEXT, created_at TIMESTAMP(3), upload_bytes BIGINT, download_bytes BIGINT, total_bytes BIGINT)',
+            'CREATE TABLE hosts (uuid UUID PRIMARY KEY, remark TEXT, view_position INTEGER)',
+            'CREATE TABLE hosts_usage_history (node_uuid UUID, inbound_tag TEXT, created_at TIMESTAMP(3), upload_bytes BIGINT, download_bytes BIGINT, total_bytes BIGINT, host_uuid UUID)',
             'CREATE TABLE node_forwarding_usage_history (node_uuid UUID, created_at TIMESTAMPTZ(3), upload_bytes BIGINT, download_bytes BIGINT, total_bytes BIGINT)',
             'CREATE TABLE node_usage_snapshot_state (node_uuid UUID, pending INTEGER, last_error TEXT, last_success_at TIMESTAMP(3))',
             `INSERT INTO nodes VALUES ('${a}', 'upload-node', TRUE, FALSE), ('${b}', 'download-node', FALSE, FALSE)`,
             `INSERT INTO nodes_usage_history VALUES ('${a}','2026-10-01 23:59:59.999',90,10,150), ('${b}','2026-10-01 00:00:00',5,195,200), ('${b}','2026-10-02 00:00:00',999999,0,999999), ('${b}','2026-09-30 23:59:59.999',999999,0,999999)`,
             `INSERT INTO nodes_user_usage_history VALUES (1,'2026-10-01',90,10,150), (1,'2026-10-01',5,195,200), (2,'2026-10-02',999999,0,999999)`,
-            `INSERT INTO hosts_usage_history VALUES ('${a}','shared','2026-10-01 23:00:00',90,10,150), ('${a}','shared','2026-10-01 23:00:00',90,10,150), ('${b}','other','2026-10-01 00:00:00',5,195,200), ('${b}','other','2026-10-02 00:00:00',999999,0,999999)`,
+            `INSERT INTO hosts_usage_history (node_uuid,inbound_tag,created_at,upload_bytes,download_bytes,total_bytes) VALUES ('${a}','shared','2026-10-01 23:00:00',90,10,150), ('${a}','shared','2026-10-01 23:00:00',90,10,150), ('${b}','other','2026-10-01 00:00:00',5,195,200), ('${b}','other','2026-10-02 00:00:00',999999,0,999999)`,
+            `INSERT INTO hosts VALUES ('00000000-0000-4000-8000-000000000011','shared-a',1), ('00000000-0000-4000-8000-000000000012','shared-b',2), ('00000000-0000-4000-8000-000000000013','download-host',3)`,
+            `UPDATE hosts_usage_history SET host_uuid = CASE WHEN inbound_tag = 'other' THEN '00000000-0000-4000-8000-000000000013'::uuid ELSE '00000000-0000-4000-8000-000000000011'::uuid END`,
+            `UPDATE hosts_usage_history SET host_uuid = '00000000-0000-4000-8000-000000000012' WHERE ctid = (SELECT ctid FROM hosts_usage_history WHERE inbound_tag='shared' LIMIT 1)`,
             `INSERT INTO node_forwarding_usage_history VALUES ('${b}','2026-10-01 23:59:59.999Z',8,12,20), ('${b}','2026-10-02 00:00:00Z',999999,0,999999)`,
             `INSERT INTO node_usage_snapshot_state VALUES ('${a}',2,NULL,'2026-10-02 00:10:00'), ('${b}',0,'fixture','2026-10-01 23:00:00')`,
         ])
@@ -219,6 +256,32 @@ async function databaseTests(testUrl: string) {
             assert.deepEqual(stats.forwarding, { upload: 8n, download: 12n, total: 20n });
             assert.equal(stats.topNodes[0].name, 'download-node');
             assert.equal(stats.topUploadNodes[0].name, 'upload-node');
+            assert.equal(stats.topHosts.length, 1);
+            assert.equal(
+                stats.topHosts[0].name,
+                'download-host',
+                'Dedup before ranking: duplicate aliases must not outrank the real winner',
+            );
+            assert.deepEqual(
+                {
+                    upload: stats.topHosts[0].upload,
+                    download: stats.topHosts[0].download,
+                    total: stats.topHosts[0].total,
+                },
+                { upload: 5n, download: 195n, total: 200n },
+            );
+            config.TELEGRAM_DAILY_TRAFFIC_TOP_N = 5;
+            const full = await collector.collect(date, now);
+            assert.equal(full.topHosts.length, 2);
+            assert.equal(full.topHosts[1].name, 'shared-a');
+            assert.equal(full.topHosts[1].nodeName, 'upload-node');
+            assert.equal(full.topHosts[1].aliasCount, 2);
+            assert.equal(
+                full.topHosts.reduce((sum, host) => sum + host.total, 0n),
+                stats.hosts.total,
+            );
+            assert.notEqual(full.topHosts[0].groupKey, full.topHosts[1].groupKey);
+            config.TELEGRAM_DAILY_TRAFFIC_TOP_N = 1;
             assert.deepEqual(stats.health, {
                 enabled: 2,
                 connected: 1,

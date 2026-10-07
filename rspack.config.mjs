@@ -51,6 +51,7 @@ function buildEntry() {
         processors: './src/bin/processors/processors.ts',
         scheduler: './src/bin/scheduler/scheduler.ts',
         cli: './src/bin/cli/cli.ts',
+        'daily-traffic-preview': './src/bin/daily-traffic-preview.ts',
         seed: './prisma/seed/config.seed.ts',
     };
 }

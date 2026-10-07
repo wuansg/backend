@@ -1,4 +1,4 @@
-# Telegram 每日流量日报（Backend 3.17.0）
+# Telegram 每日流量日报（Backend 3.17.1）
 
 - Backend scheduler 配置启用，无节点测速、硬件测试或 Agent 升级。
 - 默认 UTC 00:10（北京时间 08:10），统计前一完整 UTC 自然日；启动时补发当日应发但未创建的昨日汇总，不生成此前所有历史日报。
@@ -15,6 +15,21 @@ TELEGRAM_DAILY_TRAFFIC_TOP_N=5
 ```
 
 新安装默认禁用，启用要求已有 Telegram bot 和目标会话。`TIME_UTC` 严格 HH:mm，`TOP_N` 为 1–5；不会修改 `APP_SECRET`。
+
+## 排版及 Host 排行（3.17.1）
+
+汇总/节点/Host/上传/转发/采集状态分区显示，总量和排行名称加粗；统一 `↑ 上传 / ↓ 下载`，增加对应北京时间区间。上传排行突出上传量，而不是总量。异常长名称自动省略，极端长度时缩短名称，不丢弃统计区块，保持 Telegram HTML 完整和 4096 字符上限。
+
+Host 按 `(node_uuid, inbound_tag)` 物理入口合并，先以小时 MAX 去掉共享别名重复量，再按天 SUM 排名，排序后取 Top N。显示该组代表 Host、所属节点及共享数量；不把共享入口当作多个独立 Host 的精确用量。同一 Host 跨节点的入口分别记录，避免名称误导。
+
+随镜像内置预览工具，默认只读核对，不修改已发日报或补发状态。只有管理员明确执行 `--send` 才发送一条标记为“新版日报预览”的消息，不自动重试可能已被接受的预览：
+
+```sh
+docker exec remnawave node dist/daily-traffic-preview.js --check
+docker exec remnawave node dist/daily-traffic-preview.js --send
+```
+
+每天北京时间 08:10 的发送时间和接收会话保持不变。
 
 ## 可靠性与排障
 
