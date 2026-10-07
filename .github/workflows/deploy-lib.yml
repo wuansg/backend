@@ -4,6 +4,7 @@ on:
     branches: ['**']
     paths:
       - 'libs/contract/package.json'
+      - 'libs/contract/tsconfig*.json'
       - '.github/workflows/deploy-lib.yml'
 jobs:
   build:
