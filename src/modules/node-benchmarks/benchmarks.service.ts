@@ -37,6 +37,7 @@ export class NodeBenchmarksService implements OnApplicationBootstrap, OnApplicat
     private readonly logger = new Logger(NodeBenchmarksService.name);
     private timer?: NodeJS.Timeout;
     private polling = false;
+    private jwtReady?: Promise<void>;
     constructor(
         private readonly db: PrismaService,
         private readonly axios: AxiosService,
@@ -49,6 +50,16 @@ export class NodeBenchmarksService implements OnApplicationBootstrap, OnApplicat
     }
     onApplicationShutdown() {
         if (this.timer) clearInterval(this.timer);
+    }
+    private async ensureJwtReady() {
+        // Benchmarks execute in REST, unlike the queue workers which initialize
+        // Axios auth in processors.ts. Share one in-flight initialization and
+        // allow a later retry if key generation/auth initialization fails.
+        this.jwtReady ??= this.axios.setJwt().catch((error) => {
+            this.jwtReady = undefined;
+            throw error;
+        });
+        await this.jwtReady;
     }
     async targets() {
         const overrides = await this.db.benchmarkTarget.findMany();
@@ -211,6 +222,7 @@ export class NodeBenchmarksService implements OnApplicationBootstrap, OnApplicat
                 proxyUrl: n.proxyUrl,
                 nodeApiSniEnabled: n.nodeApiSniEnabled,
             };
+            await this.ensureJwtReady();
             // POST start is idempotent: after timeout or coordinator restart, the same ID
             // retrieves the original Agent job without repeating a test.
             const start = await this.axios.benchmarkRequest('start', opts, j.request);

@@ -75,6 +75,53 @@ async function main() {
         /QueryBus/,
     );
     console.log('Benchmark module/controller/guard startup regression passed');
+    let jwtInitializations = 0;
+    let jwtInitialized = false;
+    let rejectInitialization = false;
+    let agentCalls = 0;
+    const authDb = {
+        nodes: { findUniqueOrThrow: async () => ({
+            address: 'fixture.invalid', port: 2222, proxyUrl: null, nodeApiSniEnabled: true,
+        }) },
+        nodeBenchmark: {
+            findUniqueOrThrow: async () => ({ status: 'RUNNING' }),
+            updateMany: async () => ({ count: 1 }),
+        },
+    } as unknown as PrismaService;
+    const authAxios = {
+        setJwt: async () => {
+            jwtInitializations++;
+            if (rejectInitialization) throw new Error('Transient auth initialization failure');
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            jwtInitialized = true;
+        },
+        benchmarkRequest: async (_path: string, opts: any, request: any) => {
+            assert.ok(jwtInitialized, 'JWT/mTLS must be initialized before an Agent request');
+            assert.equal(opts.nodeApiSniEnabled, true);
+            agentCalls++;
+            return { isOk: true, response: { id: request.id, status: 'COMPLETED', phase: 'done', progress: 100, results: [] } };
+        },
+    } as unknown as AxiosService;
+    const authService = new NodeBenchmarksService(authDb, authAxios);
+    const authJob = () => ({ id: randomUUID(), nodeUuid: randomUUID(), request: { id: randomUUID() }, createdAt: new Date(), startedAt: new Date() });
+    const authPoll = async (service: NodeBenchmarksService) => {
+        const job = authJob();
+        job.request.id = job.id;
+        await (service as any).poll(job, randomUUID());
+    };
+    await Promise.all([authPoll(authService), authPoll(authService)]);
+    assert.equal(jwtInitializations, 1, 'Concurrent tasks share auth initialization');
+    assert.equal(agentCalls, 2);
+    jwtInitialized = false;
+    rejectInitialization = true;
+    const retryService = new NodeBenchmarksService(authDb, authAxios);
+    await authPoll(retryService);
+    assert.equal(agentCalls, 2, 'Auth failure must not dispatch a task');
+    rejectInitialization = false;
+    await authPoll(retryService);
+    assert.equal(jwtInitializations, 3, 'Failed auth initialization is retried');
+    assert.equal(agentCalls, 3);
+    console.log('Benchmark REST JWT/mTLS initialization, concurrency and retry regression passed');
     if (!process.env.BENCHMARK_TEST_DATABASE_URL) {
         console.log(
             'Benchmark schema tests passed; set BENCHMARK_TEST_DATABASE_URL for isolated database tests',
@@ -93,6 +140,7 @@ async function main() {
     const cancelled = new Set<string>();
     const calls = new Map<string, number>();
     const axios = {
+        setJwt: async () => {},
         benchmarkRequest: async (path: string, _opts: unknown, data: any) => {
             if (path === 'start') {
                 calls.set(data.id, (calls.get(data.id) || 0) + 1);

@@ -1,8 +1,8 @@
 # 节点硬件与网络测试
 
-状态：Contract、Frontend、Agent 3.15.0 已通过 GitHub Actions；Backend 3.15.0
-上线验收发现 REST 模块依赖缺失，已回退旧镜像恢复网站。修复版 Backend 3.15.1
-补上 CqrsModule 和实际模块/控制器/认证 Guard 初始化回归，正在重新发布。
+状态：Contract、Frontend、Agent 3.15.0 已通过 GitHub Actions；Backend 3.15.1
+已修复 REST 模块依赖并恢复网站。aiyun 3.15.0 灰度发现 REST 进程需要显式初始化
+节点 JWT/mTLS，任务尚未下发至 Agent；正在发布 Backend 3.15.2 完成认证修复。
 更新日期：2026-10-07（Asia/Shanghai）。没有在生产节点执行压力测试。
 
 ## 目标与入口
@@ -126,11 +126,14 @@ LibreSpeed 上传接口分别接受了 1 KiB 请求。此核验不等于各生�
 - Backend 启动回归创建真实 Nest 模块、Controller 和 Guards；另外构造去掉
   CqrsModule 的负例，确认能捕获 QueryBus 注入失败。数据库健康不能代替 REST
   健康，部署验收必须检查未认证的新接口返回 401 及公网网站返回 200。
+- Benchmark 协调器在首次请求 Agent 前初始化 JWT/mTLS/SNI；并发共享初始化，
+  失败后允许重试。测试覆盖初始化顺序、并发一次、失败不得下发与恢复后重试。
 
 ## 发布与灰度待办
 
-- Frontend/Agent `3.15.0`，Contract `3.15.0-anytls.0`；Backend 修复版 `3.15.1`。
-  Backend `3.15.0-anytls` 不可用，保留不可变标签但不得部署或覆盖。
+- Frontend/Agent `3.15.0`，Contract `3.15.0-anytls.0`；Backend 修复版 `3.15.2`。
+  Backend `3.15.0-anytls` 无法启动 REST，`3.15.1-anytls` 未初始化 Benchmark
+  节点认证；保留不可变标签，但正式发布应使用 `3.15.2-anytls`。
 - 先独立完成 Contract 发布，例如用专用发布分支触发 `deploy-lib`，
   核对最终 release 资产和 Frontend 锁文件 integrity，再发布 Frontend，最后构建
   Backend 镜像。不要在新 Contract 资产尚不存在时触发 Frontend CI，也不要让
@@ -145,6 +148,9 @@ LibreSpeed 上传接口分别接受了 1 KiB 请求。此核验不等于各生�
 - 为剩余 7 个城市配置获准上传端点、可选受控 iperf3 和同城市备用端点。
 - DNS/TLS/TTFB 独立指标、可选 ICMP 丢包、多连接吞吐、端点可用性校验日期展示。
 - 更细致的业务负载保护和独立持久审计表。
+- 已发现的既有问题：全新安装默认 Profile 为 `inbounds: []`，但 seed 的
+  syncInbounds 会拒绝空入站，导致首次 seed 失败。本次测试以独立合法 Profile
+  模拟有现存配置的升级，未连接生产数据；此问题需单独修复，不记为首安装通过。
 
 ## 工具参考
 
