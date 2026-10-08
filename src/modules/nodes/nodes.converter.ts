@@ -28,6 +28,7 @@ const entityToModel = (entity: NodesEntity): Nodes => {
         trafficResetDay: entity.trafficResetDay,
         trafficLimitBytes: entity.trafficLimitBytes,
         trafficUsedBytes: entity.trafficUsedBytes,
+        trafficUsageStartedAt: entity.trafficUsageStartedAt,
         notifyPercent: entity.notifyPercent,
         createdAt: entity.createdAt,
         updatedAt: entity.updatedAt,

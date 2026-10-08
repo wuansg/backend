@@ -53,6 +53,7 @@ export class ResetNodeTrafficTask {
                         new UpdateNodeCommand({
                             uuid: node.uuid,
                             trafficUsedBytes: BigInt(0),
+                            trafficUsageStartedAt: new Date(),
                         }),
                     );
                 }

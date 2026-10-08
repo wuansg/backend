@@ -182,6 +182,7 @@ export class NodesService {
             await this.nodesRepository.update({
                 uuid: node.uuid,
                 trafficUsedBytes: BigInt(0),
+                trafficUsageStartedAt: new Date(),
             });
 
             return ok(true);

@@ -25,6 +25,7 @@ export class NodesEntity implements Nodes {
     public trafficResetDay: null | number;
     public trafficLimitBytes: bigint | null;
     public trafficUsedBytes: bigint | null;
+    public trafficUsageStartedAt: Date | null;
     public notifyPercent: null | number;
 
     public viewPosition: number;

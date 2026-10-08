@@ -50,6 +50,6 @@ assert.deepEqual(batch.forwardingRules, [
     },
 ]);
 assert.equal(batch.nodeHours.length, 0);
-assert.equal(batch.nodeMultipliedTotal, 0n);
+assert.equal(batch.nodeMultipliedTotal, 200n);
 
 console.log('usage-snapshot forwarding batch: 4 tests passed');

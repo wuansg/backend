@@ -4,6 +4,10 @@ import { Injectable } from '@nestjs/common';
 
 import { AxiosService, INodeConnectionOpts, UsageSnapshot } from '@common/axios';
 import { PrismaService } from '@common/database/prisma.service';
+import {
+    getLegacyNodeTrafficPeriodStart,
+    getNodeTrafficHistoryStart,
+} from '@common/utils/node-traffic-period.util';
 
 import { buildNodeMetricsFromSnapshots, NodeMetricsPublisher } from './node-metrics.publisher';
 import {
@@ -245,11 +249,21 @@ export class UsageSnapshotIngestService {
                     `);
                 }
 
+                const nodeTrafficPeriodStart = await this.initializeNodeTrafficPeriod(
+                    tx,
+                    nodeUuid,
+                    nodeMultiplier,
+                );
                 await this.applyWriteBatch(
                     tx,
                     nodeUuid,
                     nodeId,
-                    buildUsageSnapshotWriteBatch(snapshots, userMultiplier, nodeMultiplier),
+                    buildUsageSnapshotWriteBatch(
+                        snapshots,
+                        userMultiplier,
+                        nodeMultiplier,
+                        nodeTrafficPeriodStart,
+                    ),
                 );
 
                 for (let index = 0; index < rows.length; index++) {
@@ -275,6 +289,47 @@ export class UsageSnapshotIngestService {
 
         const metrics = buildNodeMetricsFromSnapshots(nodeUuid, appliedSnapshots);
         if (metrics) this.nodeMetricsPublisher.publish(metrics);
+    }
+
+    private async initializeNodeTrafficPeriod(
+        tx: Prisma.TransactionClient,
+        nodeUuid: string,
+        nodeMultiplier: string,
+    ): Promise<Date> {
+        // Serialize quota writes with manual/scheduled resets. Existing nodes
+        // have NULL until this one-time, transactional forwarding backfill.
+        const [node] = await tx.$queryRaw<
+            Array<{
+                createdAt: Date;
+                isTrafficTrackingActive: boolean;
+                trafficResetDay: number | null;
+                trafficUsageStartedAt: Date | null;
+            }>
+        >(Prisma.sql`
+            SELECT created_at AS "createdAt",
+                   is_traffic_tracking_active AS "isTrafficTrackingActive",
+                   traffic_reset_day AS "trafficResetDay",
+                   traffic_usage_started_at AS "trafficUsageStartedAt"
+            FROM nodes WHERE uuid = ${nodeUuid}::uuid FOR UPDATE
+        `);
+        if (!node) throw new Error(`Node ${nodeUuid} no longer exists.`);
+        if (node.trafficUsageStartedAt) return node.trafficUsageStartedAt;
+
+        const periodStart = getLegacyNodeTrafficPeriodStart(node);
+        const [history] = await tx.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
+            SELECT COALESCE(SUM(total_bytes), 0)::bigint AS total
+            FROM node_forwarding_usage_history
+            WHERE node_uuid = ${nodeUuid}::uuid
+              AND created_at >= ${getNodeTrafficHistoryStart(periodStart)}
+        `);
+        const backfill = (history.total * BigInt(nodeMultiplier)) / 1_000_000_000n;
+        await tx.$executeRaw(Prisma.sql`
+            UPDATE nodes
+            SET traffic_used_bytes = COALESCE(traffic_used_bytes, 0) + ${backfill},
+                traffic_usage_started_at = ${periodStart}
+            WHERE uuid = ${nodeUuid}::uuid AND traffic_usage_started_at IS NULL
+        `);
+        return periodStart;
     }
 
     private async applyWriteBatch(

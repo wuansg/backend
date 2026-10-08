@@ -31,6 +31,7 @@ export function buildUsageSnapshotWriteBatch(
     snapshots: readonly UsageSnapshot[],
     userMultiplier: string,
     nodeMultiplier: string,
+    nodeTrafficPeriodStart?: Date,
 ): UsageSnapshotWriteBatch {
     const nodeHours = new Map<string, UsageDelta>();
     const users = new Map<
@@ -67,10 +68,6 @@ export function buildUsageSnapshotWriteBatch(
         const nodeUsage = sumUsage(outbounds.values());
         if (nodeUsage.uplink + nodeUsage.downlink > 0n) {
             addUsage(nodeHours, hourKey, nodeUsage);
-            nodeMultipliedTotal += multiplyUsage(
-                nodeMultiplier,
-                nodeUsage.uplink + nodeUsage.downlink,
-            );
         }
 
         for (const [username, usage] of aggregate(
@@ -124,6 +121,7 @@ export function buildUsageSnapshotWriteBatch(
             }
         }
 
+        let forwardingTotal = 0n;
         for (const counter of snapshot.counters) {
             const forwardingProtocol = counter.protocol?.toUpperCase();
             if (
@@ -136,10 +134,25 @@ export function buildUsageSnapshotWriteBatch(
             ) {
                 continue;
             }
-            addUsage(forwardingRules, `${counter.name}\u0000${forwardingProtocol}\u0000${hourKey}`, {
-                uplink: counter.direction === 'uplink' ? BigInt(counter.value) : 0n,
-                downlink: counter.direction === 'downlink' ? BigInt(counter.value) : 0n,
-            });
+            addUsage(
+                forwardingRules,
+                `${counter.name}\u0000${forwardingProtocol}\u0000${hourKey}`,
+                {
+                    uplink: counter.direction === 'uplink' ? BigInt(counter.value) : 0n,
+                    downlink: counter.direction === 'downlink' ? BigInt(counter.value) : 0n,
+                },
+            );
+            forwardingTotal += BigInt(counter.value);
+        }
+
+        // Quota counts traffic on this node, including nft forwarding. Keep
+        // core, forwarding, user and Host histories separate: they overlap.
+        // Delayed pre-reset snapshots still enter history, but not the new quota.
+        if (!nodeTrafficPeriodStart || capturedAt >= nodeTrafficPeriodStart) {
+            nodeMultipliedTotal += multiplyUsage(
+                nodeMultiplier,
+                nodeUsage.uplink + nodeUsage.downlink + forwardingTotal,
+            );
         }
     }
 
