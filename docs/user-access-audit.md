@@ -1,6 +1,6 @@
 # 指定用户访问审计
 
-状态：GitHub 发布、面板上线、aiyun 兼容性灰度及 HostDZire SG 实际采集验收完成。
+状态：GitHub 发布、面板上线、aiyun 兼容性灰度、HostDZire SG 实际采集验收及 12 台在线节点滚动升级完成。
 日期：2026-10-10 UTC。经用户明确指定，仅用户 ID `19` 开启，保存 7 天。
 
 发布版本：Backend `3.18.0-anytls`、Contract `3.18.0-anytls.0`、
@@ -86,6 +86,7 @@ HTTPS 页面路径、正文、搜索内容不可见；IP 直连、ECH、加密 D
 | Frontend | `d0d8f21722c7cd942788d0c75588ed889ec8d696` | `3.17.0`，打包进 Backend 镜像 |
 | Backend | `9559c25a888575a55bba8a6375b16e809eac9dc0` | `3.18.0-anytls` / `sha256:0c957a1d3fbde237bc3e670fea46eccfd69e95d1b84aac56c3ca1031c768117b` |
 | Agent | `69f296b38d25336010032c29a7543e0db266eb90` | `3.16.0` / `sha256:09571733493e4b6b216b4e2916ee9da5dd1128cbc60a2605ac5a61348e3c76e6` |
+| Agent ARM64（Oracle Japan 独立构建） | `9fb8d2350e0781a403c063c0e29eb5ce6e82e416` | `3.16.0-arm64` / `sha256:d678cbab4cba943313fdf1c75aa5101c3b92d6d26f6a81d1c69948d4fb5a8323` |
 
 GitHub 成功运行：
 
@@ -96,6 +97,7 @@ GitHub 成功运行：
 - [Contract 3.18.0-anytls.0 发布](https://github.com/wuansg/backend/actions/runs/38061932788)
 - [Backend 正式镜像](https://github.com/wuansg/backend/actions/runs/38062033210)
 - [Agent 测试与正式镜像](https://github.com/wuansg/remnawave-node-go/actions/runs/38061662178)
+- [Oracle Japan ARM64 独立测试与镜像](https://github.com/wuansg/remnawave-node-go/actions/runs/38062965730)
 
 面板部署于 HostDZire SG。升级前备份：
 `/opt/remnawave/backups/release-3.18.0-20261010/`，包含 PostgreSQL dump、Compose 与原环境文件。
@@ -105,7 +107,7 @@ GitHub 成功运行：
 公网面板 HTTP 200，未登录审计接口 401，无审计权限但有 users/connections 权限的 Token 返回 403。
 正式迁移后首先确认开启用户及记录均为 0，随后才按用户指示开启 ID 19。
 
-仅升级两个 Agent，并同步其面板期望版本 / 镜像标签：
+首次灰度升级两个 Agent，并同步其面板期望版本 / 镜像标签：
 
 - **aiyun**：`3.16.0`，保留零入站、纯转发模式；1 条转发规则 applied，usage snapshot 无积压。
   默认无用户时已验证不订阅；4 个审计 Agent 接口无 JWT 均为 401。
@@ -125,9 +127,45 @@ SG 投递队列已 ACK 清空：pending 0、dropped 0、lastError 空，原 usag
 
 上线前即离线的 CloudSilk 未改动；其余原在线节点在灰度后仍在线。
 
+## 全节点滚动升级（2026-10-10 UTC）
+
+经用户要求升级所有节点，最终完成 12 台在线节点，均为 Agent `3.16.0`、sing-box `1.14.0`。
+实际版本、面板期望版本和镜像标签已同步；x64 使用 `3.16.0`，Oracle Japan ARM64 使用
+`3.16.0-arm64`，全部以 GitHub Actions 发布镜像的固定 digest 部署。
+
+- 核心节点（9 台）：DataWave HKG std、Hytron、DataWave TPE std、JamCloud、HostDZire SG、
+  Oracle Japan、taipei101、NoLimit、bero，均 `CORE_ACTIVE` 且核心在线。
+- 纯转发节点（3 台）：AliHK、YH AliHK、Aiyun，保留零入站、`FORWARDING_ONLY`，转发状态 applied；
+  不为其强行启动核心，也不把无法采集网站审计视为转发故障。
+- CloudSilk：用户确认因流量用完停机，本轮跳过；仍为 `3.15.0`，未重启、未调整流量限额。
+
+香港节点最后逐台处理。DWHK 更新前，将当前实际运行的 **OpenClash** `Final` 从
+`🇭🇰 hkg | ali` 切到独立的 `🇸🇬 sin | cft`（切换前探测 59 ms）；香港批次验收完成后，
+探测原香港链路 16 ms 并恢复原选择。未启动或重载 Nikki，未改订阅配置。
+
+Oracle ARM64 在独立分支 `ops/oracle-arm64-3.16.0` 手动构建并通过测试；仅改架构构建工作流，
+应用逻辑与 x64 同版本，未改变 main 的 x64 构建策略或常规镜像标签。
+
+逐台验收及最终全量复核通过：
+
+- 原配置 profile、入站及用户配置哈希、转发/插件哈希均不变；Compose 仅修改镜像行，
+  挂载、环境值、网络与启动参数保持不变。
+- 原 usage snapshot generation 保留，gap 0、pending 0、无同步错误，节点已用流量未重置。
+- AliHK、YH AliHK、DWHK 共 28 个命名 nft 转发计数器的字节和包数均不低于升级前快照。
+- 12 台审计政策同步正常；9 台核心节点采集正常，仍只有用户 ID `19` 开启，其他用户无审计记录。
+- 临时 rollout API Token 已删除并清理缓存；无硬件/网络测速任务，未扩容两台 AliHK。
+- 面板公网 HTTP 200，容器 healthy、restarts 0；Backend/Frontend 未因本轮 Agent 升级更换镜像。
+
+后续升级的 10 台节点各自回滚备份：
+`/root/remnanode-backups/access-audit-fleet-3.16.0-20261010/`，保留原 Compose、旧镜像信息、
+环境规范化校验值、运行参数及适用节点的 nft 计数快照。首次两个灰度节点的备份路径见上文。
+全量升级前的面板基线另保存在
+`/opt/remnawave/backups/release-3.18.0-20261010/access-audit-fleet-baseline.json`。
+原镜像均保留，未执行镜像或构建缓存清理。
+
 ## 后续
 
-其他 Agent 仍为 `3.15.0`，尚未滚动升级，因而不具备此采集能力。
-下一轮经用户确认后再升级；DWHK 按既有要求先切走 Nikki final，再更新、恢复。
-GitHub 常规只构建 x64；Oracle Japan ARM64 仍需独立版本构建安排，不能部署 x64 镜像。
+仅 CloudSilk 尚未升级，待流量恢复、SSH 可用后再补；本轮不尝试恢复这台停机节点。
+后续 DWHK 更新仍须先切走实际运行控制器的 Final，再更新并验证后恢复。
+GitHub 常规只构建 x64；Oracle Japan ARM64 继续使用独立版本构建，不能部署 x64 镜像。
 用户 19 政策保持开启；可从用户详情的“访问审计”关闭，关闭会立即阻止 Backend 写入新记录。
