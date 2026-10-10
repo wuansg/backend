@@ -3,6 +3,7 @@ import { ConditionalModule } from '@nestjs/config';
 
 import { isRestApi, isScheduler } from '@common/utils/startup-app';
 
+import { AccessAuditModule } from './access-audit/access-audit.module';
 import { AdminModule } from './admin/admin.module';
 import { ApiTokensModule } from './api-tokens/api-tokens.module';
 import { AuthModule } from './auth/auth.module';
@@ -38,6 +39,7 @@ import { UsersModule } from './users/users.module';
     imports: [
         RemnawaveSettingsModule,
         ConditionalModule.registerWhen(AdminModule, () => isRestApi()),
+        ConditionalModule.registerWhen(AccessAuditModule, () => isRestApi()),
         ConditionalModule.registerWhen(AuthModule, () => isRestApi()),
         ConditionalModule.registerWhen(SubscriptionPageConfigModule, () => isRestApi()),
         UsersModule,

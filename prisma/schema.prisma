@@ -28,6 +28,67 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model AccessAuditSettings {
+  id          Int    @id @default(1)
+  revision    BigInt @default(0)
+  targetsHash String @default("") @map("targets_hash")
+
+  @@map("access_audit_settings")
+}
+
+model UserAccessAuditPolicy {
+  userId        BigInt    @id @map("user_id")
+  enabled       Boolean   @default(false)
+  retentionDays Int       @default(7) @map("retention_days")
+  windowId      String?   @map("window_id") @db.Uuid
+  enabledAt     DateTime? @map("enabled_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user          Users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_access_audit_policy")
+}
+
+model UserAccessAuditRecord {
+  id              BigInt    @id @default(autoincrement())
+  userId          BigInt    @map("user_id")
+  nodeUuid        String    @map("node_uuid") @db.Uuid
+  windowId        String    @map("window_id") @db.Uuid
+  connectionId    String    @map("connection_id") @db.Uuid
+  domain          String    @db.VarChar(253)
+  destinationIp   String    @map("destination_ip") @db.VarChar(45)
+  destinationPort Int       @map("destination_port")
+  inbound         String    @db.VarChar(128)
+  network         String    @db.VarChar(16)
+  protocol        String    @db.VarChar(32)
+  startedAt       DateTime  @map("started_at") @db.Timestamptz(3)
+  observedAt      DateTime  @map("observed_at") @db.Timestamptz(3)
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(3)
+  closedAt        DateTime? @map("closed_at") @db.Timestamptz(3)
+  uploadBytes     BigInt    @map("upload_bytes")
+  downloadBytes   BigInt    @map("download_bytes")
+  partial         Boolean   @default(false)
+  user            Users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  node            Nodes     @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+
+  @@unique([nodeUuid, windowId, connectionId])
+  @@index([userId, observedAt])
+  @@index([observedAt])
+  @@index([expiresAt])
+  @@map("user_access_audit_records")
+}
+
+model NodeAccessAuditState {
+  nodeUuid   String    @id @map("node_uuid") @db.Uuid
+  leaseOwner String?   @map("lease_owner") @db.Uuid
+  leaseUntil DateTime? @map("lease_until") @db.Timestamptz(3)
+  syncedAt   DateTime? @map("synced_at") @db.Timestamptz(3)
+  lastError  String?   @map("last_error") @db.VarChar(256)
+  status     Json      @default("{}")
+  node       Nodes     @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+
+  @@map("node_access_audit_state")
+}
+
 model RemnawaveSettings {
   id Int @id @default(1)
 
@@ -77,6 +138,8 @@ model Users {
   userMetas                      UserMeta[]
   torrentBlockerReports          TorrentBlockerReports[]
   traffic                        UserTraffic?
+  accessAuditPolicy              UserAccessAuditPolicy?
+  accessAuditRecords             UserAccessAuditRecord[]
 
   externalSquad ExternalSquads? @relation(fields: [externalSquadUuid], references: [uuid], onDelete: SetNull)
 
@@ -236,6 +299,8 @@ model Nodes {
   geocheckHistory              NodeGeocheckHistory[]
   geocheckDriftEvents          NodeGeocheckDriftEvent[]
   forwardingUsageHistory       NodeForwardingUsageHistory[]
+  accessAuditState             NodeAccessAuditState?
+  accessAuditRecords           UserAccessAuditRecord[]
 
   activeConfigProfile ConfigProfiles? @relation(fields: [activeConfigProfileUuid], references: [uuid], onDelete: SetNull)
   provider            InfraProviders? @relation(fields: [providerUuid], references: [uuid], onDelete: SetNull)

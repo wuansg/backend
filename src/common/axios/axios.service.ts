@@ -655,6 +655,23 @@ export class AxiosService {
         });
     }
 
+    public async accessAuditRequest(
+        path: 'config' | 'pull' | 'ack' | 'status',
+        opts: INodeConnectionOpts,
+        data?: unknown,
+    ) {
+        return this.request<{ response: unknown }>({
+            label: 'ACCESS AUDIT',
+            path: '/node/access-audit/' + path,
+            opts,
+            data,
+            method: path === 'status' ? 'get' : 'post',
+            handle500: true,
+            logAxiosError: false,
+            timeout: 10_000,
+        });
+    }
+
     public async getUsageSnapshotStatus(
         opts: INodeConnectionOpts,
     ): Promise<UsageSnapshotStatus | null> {

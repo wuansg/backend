@@ -1,4 +1,9 @@
 export const CONTROLLERS_INFO = {
+    ACCESS_AUDIT: {
+        tag: 'User Access Audit',
+        description: 'Sensitive connection records for explicitly opted-in users only.',
+        resource: 'access-audit',
+    },
     MANAGEMENT: {
         tag: 'Management Catalog Controller',
         description: 'Quick Open and generic entity organization.',

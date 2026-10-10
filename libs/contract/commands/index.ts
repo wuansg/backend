@@ -1,4 +1,5 @@
 export * from './api-tokens';
+export * from './access-audit';
 export * from './auth';
 export * from './bandwidth-stats';
 export * from './config-profiles';
