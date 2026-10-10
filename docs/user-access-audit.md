@@ -1,7 +1,7 @@
 # 指定用户访问审计
 
-状态：本地实现与验证完成，已获准推送并在 aiyun 灰度；GitHub 发布进行中。
-日期：2026-10-10 UTC。未开启任何真实用户。
+状态：GitHub 发布、面板上线、aiyun 兼容性灰度及 HostDZire SG 实际采集验收完成。
+日期：2026-10-10 UTC。经用户明确指定，仅用户 ID `19` 开启，保存 7 天。
 
 发布版本：Backend `3.18.0-anytls`、Contract `3.18.0-anytls.0`、
 Frontend `3.17.0`、Agent `3.16.0`（sing-box 仍为 `1.14.0`）。
@@ -77,13 +77,57 @@ HTTPS 页面路径、正文、搜索内容不可见；IP 直连、ECH、加密 D
   大整数显示、安全文本渲染、域名/日期筛选、快捷栏、全局入口通过。
 - Frontend 既有日期快捷栏与上传/下载展示回归通过；新增 GitHub x64 回归工作流。
 
-## 尚未执行的发布步骤
+## 发布与线上验收
 
-1. 仅提交本功能及版本号；保留工作区无关改动。
-2. 先推送 Frontend 并完成构建，再推送 Backend（镜像打包新界面）；Agent 独立推送。
-   让 GitHub Actions 构建版本标签镜像；不复制本地二进制部署。
-3. 正式数据库备份后应用加法迁移，更新 Backend/Frontend 并核验公网 REST/页面健康。
-4. aiyun 使用 Agent `3.16.0` 版本标签镜像灰度，保持现有配置及数据卷。
-5. 用户明确指定真实测试账户后才开启，并验证另一个未开启账户无记录。
-6. 灰度通过后滚动升级其他节点。DWHK 按既有要求先切走 Nikki final，再更新、恢复。
-   GitHub 常规只构建 x64；Oracle Japan ARM64 仍需独立版本构建安排，不能部署 x64 镜像。
+所有镜像来自 GitHub Actions；部署使用版本标签加 digest，没有复制本地二进制。
+
+| 组件 | 应用源提交 | 发布版本 / 镜像 digest |
+| --- | --- | --- |
+| Frontend | `d0d8f21722c7cd942788d0c75588ed889ec8d696` | `3.17.0`，打包进 Backend 镜像 |
+| Backend | `9559c25a888575a55bba8a6375b16e809eac9dc0` | `3.18.0-anytls` / `sha256:0c957a1d3fbde237bc3e670fea46eccfd69e95d1b84aac56c3ca1031c768117b` |
+| Agent | `69f296b38d25336010032c29a7543e0db266eb90` | `3.16.0` / `sha256:09571733493e4b6b216b4e2916ee9da5dd1128cbc60a2605ac5a61348e3c76e6` |
+
+GitHub 成功运行：
+
+- [Frontend 审计浏览器回归](https://github.com/wuansg/frontend/actions/runs/38061656679)
+- [Frontend 日期选择器回归](https://github.com/wuansg/frontend/actions/runs/38061656722)
+- [Backend PostgreSQL / 权限 / 采集回归](https://github.com/wuansg/backend/actions/runs/38061932783)
+- [Backend 原有节点计费回归](https://github.com/wuansg/backend/actions/runs/38061932795)
+- [Contract 3.18.0-anytls.0 发布](https://github.com/wuansg/backend/actions/runs/38061932788)
+- [Backend 正式镜像](https://github.com/wuansg/backend/actions/runs/38062033210)
+- [Agent 测试与正式镜像](https://github.com/wuansg/remnawave-node-go/actions/runs/38061662178)
+
+面板部署于 HostDZire SG。升级前备份：
+`/opt/remnawave/backups/release-3.18.0-20261010/`，包含 PostgreSQL dump、Compose 与原环境文件。
+数据库 dump 已通过 `pg_restore --list` 核验（454 项、约 7.4 MiB），SHA256：
+`e48e530f401abf5984884142e2e12703dee49751becc53d96a1f75c828be4b7e`。
+加法迁移 `20261010000000_user_access_audit` 已应用；APP_SECRET 和其余环境设置未改变。
+公网面板 HTTP 200，未登录审计接口 401，无审计权限但有 users/connections 权限的 Token 返回 403。
+正式迁移后首先确认开启用户及记录均为 0，随后才按用户指示开启 ID 19。
+
+仅升级两个 Agent，并同步其面板期望版本 / 镜像标签：
+
+- **aiyun**：`3.16.0`，保留零入站、纯转发模式；1 条转发规则 applied，usage snapshot 无积压。
+  默认无用户时已验证不订阅；4 个审计 Agent 接口无 JWT 均为 401。
+- **HostDZire SG**：`3.16.0`，保持原 Trojan WS 54320 入站和用户权限；sing-box `1.14.0` 正常运行。
+  审计服务仅在 `127.0.0.1:61003`，有秘密认证；政策已同步且只有 1 个开启用户。
+
+这两个节点的 Compose、挂载、网络、环境和启动命令保持不变（仅更新镜像行）。
+各自 Agent 回滚备份：`/root/remnanode-backups/access-audit-3.16.0-20261010/`。
+
+真实链路验收使用用户 19，经 SG 正式入站发起 2 个小流量 HTTPS 请求，均 HTTP 200。
+审计最终记录 2 条，域名识别、关闭计量及参考上传 `3876` 字节 / 下载 `132143` 字节正确入库，
+非 partial；带用户、节点、域名筛选的 records API 和域名排行均 HTTP 200。
+SG 投递队列已 ACK 清空：pending 0、dropped 0、lastError 空，原 usage snapshot 无积压。
+数据库未发现任何非 19 用户的审计记录；所有其余用户政策关闭。
+测试客户端仅监听临时 loopback 端口，25 秒自动停止；没有将用户密码或客户端配置写入文件。
+审计 API 验收的临时 Token 用后删除并清理缓存。
+
+上线前即离线的 CloudSilk 未改动；其余原在线节点在灰度后仍在线。
+
+## 后续
+
+其他 Agent 仍为 `3.15.0`，尚未滚动升级，因而不具备此采集能力。
+下一轮经用户确认后再升级；DWHK 按既有要求先切走 Nikki final，再更新、恢复。
+GitHub 常规只构建 x64；Oracle Japan ARM64 仍需独立版本构建安排，不能部署 x64 镜像。
+用户 19 政策保持开启；可从用户详情的“访问审计”关闭，关闭会立即阻止 Backend 写入新记录。
