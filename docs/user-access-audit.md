@@ -1,9 +1,10 @@
 # 指定用户访问审计
 
-状态：GitHub 发布、面板上线、aiyun 兼容性灰度、HostDZire SG 实际采集验收及 12 台在线节点滚动升级完成。
-日期：2026-10-10 UTC。经用户明确指定，仅用户 ID `19` 开启，保存 7 天。
+状态：首次发布及 12 台在线节点滚动升级完成；审计 UI 优化已于 2026-10-11 UTC 上线。
+首次发布日期：2026-10-10 UTC。首次验收按用户指示仅为 ID `19` 开启，保存 7 天；
+这是当时的验收状态，后续部署以管理员当前设置为准，不恢复或扩大审计范围。
 
-发布版本：Backend `3.18.0-anytls`、Contract `3.18.0-anytls.0`、
+首次发布版本：Backend `3.18.0-anytls`、Contract `3.18.0-anytls.0`、
 Frontend `3.17.0`、Agent `3.16.0`（sing-box 仍为 `1.14.0`）。
 Frontend 使用独立类型校验的审计接口适配器，不需要等待新 Contract 资产发布。
 
@@ -163,9 +164,51 @@ Oracle ARM64 在独立分支 `ops/oracle-arm64-3.16.0` 手动构建并通过测�
 `/opt/remnawave/backups/release-3.18.0-20261010/access-audit-fleet-baseline.json`。
 原镜像均保留，未执行镜像或构建缓存清理。
 
+## 审计 UI 优化部署（2026-10-11 UTC）
+
+Frontend `3.17.1` 已打包进 Backend `3.18.1-anytls` 并部署到 HostDZire SG 面板。
+这次不修改 Backend 业务逻辑、数据库迁移、Contract 或 Agent，不重启任何节点。
+
+- 设置、筛选、连接记录及目标排行分区；新增本页连接数、目标数和参考上传/下载摘要。
+- 宽屏使用记录表格，窄屏使用卡片；长域名、IPv6、用户名和流量数值适配小屏。
+- 优化浅色/深色主题、加载/错误/空状态、分页和采集状态。
+- 继续保留逐用户开启确认、原日期与筛选行为；摘要是本页连接参考流量，不是计费总量。
+
+| 组件 | 应用源提交 | 版本 / 镜像 digest |
+| --- | --- | --- |
+| Frontend | `67aed250c47c6bd91cd66b0db277339200d11a55` | `3.17.1`，打包进 Backend 镜像 |
+| Backend | `2e20e1405cec57626e4cd46ae7903eaa32515d44` | `3.18.1-anytls` / `sha256:c2c81261f8cabd10c8a40a8d084c73ee9ced72a9931f0d27b64495fe5b4f7c8e` |
+
+GitHub 成功运行：
+
+- [Frontend 审计 UI 回归](https://github.com/wuansg/frontend/actions/runs/38134901096)
+- [Frontend 日期选择器回归](https://github.com/wuansg/frontend/actions/runs/38134901166)
+- [Backend 正式镜像](https://github.com/wuansg/backend/actions/runs/38135185792)
+
+本地类型检查、生产构建、日期及流量回归、1280/768/390/320 px 浏览器回归通过；
+oxlint 在本地环境发生 allocator panic，未将其算作通过的检查。
+
+部署前备份：`/opt/remnawave/backups/release-3.18.1-20261011/`，
+包括 PostgreSQL dump、原 Compose/环境、容器信息和本次动态基线。
+dump 经 `pg_restore --list` 验证（478 项，约 8.1 MiB），SHA256：
+`bb73a28e91b5e2603e8bef8c8f4c7e314713b3515116f489858bd206aeec742b`。
+保留原 `3.18.0-anytls` 镜像及 Compose 供回滚，没有清理镜像或备份。
+
+线上验收：
+
+- Compose 仅变更面板镜像为版本标签加 digest；其余容器未重建，环境设置及 APP_SECRET 不变。
+- 面板 running/healthy、restarts 0；公网 HTML 和入口 JS 均 HTTP 200，确认实际提供新版 UI。
+- 13 个节点配置与实际/期望版本不变；原在线 12 台仍在线，核心/转发状态正常，
+  usage snapshot generation 保留、gap 0、pending 0、近期同步无错误，已用流量未下降。
+- 审计政策与部署前动态基线逐项一致，包括开关、保存天数、窗口及更新时间；
+  所有原在线节点审计同步正常。没有恢复首次验收的 user 19-only 状态，也没有自动开启任何用户。
+- 没有新增迁移；未登录审计端点 401，具有审计读取权限 200，无审计权限 403。
+  接口验证使用不存在的目标筛选，不读取真实访问历史；临时 Token 用后删除并清理缓存。
+- CloudSilk 因流量用尽仍跳过；未修改任何节点的配额、配置或运行状态。
+
 ## 后续
 
 仅 CloudSilk 尚未升级，待流量恢复、SSH 可用后再补；本轮不尝试恢复这台停机节点。
 后续 DWHK 更新仍须先切走实际运行控制器的 Final，再更新并验证后恢复。
 GitHub 常规只构建 x64；Oracle Japan ARM64 继续使用独立版本构建，不能部署 x64 镜像。
-用户 19 政策保持开启；可从用户详情的“访问审计”关闭，关闭会立即阻止 Backend 写入新记录。
+审计开关以管理员当前设置为准；可从用户详情的“访问审计”关闭，关闭会立即阻止 Backend 写入新记录。
