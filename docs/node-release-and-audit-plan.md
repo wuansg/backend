@@ -60,3 +60,45 @@ Backend 修改范围 lint 通过；Frontend 的 oxlint 1.74.0 在本机和相同
 回归和 amd64 镜像构建通过，备份 HostDZire SG 面板数据库、Compose、环境与动态基线后，
 部署版本标签附 digest。Agent 不修改、不重建；节点 Profile、入站、转发配置及审计开关保持原样。
 CloudSilk 按流量用尽停机状态保留。发布结果另记录实际提交、Actions、镜像摘要和线上验收。
+
+## 部署完成（2026-10-12 UTC）
+
+- HostDZire SG 面板已部署 Backend `3.19.0-anytls`，内置 Frontend `3.18.0`。
+- Backend 源码 `725afa14f1fe63655124385fbcd7a03d01c1bf04`；Frontend 源码
+  `a20eab4341071344faa5d07e2135cfa7c6fcc77a`，版本标签 `3.18.0`。
+- 固定镜像 `ghcr.io/wuansg/backend:3.19.0-anytls@sha256:b53826fec78ad0d360ac4d2e72aca54b61ca0f05407eba88182b2e6d3be73ba1`，
+  已核对 amd64、OCI 版本与前后端提交标签。全部镜像及 Frontend ZIP 均由 GitHub 构建。
+- Contract `3.19.0-anytls.0` 正式资产发布成功；Agent 保持既有 `3.16.0`，未修改或重建。
+
+成功 Actions：
+
+- [Backend 镜像](https://github.com/wuansg/backend/actions/runs/38226302060)
+- [发布与审计数据库回归](https://github.com/wuansg/backend/actions/runs/38226303536)
+- [节点流量回归](https://github.com/wuansg/backend/actions/runs/38226303476)
+- [Contract 发布](https://github.com/wuansg/backend/actions/runs/38226303480)
+- [Frontend 正式版本](https://github.com/wuansg/frontend/actions/runs/38226298581)
+- [Frontend 发布/审计 UI 回归](https://github.com/wuansg/frontend/actions/runs/38226298778)
+- [日期筛选回归](https://github.com/wuansg/frontend/actions/runs/38226298741)
+
+备份位于 `/opt/remnawave/backups/release-3.19.0-20261012/`，保留原 Compose、环境、
+容器信息、动态基线及 PostgreSQL custom dump（约 11 MiB，`pg_restore --list` 478 项）。
+数据库 dump SHA256：`b9a155c3f3d374ddcd710fbf8be5509e9563ba356969bd67725a6357f655b815`。
+旧镜像 `3.18.1-anytls` 及其摘要保留；没有清理镜像、数据库卷或既有备份。
+
+线上验收：
+
+- 面板 running/healthy、容器 restarts 0；API、worker、scheduler 均 online/restarts 0；公网 HTTP 200。
+- 只重建面板容器，其余容器 ID 完全不变；Compose 只替换镜像，环境与 APP_SECRET 不变。
+- 原在线 12/13 台节点仍在线；配置、Profile、入站、转发及实际/期望版本与基线一致。
+  已用流量没有下降，快照 generation 保留、gap/pending 为 0、近期同步无错误。
+- 9 个在线核心节点均已得到 Agent 确认并建立健康 revision，3 个在线纯转发节点记录 NO_CORE。
+  在线节点没有固定版本、阻塞或待同步序号；没有新建灰度批次、回滚或强制重启核心。
+  后台对已知停机 CloudSilk 的健康尝试如实记录 FAILED；不存在其他节点的失败记录。
+- 两条新迁移已完成，旧迁移及校验值未修改。审计策略逐字段保持当前管理员设置，
+  包括 10 个现有启用用户、保存期、窗口和时间戳；没有恢复此前 user 19-only 策略。
+- 新汇总、上传/下载排行、CSV、发布历史：未登录 401、只读权限 200；只读 Token
+  无法执行 stage/resume/创建批次（403）。CSV 测试使用不存在的目标，只有表头，未读取真实访问历史。
+- 前端实际 bundle 包含发布弹窗、独立 stage 路由和审计增强；临时验证 Token 及缓存已清理。
+
+注：首次策略比较检查只因新 nullable 字段的 JSON 键顺序不同而误报；改为结构化逐字段比较后通过，
+没有为消除误报改写数据库策略。CloudSilk 继续保留停机状态；本轮没有新增测速、压测或节点升级。
