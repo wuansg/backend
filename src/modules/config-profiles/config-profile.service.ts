@@ -11,6 +11,7 @@ import { diffInbounds } from '@common/utils/inbounds';
 import { CACHE_KEYS } from '@libs/contracts/constants';
 import { ERRORS } from '@libs/contracts/constants/errors';
 
+import { NodeDeploymentsService } from '@modules/node-deployments/node-deployments.service';
 import { NodeForwardingService } from '@modules/nodes/forwarding';
 import { NodesRepository } from '@modules/nodes/repositories/nodes.repository';
 
@@ -39,6 +40,7 @@ export class ConfigProfileService {
         private readonly rawCache: RawCacheService,
         private readonly nodesRepository: NodesRepository,
         private readonly nodeForwardingService: NodeForwardingService,
+        private readonly deployments: NodeDeploymentsService,
     ) {}
 
     public async getConfigProfiles(): Promise<TResult<GetConfigProfilesResponseModel>> {
@@ -212,6 +214,8 @@ export class ConfigProfileService {
         name?: string,
         config?: object,
         coreType?: 'SING_BOX',
+        actorUuid: string | null = null,
+        deployStrategy: 'immediate' | 'staged' = 'immediate',
     ): Promise<TResult<GetConfigProfileByUuidResponseModel>> {
         try {
             const existingConfigProfile =
@@ -225,6 +229,26 @@ export class ConfigProfileService {
                 return fail(ERRORS.NAME_OR_CONFIG_REQUIRED);
             }
 
+            if (config || coreType) {
+                await this.deployments.assertProfileEditable(uuid);
+                if (deployStrategy === 'staged') {
+                    const candidate = this.createConfigHelper(
+                        coreType ?? existingConfigProfile.coreType,
+                        config ?? (existingConfigProfile.config as object),
+                    ).getAllInbounds();
+                    const topology = (inbounds: Array<{ tag: string; type: string }>) =>
+                        JSON.stringify(
+                            inbounds
+                                .map((i) => ({ tag: i.tag, type: i.type }))
+                                .sort((a, b) => a.tag.localeCompare(b.tag)),
+                        );
+                    if (topology(candidate) !== topology(existingConfigProfile.inbounds))
+                        throw Error(
+                            'Staged releases must retain inbound tags and protocol types; topology changes require an explicit immediate deployment',
+                        );
+                    await this.deployments.holdProfile(uuid);
+                }
+            }
             await this.updateConfigProfileTransactional(
                 existingConfigProfile,
                 uuid,
@@ -237,10 +261,13 @@ export class ConfigProfileService {
                 // No need for now
                 // await this.commandBus.execute(new SyncActiveProfileCommand());
 
-                await this.nodesQueuesService.startAllNodesByProfile({
-                    profileUuid: existingConfigProfile.uuid,
-                    emitter: 'updateConfigProfile',
-                });
+                if (deployStrategy !== 'staged')
+                    await this.nodesQueuesService.startAllNodesByProfile({
+                        profileUuid: existingConfigProfile.uuid,
+                        emitter: 'updateConfigProfile',
+                        actorUuid,
+                        clearPin: true,
+                    });
 
                 await this.rawCache.delMany(
                     existingConfigProfile.inbounds.map((inbound) =>

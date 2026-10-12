@@ -1,4 +1,4 @@
-import { Job } from 'bullmq';
+import { DelayedError, Job } from 'bullmq';
 
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
@@ -6,6 +6,7 @@ import { CommandBus, QueryBus } from '@nestjs/cqrs';
 
 import { AxiosService } from '@common/axios';
 
+import { NodeDeploymentsService } from '@modules/node-deployments/node-deployments.service';
 import { DeleteNodeByUuidCommand } from '@modules/nodes/commands/delete-node-by-uuid';
 import { UpdateNodeCommand } from '@modules/nodes/commands/update-node';
 import { GetNodeByUuidQuery } from '@modules/nodes/queries/get-node-by-uuid';
@@ -25,11 +26,16 @@ export class StopNodeProcessor extends WorkerHost {
         private readonly axios: AxiosService,
         private readonly queryBus: QueryBus,
         private readonly commandBus: CommandBus,
+        private readonly deployments: NodeDeploymentsService,
     ) {
         super();
     }
 
-    async process(job: Job<{ nodeUuid: string; isNeedToBeDeleted: boolean }>): Promise<boolean> {
+    async process(
+        job: Job<{ nodeUuid: string; isNeedToBeDeleted: boolean }>,
+        token?: string,
+    ): Promise<boolean> {
+        let owner: string | null = null;
         try {
             const { nodeUuid, isNeedToBeDeleted } = job.data;
 
@@ -38,6 +44,12 @@ export class StopNodeProcessor extends WorkerHost {
             if (!result.isOk) {
                 this.logger.error(`Node ${nodeUuid} not found`);
                 return false;
+            }
+            if (!isNeedToBeDeleted && !result.response.isDisabled) return false;
+            owner = await this.deployments.acquireStopLease(nodeUuid);
+            if (!owner) {
+                await job.moveToDelayed(Date.now() + 2000, token);
+                throw new DelayedError();
             }
 
             if (isNeedToBeDeleted) {
@@ -69,8 +81,11 @@ export class StopNodeProcessor extends WorkerHost {
 
             return true;
         } catch (error) {
+            if (error instanceof DelayedError) throw error;
             this.logger.error(`Error handling "${NODES_JOB_NAMES.STOP_NODE}" job: ${error}`);
             return false;
+        } finally {
+            if (owner) await this.deployments.releaseStopLease(job.data.nodeUuid, owner);
         }
     }
 }

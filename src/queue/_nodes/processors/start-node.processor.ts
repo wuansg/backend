@@ -15,6 +15,10 @@ import { CACHE_KEYS, CACHE_KEYS_TTL, EVENTS } from '@libs/contracts/constants';
 
 import { NodeEvent } from '@integration-modules/notifications/interfaces';
 
+import {
+    NodeDeploymentsService,
+    NodeClaim,
+} from '@modules/node-deployments/node-deployments.service';
 import { NodeObservabilityRepository } from '@modules/node-observability';
 import { GetPluginByUuidQuery } from '@modules/node-plugins/queries/get-plugin-by-uuid';
 import { UpdateNodeCommand } from '@modules/nodes/commands/update-node';
@@ -47,13 +51,33 @@ export class StartNodeProcessor extends WorkerHost {
         private readonly commandBus: CommandBus,
         private readonly rawCacheService: RawCacheService,
         private readonly nodeObservabilityRepository: NodeObservabilityRepository,
+        private readonly deployments: NodeDeploymentsService,
     ) {
         super();
     }
 
     async process(job: Job<{ nodeUuid: string; force?: boolean }>) {
+        let claim: NodeClaim | null = null;
+        let success = false,
+            coreless = false;
+        let heartbeat: NodeJS.Timeout | undefined;
         try {
-            const { nodeUuid, force } = job.data;
+            if (job.name !== NODES_JOB_NAMES.START_NODE) return;
+            const { nodeUuid } = job.data;
+            // Jobs left over from an earlier release still reconcile the current database state.
+            if (!job.id?.startsWith('RECONCILE-'))
+                await this.deployments.request(nodeUuid, {
+                    force: job.data.force,
+                    reason: 'LEGACY_START_RECOVERY',
+                });
+            claim = await this.deployments.claim(nodeUuid);
+            if (!claim) return;
+            const force = claim.force;
+            heartbeat = setInterval(
+                () => void this.deployments.heartbeat(claim!).catch(() => {}),
+                30000,
+            );
+            heartbeat.unref();
 
             const nodeCheckup = await this.queryBus.execute(new GetNodeByUuidQuery(nodeUuid));
 
@@ -64,7 +88,7 @@ export class StartNodeProcessor extends WorkerHost {
 
             const { response: node } = nodeCheckup;
 
-            if (node.isConnecting) {
+            if (node.isDisabled) {
                 return;
             }
 
@@ -263,7 +287,8 @@ export class StartNodeProcessor extends WorkerHost {
                         new NodeEvent(updateNodeResult.response, EVENTS.NODE.CONNECTION_RESTORED),
                     );
                 }
-
+                success = !pluginError && !forwardingError;
+                coreless = true;
                 return;
             }
 
@@ -300,7 +325,9 @@ export class StartNodeProcessor extends WorkerHost {
                 );
             }
 
-            const startNodeResult = await this.axios.startCore(
+            const applied = await this.deployments.apply(
+                claim,
+                node.activeConfigProfileUuid,
                 {
                     coreType: 'SING_BOX' as const,
                     singBoxConfig: {
@@ -322,6 +349,7 @@ export class StartNodeProcessor extends WorkerHost {
                     nodeApiSniEnabled: node.nodeApiSniEnabled,
                 },
             );
+            const startNodeResult = applied.result;
 
             this.logger.log(`Started node in ${formatExecutionTime(reqStartTime)}`);
 
@@ -340,6 +368,7 @@ export class StartNodeProcessor extends WorkerHost {
             }
 
             const nodeResponse = startNodeResult.response;
+            success = applied.success && !pluginError && !forwardingError;
 
             const refreshedHealth = await this.axios.getNodeHealth({
                 address: node.address,
@@ -406,8 +435,21 @@ export class StartNodeProcessor extends WorkerHost {
             }
 
             return;
-        } catch (error) {
-            this.logger.error(`Error handling "${NODES_JOB_NAMES.START_NODE}" job: ${error}`);
+        } catch {
+            this.logger.error(`Node reconciliation interrupted; request remains recoverable`);
+        } finally {
+            if (heartbeat) clearInterval(heartbeat);
+            if (claim) {
+                await this.commandBus
+                    .execute(new UpdateNodeCommand({ uuid: claim.nodeUuid, isConnecting: false }))
+                    .catch(() => {});
+                await this.deployments.finish(
+                    claim,
+                    success,
+                    'CONFIG_APPLICATION_FAILED',
+                    coreless,
+                );
+            }
         }
     }
 

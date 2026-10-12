@@ -1,4 +1,6 @@
-import { Body, Controller, HttpStatus, Param, UseFilters, UseGuards } from '@nestjs/common';
+import { createZodDto } from 'nestjs-zod';
+
+import { Body, Controller, HttpStatus, Param, Req, UseFilters, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiConflictResponse, ApiTags } from '@nestjs/swagger';
 
 import { Endpoint } from '@common/decorators/base-endpoint';
@@ -19,9 +21,12 @@ import {
     GetConfigProfilesCommand,
     GetInboundsByProfileUuidCommand,
     ReorderConfigProfileCommand,
+    StageConfigProfileCommand,
     UpdateConfigProfileCommand,
 } from '@libs/contracts/commands';
 import { ROLE } from '@libs/contracts/constants';
+
+import type { IJWTAuthPayload } from '@modules/auth/interfaces';
 
 import { ConfigProfileService } from './config-profile.service';
 import {
@@ -41,6 +46,8 @@ import {
     UpdateConfigProfileBodyDto,
     UpdateConfigProfileResponseDto,
 } from './dtos';
+
+class StageProfileBodyDto extends createZodDto(StageConfigProfileCommand.RequestBodySchema) {}
 
 @ApiBearerAuth('Authorization')
 @ApiScopeResource(CONTROLLERS_INFO.CONFIG_PROFILES.resource)
@@ -174,18 +181,41 @@ export class ConfigProfileController {
     })
     async updateConfigProfile(
         @Body() body: UpdateConfigProfileBodyDto,
+        @Req() req: { user: IJWTAuthPayload },
     ): Promise<UpdateConfigProfileResponseDto> {
         const result = await this.configProfileService.updateConfigProfile(
             body.uuid,
             body.name,
             body.config,
             body.coreType,
+            req.user.uuid,
+            body.deployStrategy,
         );
 
         const data = errorHandler(result);
         return {
             response: data,
         };
+    }
+
+    @Endpoint({
+        command: StageConfigProfileCommand,
+        httpCode: HttpStatus.OK,
+        type: UpdateConfigProfileResponseDto,
+    })
+    async stageConfigProfile(
+        @Body() body: StageProfileBodyDto,
+        @Req() req: { user: IJWTAuthPayload },
+    ): Promise<UpdateConfigProfileResponseDto> {
+        const result = await this.configProfileService.updateConfigProfile(
+            body.uuid,
+            body.name,
+            body.config,
+            body.coreType,
+            req.user.uuid,
+            'staged',
+        );
+        return { response: errorHandler(result) };
     }
 
     @Endpoint({

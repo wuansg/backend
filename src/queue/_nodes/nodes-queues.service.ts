@@ -3,6 +3,10 @@ import { Queue } from 'bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 
+import {
+    NodeDeploymentsService,
+    NodeApplyRequest,
+} from '@modules/node-deployments/node-deployments.service';
 import { IGetEnabledNodesPartialResponse } from '@modules/nodes/queries/get-enabled-nodes-partial/get-enabled-nodes-partial.query';
 
 import { QUEUES_NAMES } from '@queue/queue.enum';
@@ -49,6 +53,7 @@ export class NodesQueuesService implements OnApplicationBootstrap {
         @InjectQueue(QUEUES_NAMES.NODES.BULK_USERS) private readonly nodeBulkUsersQueue: Queue,
         @InjectQueue(QUEUES_NAMES.NODES.QUERY_NODES) private readonly queryNodesQueue: Queue,
         @InjectQueue(QUEUES_NAMES.NODES.PLUGINS) private readonly nodePluginsQueue: Queue,
+        private readonly deployments: NodeDeploymentsService,
     ) {}
 
     get queues() {
@@ -81,12 +86,15 @@ export class NodesQueuesService implements OnApplicationBootstrap {
         await this.startAllNodesQueue.setGlobalConcurrency(1);
     }
 
-    public async startNode(payload: { nodeUuid: string; force?: boolean }) {
-        return this.startNodeQueue.add(NODES_JOB_NAMES.START_NODE, payload, {
-            jobId: `${NODES_JOB_NAMES.START_NODE}-${payload.nodeUuid}`,
-            removeOnComplete: true,
-            removeOnFail: true,
-        });
+    public async startNode(payload: { nodeUuid: string } & NodeApplyRequest) {
+        const { nodeUuid, ...request } = payload;
+        return this.deployments.request(nodeUuid, request);
+    }
+    public async reconcileNodeUsers(nodeUuid: string) {
+        return this.deployments.request(nodeUuid, { reason: 'USER_RECONCILE' });
+    }
+    public async assertNodeConfigurationEditable(nodeUuid: string) {
+        return this.deployments.assertEditable(nodeUuid);
     }
 
     public async stopNode(payload: { nodeUuid: string; isNeedToBeDeleted: boolean }) {
@@ -147,15 +155,18 @@ export class NodesQueuesService implements OnApplicationBootstrap {
         emitter: string;
         profileUuid: string;
         force?: boolean;
+        actorUuid?: string | null;
+        clearPin?: boolean;
     }) {
-        return this.startAllNodesByProfileQueue.add(NODES_JOB_NAMES.START_ALL_BY_PROFILE, payload, {
-            deduplication: {
-                id: payload.profileUuid,
-            },
-        });
+        // Per-node durable requests coalesce the work. Do not drop newer clearPin/force intent.
+        return this.startAllNodesByProfileQueue.add(NODES_JOB_NAMES.START_ALL_BY_PROFILE, payload);
     }
 
-    public async startAllNodes(payload: { emitter: string; force?: boolean }) {
+    public async startAllNodes(payload: {
+        emitter: string;
+        force?: boolean;
+        actorUuid?: string | null;
+    }) {
         return this.startAllNodesQueue.add(NODES_JOB_NAMES.START_ALL_NODES, payload, {
             deduplication: {
                 id: NODES_JOB_NAMES.START_ALL_NODES,

@@ -20,6 +20,8 @@ import {
     AuditQuerySchema,
 } from '@libs/contracts/commands';
 
+import { auditCsv } from './access-audit-csv.util';
+
 @Injectable()
 export class AccessAuditService implements OnApplicationBootstrap, OnApplicationShutdown {
     private readonly logger = new Logger(AccessAuditService.name);
@@ -67,9 +69,10 @@ export class AccessAuditService implements OnApplicationBootstrap, OnApplication
             orderBy: { viewPosition: 'asc' },
         });
         return {
-            enabled: p?.enabled ?? false,
+            enabled: Boolean(p?.enabled && (!p.enabledUntil || p.enabledUntil > new Date())),
             retentionDays: p?.retentionDays ?? 7,
             enabledAt: p?.enabledAt?.toISOString() ?? null,
+            enabledUntil: p?.enabledUntil?.toISOString() ?? null,
             nodes: nodes.map((n) => ({
                 uuid: n.uuid,
                 name: n.name,
@@ -86,6 +89,13 @@ export class AccessAuditService implements OnApplicationBootstrap, OnApplication
     }
     async setPolicy(userId: number, input: unknown) {
         const b = AuditPolicyBodySchema.parse(input);
+        const until = b.enabledUntil ? new Date(b.enabledUntil) : null;
+        if (
+            b.enabled &&
+            until &&
+            (until <= new Date() || until.getTime() > Date.now() + 30 * 86400000)
+        )
+            throw new BadRequestException('Temporary audit expiry must be in the next 30 days');
         await this.db.$transaction(async (tx) => {
             // Same lock as ingestion: disabling cannot race with a record insert.
             await tx.$queryRaw`SELECT id FROM access_audit_settings WHERE id = 1 FOR UPDATE`;
@@ -99,19 +109,35 @@ export class AccessAuditService implements OnApplicationBootstrap, OnApplication
             const old = await tx.userAccessAuditPolicy.findUnique({
                 where: { userId: BigInt(userId) },
             });
-            const newlyEnabled = b.enabled && !old?.enabled;
+            const newlyEnabled =
+                b.enabled &&
+                (!old?.enabled || Boolean(old.enabledUntil && old.enabledUntil <= new Date()));
             if (
                 newlyEnabled &&
-                (await tx.userAccessAuditPolicy.count({ where: { enabled: true } })) >= 10000
+                (await tx.userAccessAuditPolicy.count({ where: this.activePolicies() })) >= 10000
             )
                 throw new BadRequestException('Access audit supports at most 10000 selected users');
             const data = {
-                ...b,
+                enabled: b.enabled,
+                retentionDays: b.retentionDays,
+                enabledUntil: !b.enabled
+                    ? null
+                    : b.enabledUntil !== undefined
+                      ? until
+                      : newlyEnabled
+                        ? null
+                        : (old?.enabledUntil ?? null),
                 ...(newlyEnabled ? { windowId: randomUUID(), enabledAt: new Date() } : {}),
             };
             await tx.userAccessAuditPolicy.upsert({
                 where: { userId: BigInt(userId) },
-                create: { userId: BigInt(userId), ...data },
+                // PostgreSQL checks INSERT values before ON CONFLICT, even for an existing row.
+                create: {
+                    userId: BigInt(userId),
+                    ...data,
+                    windowId: data.windowId ?? old?.windowId ?? null,
+                    enabledAt: data.enabledAt ?? old?.enabledAt ?? null,
+                },
                 update: data,
             });
             await tx.accessAuditSettings.update({
@@ -123,12 +149,95 @@ export class AccessAuditService implements OnApplicationBootstrap, OnApplication
         void this.tick().catch(() => {});
         return this.policy(userId);
     }
+    private activePolicies(): Prisma.UserAccessAuditPolicyWhereInput {
+        return {
+            enabled: true,
+            OR: [{ enabledUntil: null }, { enabledUntil: { gt: new Date() } }],
+        };
+    }
+    async expirePolicies(): Promise<number> {
+        return this.db.$transaction(async (tx) => {
+            await tx.$queryRaw`SELECT id FROM access_audit_settings WHERE id = 1 FOR UPDATE`;
+            const result = await tx.userAccessAuditPolicy.updateMany({
+                where: { enabled: true, enabledUntil: { lte: new Date() } },
+                data: { enabled: false },
+            });
+            if (result.count)
+                await tx.accessAuditSettings.update({
+                    where: { id: 1 },
+                    data: { revision: { increment: 1 } },
+                });
+            return result.count;
+        });
+    }
+    private sqlWhere(q: z.infer<typeof AuditQuerySchema>): Prisma.Sql {
+        const today = new Date().toISOString().slice(0, 10);
+        const from = new Date((q.start ?? today) + 'T00:00:00Z');
+        const to = new Date(Date.parse((q.end ?? today) + 'T00:00:00Z') + 86400000);
+        return Prisma.sql`observed_at >= ${from} AND observed_at < ${to} AND expires_at > now()
+            ${q.userId ? Prisma.sql`AND user_id = ${BigInt(q.userId)}` : Prisma.empty}
+            ${q.nodeUuid ? Prisma.sql`AND node_uuid = ${q.nodeUuid}::uuid` : Prisma.empty}
+            ${q.domain ? Prisma.sql`AND POSITION(lower(${q.domain}) IN lower(domain)) > 0` : Prisma.empty}`;
+    }
+    async summary(input: unknown) {
+        const q = AuditQuerySchema.parse(input);
+        const [row] = await this.db.$queryRaw<
+            Array<{
+                connections: string;
+                targets: string;
+                users: string;
+                nodes: string;
+                partial: string;
+                upload: string;
+                download: string;
+            }>
+        >(Prisma.sql`
+            SELECT COUNT(*)::text AS connections, COUNT(DISTINCT COALESCE(NULLIF(domain,''),destination_ip))::text AS targets,
+            COUNT(DISTINCT user_id)::text AS users, COUNT(DISTINCT node_uuid)::text AS nodes,
+            COUNT(*) FILTER (WHERE partial)::text AS partial,
+            COALESCE(SUM(upload_bytes),0)::text AS upload, COALESCE(SUM(download_bytes),0)::text AS download
+            FROM user_access_audit_records WHERE ${this.sqlWhere(q)}`);
+        return row;
+    }
+    async exportRecords(input: unknown) {
+        const q = AuditQuerySchema.parse(input);
+        const rows = await this.db.userAccessAuditRecord.findMany({
+            where: this.where(q),
+            orderBy: { id: 'desc' },
+            take: 5001,
+            include: { node: { select: { name: true } }, user: { select: { username: true } } },
+        });
+        if (rows.length > 5000)
+            throw new BadRequestException(
+                'Export exceeds 5000 records; narrow the date, user, node or domain filter',
+            );
+        return {
+            count: rows.length,
+            csv: auditCsv(
+                rows.map((r) => ({
+                    ...r,
+                    id: r.id.toString(),
+                    userId: r.userId.toString(),
+                    username: r.user.username,
+                    nodeName: r.node.name,
+                    startedAt: r.startedAt.toISOString(),
+                    observedAt: r.observedAt.toISOString(),
+                    closedAt: r.closedAt?.toISOString() ?? '',
+                    upload: r.uploadBytes.toString(),
+                    download: r.downloadBytes.toString(),
+                })),
+            ),
+        };
+    }
     private where(q: z.infer<typeof AuditQuerySchema>): Prisma.UserAccessAuditRecordWhereInput {
         const today = new Date().toISOString().slice(0, 10);
         return {
             ...(q.userId ? { userId: BigInt(q.userId) } : {}),
             ...(q.nodeUuid ? { nodeUuid: q.nodeUuid } : {}),
-            ...(q.domain ? { domain: { contains: q.domain, mode: 'insensitive' } } : {}),
+            // Prisma uses ILIKE patterns; match the literal POSITION filter used by aggregates.
+            ...(q.domain
+                ? { domain: { contains: q.domain.replace(/[\\%_]/g, '\\$&'), mode: 'insensitive' } }
+                : {}),
             observedAt: {
                 gte: new Date((q.start ?? today) + 'T00:00:00Z'),
                 lt: new Date(Date.parse((q.end ?? today) + 'T00:00:00Z') + 86400000),
@@ -170,9 +279,12 @@ export class AccessAuditService implements OnApplicationBootstrap, OnApplication
     }
     async domains(input: unknown) {
         const q = AuditQuerySchema.parse(input);
-        const today = new Date().toISOString().slice(0, 10);
-        const from = new Date((q.start ?? today) + 'T00:00:00Z');
-        const to = new Date(Date.parse((q.end ?? today) + 'T00:00:00Z') + 86400000);
+        const order =
+            q.direction === 'upload'
+                ? Prisma.sql`SUM(upload_bytes)`
+                : q.direction === 'download'
+                  ? Prisma.sql`SUM(download_bytes)`
+                  : Prisma.sql`SUM(upload_bytes)+SUM(download_bytes)`;
         const rows = await this.db.$queryRaw<
             Array<{
                 target: string;
@@ -184,12 +296,9 @@ export class AccessAuditService implements OnApplicationBootstrap, OnApplication
         >(Prisma.sql`
             SELECT COALESCE(NULLIF(domain,''),destination_ip) AS target, MAX(domain) AS domain,
               COUNT(*) AS connections, SUM(upload_bytes)::text AS upload, SUM(download_bytes)::text AS download
-            FROM user_access_audit_records WHERE observed_at >= ${from} AND observed_at < ${to} AND expires_at > now()
-              ${q.userId ? Prisma.sql`AND user_id = ${BigInt(q.userId)}` : Prisma.empty}
-              ${q.nodeUuid ? Prisma.sql`AND node_uuid = ${q.nodeUuid}::uuid` : Prisma.empty}
-              ${q.domain ? Prisma.sql`AND POSITION(lower(${q.domain}) IN lower(domain)) > 0` : Prisma.empty}
+            FROM user_access_audit_records WHERE ${this.sqlWhere(q)}
             GROUP BY COALESCE(NULLIF(domain,''),destination_ip)
-            ORDER BY SUM(upload_bytes)+SUM(download_bytes) DESC, target ASC LIMIT 20`);
+            ORDER BY ${order} DESC, target ASC LIMIT 20`);
         return rows.map((r) => ({
             domain: r.domain,
             destinationIp: r.domain ? '' : r.target,
@@ -204,7 +313,7 @@ export class AccessAuditService implements OnApplicationBootstrap, OnApplication
             async (tx) => {
                 await tx.$queryRaw`SELECT id FROM access_audit_settings WHERE id = 1 FOR UPDATE`;
                 const policies = await tx.userAccessAuditPolicy.findMany({
-                    where: { enabled: true },
+                    where: this.activePolicies(),
                 });
                 const byId = new Map(policies.map((p) => [p.userId.toString(), p]));
                 for (const r of batch.records) {
@@ -213,6 +322,7 @@ export class AccessAuditService implements OnApplicationBootstrap, OnApplication
                     const startedAt = new Date(r.startedAt);
                     if (
                         !p?.enabledAt ||
+                        Boolean(p?.enabledUntil && p.enabledUntil <= new Date()) ||
                         p.windowId !== r.windowId ||
                         observedAt < p.enabledAt ||
                         observedAt.getTime() > Date.now() + 60000 ||
@@ -250,6 +360,7 @@ export class AccessAuditService implements OnApplicationBootstrap, OnApplication
         if (this.polling) return;
         this.polling = true;
         try {
+            await this.expirePolicies();
             if (Date.now() - this.lastCleanup > 60000) {
                 await this.db.userAccessAuditRecord.deleteMany({
                     where: { expiresAt: { lte: new Date() } },
@@ -296,7 +407,7 @@ export class AccessAuditService implements OnApplicationBootstrap, OnApplication
                                     where: { id: 1 },
                                 });
                                 const targets = await tx.userAccessAuditPolicy.findMany({
-                                    where: { enabled: true },
+                                    where: this.activePolicies(),
                                     orderBy: { userId: 'asc' },
                                 });
                                 const hash = createHash('sha256')
@@ -321,7 +432,14 @@ export class AccessAuditService implements OnApplicationBootstrap, OnApplication
                             });
                             const config = {
                                 revision: Number(desired.settings.revision),
-                                expiresAt: new Date(Date.now() + 120000).toISOString(),
+                                expiresAt: new Date(
+                                    Math.min(
+                                        Date.now() + 120000,
+                                        ...desired.targets.flatMap((p) =>
+                                            p.enabledUntil ? [p.enabledUntil.getTime()] : [],
+                                        ),
+                                    ),
+                                ).toISOString(),
                                 targets: desired.targets.map((p) => ({
                                     userId: p.userId.toString(),
                                     windowId: p.windowId!,

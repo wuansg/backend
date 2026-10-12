@@ -28,6 +28,7 @@ export namespace UpdateConfigProfileCommand {
             .optional(),
         coreType: z.literal('SING_BOX').optional(),
         config: z.looseObject({}).optional(),
+        deployStrategy: z.enum(['immediate', 'staged']).optional(),
     });
 
     export const ResponseSchema = z.object({

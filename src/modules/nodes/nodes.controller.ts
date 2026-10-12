@@ -1,7 +1,16 @@
 import { CONTROLLERS_INFO, NODES_CONTROLLER } from '@contract/api';
 import { ROLE } from '@contract/constants';
 
-import { Body, Controller, HttpStatus, Param, Query, UseFilters, UseGuards } from '@nestjs/common';
+import {
+    Body,
+    Controller,
+    HttpStatus,
+    Param,
+    Query,
+    Req,
+    UseFilters,
+    UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 import { Endpoint } from '@common/decorators/base-endpoint';
@@ -37,6 +46,7 @@ import {
     AcknowledgeNodeGeocheckDriftCommand,
 } from '@libs/contracts/commands';
 
+import type { IJWTAuthPayload } from '@modules/auth/interfaces';
 import { NodeObservabilityService } from '@modules/node-observability';
 
 import {
@@ -278,8 +288,11 @@ export class NodesController {
         command: UpdateNodeCommand,
         httpCode: HttpStatus.OK,
     })
-    async updateNode(@Body() body: UpdateNodeBodyDto): Promise<NodeResponseDto> {
-        const res = await this.nodesService.updateNode(body);
+    async updateNode(
+        @Body() body: UpdateNodeBodyDto,
+        @Req() req: { user: IJWTAuthPayload },
+    ): Promise<NodeResponseDto> {
+        const res = await this.nodesService.updateNode(body, req.user.uuid);
         const data = errorHandler(res);
         return {
             response: data,
@@ -290,8 +303,16 @@ export class NodesController {
         command: RestartNodeCommand,
         httpCode: HttpStatus.ACCEPTED,
     })
-    async restartNode(@Param() param: RestartNodeParamDto, @Body() body: RestartNodeBodyDto) {
-        const res = await this.nodesService.restartNode(param.uuid, body.forceRestart);
+    async restartNode(
+        @Param() param: RestartNodeParamDto,
+        @Body() body: RestartNodeBodyDto,
+        @Req() req: { user: IJWTAuthPayload },
+    ) {
+        const res = await this.nodesService.restartNode(
+            param.uuid,
+            body.forceRestart,
+            req.user.uuid,
+        );
         errorHandler(res);
         return;
     }
@@ -310,8 +331,11 @@ export class NodesController {
         command: RestartAllNodesCommand,
         httpCode: HttpStatus.ACCEPTED,
     })
-    async restartAllNodes(@Body() body: RestartAllNodesBodyDto) {
-        const res = await this.nodesService.restartAllNodes(body.forceRestart);
+    async restartAllNodes(
+        @Body() body: RestartAllNodesBodyDto,
+        @Req() req: { user: IJWTAuthPayload },
+    ) {
+        const res = await this.nodesService.restartAllNodes(body.forceRestart, req.user.uuid);
         errorHandler(res);
         return;
     }
@@ -334,8 +358,11 @@ export class NodesController {
         command: BulkNodesProfileModificationCommand,
         httpCode: HttpStatus.NO_CONTENT,
     })
-    async profileModification(@Body() body: ProfileModificationBodyDto) {
-        const result = await this.nodesService.profileModification(body);
+    async profileModification(
+        @Body() body: ProfileModificationBodyDto,
+        @Req() req: { user: IJWTAuthPayload },
+    ) {
+        const result = await this.nodesService.profileModification(body, req.user.uuid);
 
         errorHandler(result);
         return;
@@ -345,8 +372,11 @@ export class NodesController {
         command: BulkNodesActionsCommand,
         httpCode: HttpStatus.NO_CONTENT,
     })
-    async bulkNodesActions(@Body() body: BulkNodesActionsBodyDto) {
-        const result = await this.nodesService.bulkNodesActions(body);
+    async bulkNodesActions(
+        @Body() body: BulkNodesActionsBodyDto,
+        @Req() req: { user: IJWTAuthPayload },
+    ) {
+        const result = await this.nodesService.bulkNodesActions(body, req.user.uuid);
 
         errorHandler(result);
         return;

@@ -4,6 +4,10 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 
 import { AxiosService } from '@common/axios';
+import { INodeConnectionOpts } from '@common/axios/axios.interfaces';
+import { PrismaService } from '@common/database/prisma.service';
+
+import { NodeDeploymentsService } from '@modules/node-deployments/node-deployments.service';
 
 import { QUEUES_NAMES } from '@queue/queue.enum';
 
@@ -27,7 +31,11 @@ import {
 export class NodeBulkUsersQueueProcessor extends WorkerHost {
     private readonly logger = new Logger(NodeBulkUsersQueueProcessor.name);
 
-    constructor(private readonly axios: AxiosService) {
+    constructor(
+        private readonly axios: AxiosService,
+        private readonly db: PrismaService,
+        private readonly deployments: NodeDeploymentsService,
+    ) {
         super();
     }
 
@@ -55,43 +63,20 @@ export class NodeBulkUsersQueueProcessor extends WorkerHost {
     }
 
     private async handleAddUsersToNode(job: Job<IAddUsersToNodePayload>) {
-        try {
-            const { data, node } = job.data;
-            const result = await this.axios.addUsers(data, node);
-
-            if (!result.isOk) {
-                this.logger.error(
-                    `Failed to add users to Node ${node.address}:${node.port}: ${result.message}`,
-                );
-            }
-
-            return result;
-        } catch (error) {
-            this.logger.error(
-                `Error handling "${NODES_JOB_NAMES.ADD_USERS_TO_NODE}" job: ${error}`,
-            );
-            return;
-        }
+        return this.reconcileUsers(job.data.node);
     }
 
     private async handleRemoveUsersFromNode(job: Job<IRemoveUsersFromNodePayload>) {
-        try {
-            const { data, node } = job.data;
-            const result = await this.axios.deleteUsers(data, node);
+        return this.reconcileUsers(job.data.node);
+    }
 
-            if (!result.isOk) {
-                this.logger.error(
-                    `Failed to remove users from Node ${node.address}:${node.port}: ${result.message}`,
-                );
-            }
-
-            return result;
-        } catch (error) {
-            this.logger.error(
-                `Error handling "${NODES_JOB_NAMES.REMOVE_USERS_FROM_NODE}" job: ${error}`,
-            );
-            return;
-        }
+    private async reconcileUsers(opts: INodeConnectionOpts) {
+        const nodes = await this.db.nodes.findMany({
+            where: { address: opts.address, port: opts.port, isDisabled: false },
+            select: { uuid: true },
+        });
+        for (const node of nodes)
+            await this.deployments.request(node.uuid, { reason: 'USER_RECONCILE' });
     }
 
     private async handleDropUsersConnections(job: Job<IDropUsersConnectionsPayload>) {

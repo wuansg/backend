@@ -26,6 +26,7 @@ import {
 import { NodesEntity } from './entities';
 import { NodeForwardingService } from './forwarding';
 import { NodeResponseModel } from './models';
+import { nodeUpdateNeedsApply } from './node-update-policy.util';
 import { NodesSystemCacheService } from './nodes-system-cache.service';
 import { NodesRepository } from './repositories/nodes.repository';
 
@@ -149,7 +150,11 @@ export class NodesService {
         }
     }
 
-    public async restartNode(uuid: string, force: boolean): Promise<TResult<boolean>> {
+    public async restartNode(
+        uuid: string,
+        force: boolean,
+        actorUuid: string | null = null,
+    ): Promise<TResult<boolean>> {
         try {
             const node = await this.nodesRepository.findByUUID(uuid);
             if (!node) {
@@ -163,6 +168,8 @@ export class NodesService {
             await this.nodesQueuesService.startNode({
                 nodeUuid: node.uuid,
                 force,
+                actorUuid,
+                reason: 'MANUAL_RESTART',
             });
 
             return ok(true);
@@ -192,7 +199,10 @@ export class NodesService {
         }
     }
 
-    public async restartAllNodes(forceRestart: boolean): Promise<TResult<boolean>> {
+    public async restartAllNodes(
+        forceRestart: boolean,
+        actorUuid: string | null = null,
+    ): Promise<TResult<boolean>> {
         try {
             const nodes = await this.nodesRepository.findByCriteria({
                 isDisabled: false,
@@ -204,6 +214,7 @@ export class NodesService {
             await this.nodesQueuesService.startAllNodes({
                 emitter: NodesService.name,
                 force: forceRestart,
+                actorUuid,
             });
 
             return ok(true);
@@ -252,7 +263,10 @@ export class NodesService {
         }
     }
 
-    public async updateNode(body: UpdateNodeBodyDto): Promise<TResult<NodeResponseModel>> {
+    public async updateNode(
+        body: UpdateNodeBodyDto,
+        actorUuid: string | null = null,
+    ): Promise<TResult<NodeResponseModel>> {
         try {
             const { configProfile, ...nodeData } = body;
 
@@ -261,10 +275,17 @@ export class NodesService {
                 return fail(ERRORS.NODE_NOT_FOUND);
             }
 
-            if (configProfile) {
+            if (nodeData.name !== undefined) nodeData.name = nodeData.name.trim();
+            if (nodeData.address !== undefined) nodeData.address = nodeData.address.trim();
+            const needsApply = nodeUpdateNeedsApply(node, { ...nodeData, configProfile });
+            if (needsApply)
+                await this.nodesQueuesService.assertNodeConfigurationEditable(node.uuid);
+
+            if (configProfile && needsApply) {
                 const configProfileResponse = await this.queryBus.execute(
                     new GetConfigProfileByUuidQuery(configProfile.activeConfigProfileUuid),
                 );
+                if (!configProfileResponse.isOk) return fail(ERRORS.CONFIG_PROFILE_NOT_FOUND);
 
                 if (configProfileResponse.isOk) {
                     const inbounds = configProfileResponse.response.inbounds;
@@ -322,9 +343,13 @@ export class NodesService {
                 return fail(ERRORS.UPDATE_NODE_ERROR);
             }
 
-            if (!node.isDisabled) {
+            // Disabled nodes retain the durable desired state; claim() never dispatches them.
+            if (needsApply) {
                 await this.nodesQueuesService.startNode({
                     nodeUuid: result.uuid,
+                    actorUuid,
+                    reason: 'NODE_CONFIGURATION_CHANGED',
+                    clearPin: nodeUpdateNeedsApply(node, { configProfile }),
                 });
             }
 
@@ -379,6 +404,7 @@ export class NodesService {
 
             await this.nodesQueuesService.startNode({
                 nodeUuid: result.uuid,
+                reason: 'NODE_ENABLED',
             });
 
             this.eventEmitter.emit(EVENTS.NODE.ENABLED, new NodeEvent(result, EVENTS.NODE.ENABLED));
@@ -484,7 +510,10 @@ export class NodesService {
         }
     }
 
-    public async profileModification(body: ProfileModificationBodyDto): Promise<TResult<boolean>> {
+    public async profileModification(
+        body: ProfileModificationBodyDto,
+        actorUuid: string | null = null,
+    ): Promise<TResult<boolean>> {
         try {
             const { uuids, configProfile } = body;
 
@@ -507,6 +536,8 @@ export class NodesService {
                 return fail(ERRORS.CONFIG_PROFILE_INBOUND_NOT_FOUND_IN_SPECIFIED_PROFILE);
             }
 
+            for (const uuid of uuids)
+                await this.nodesQueuesService.assertNodeConfigurationEditable(uuid);
             await this.nodesRepository.updateMany(uuids, {
                 activeConfigProfileUuid: configProfile.activeConfigProfileUuid,
             });
@@ -515,10 +546,13 @@ export class NodesService {
 
             await this.nodesRepository.addInboundsToNodes(uuids, configProfile.activeInbounds);
 
-            await this.nodesQueuesService.startAllNodesByProfile({
-                profileUuid: configProfile.activeConfigProfileUuid,
-                emitter: 'bulkProfileModification',
-            }); // no need to restart all nodes
+            for (const nodeUuid of uuids)
+                await this.nodesQueuesService.startNode({
+                    nodeUuid,
+                    actorUuid,
+                    reason: 'NODE_CONFIGURATION_CHANGED',
+                    clearPin: true,
+                });
 
             return ok(true);
         } catch (error) {
@@ -527,14 +561,17 @@ export class NodesService {
         }
     }
 
-    public async bulkNodesActions(body: BulkNodesActionsBodyDto): Promise<TResult<boolean>> {
+    public async bulkNodesActions(
+        body: BulkNodesActionsBodyDto,
+        actorUuid: string | null = null,
+    ): Promise<TResult<boolean>> {
         try {
             const { uuids, action } = body;
 
             const actionMap: Record<string, (uuid: string) => Promise<unknown>> = {
                 [NODES_BULK_ACTIONS.ENABLE]: (uuid) => this.enableNode(uuid),
                 [NODES_BULK_ACTIONS.DISABLE]: (uuid) => this.disableNode(uuid),
-                [NODES_BULK_ACTIONS.RESTART]: (uuid) => this.restartNode(uuid, true),
+                [NODES_BULK_ACTIONS.RESTART]: (uuid) => this.restartNode(uuid, true, actorUuid),
                 [NODES_BULK_ACTIONS.RESET_TRAFFIC]: (uuid) => this.resetNodeTraffic(uuid),
             };
 

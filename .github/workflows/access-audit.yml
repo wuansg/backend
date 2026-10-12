@@ -1,4 +1,4 @@
-name: Selected-user access audit regression
+name: Node releases and selected-user audit regression
 
 on:
   workflow_dispatch:
@@ -6,12 +6,23 @@ on:
     branches: [main]
     paths:
       - 'src/modules/access-audit/**'
+      - 'src/modules/node-deployments/**'
+      - 'src/modules/nodes/**'
+      - 'src/modules/config-profiles/**'
+      - 'src/queue/_nodes/**'
       - 'src/common/axios/**'
+      - 'src/common/database/opaque-json-camel-case.plugin.ts'
       - 'src/common/guards/scopes/**'
       - 'libs/contract/commands/access-audit/**'
+      - 'libs/contract/commands/node-deployments/**'
+      - 'libs/contract/commands/nodes/**'
+      - 'libs/contract/commands/config-profiles/**'
       - 'libs/contract/api/controllers-info.ts'
       - 'prisma/**'
       - 'scripts/test-access-audit.ts'
+      - 'scripts/test-node-deployments.ts'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/access-audit.yml'
 
 permissions:
@@ -35,6 +46,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://audit_test:isolated-fixture-only@127.0.0.1:5432/audit_test
       AUDIT_TEST_DATABASE_URL: postgresql://audit_test:isolated-fixture-only@127.0.0.1:5432/audit_test
+      NODE_DEPLOYMENTS_TEST_DATABASE_URL: postgresql://audit_test:isolated-fixture-only@127.0.0.1:5432/audit_test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -44,4 +56,6 @@ jobs:
       - run: npm ci
       - run: npx prisma generate && npx prisma migrate deploy
       - run: npm run test:access-audit
+      - run: npm run test:node-deployments
+      - run: npm run test:opaque-json && npm run test:api-scope-catalog
       - run: npm run build

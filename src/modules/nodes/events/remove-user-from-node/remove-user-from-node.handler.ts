@@ -1,7 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { IEventHandler, EventsHandler } from '@nestjs/cqrs';
-
-import { RemoveUserCommand as RemoveUserFromNodeCommandSdk } from '@remnawave/node-contract';
+import { EventsHandler, IEventHandler } from '@nestjs/cqrs';
 
 import { NodesQueuesService } from '@queue/_nodes';
 
@@ -10,37 +8,22 @@ import { RemoveUserFromNodeEvent } from './remove-user-from-node.event';
 
 @EventsHandler(RemoveUserFromNodeEvent)
 export class RemoveUserFromNodeHandler implements IEventHandler<RemoveUserFromNodeEvent> {
-    public readonly logger = new Logger(RemoveUserFromNodeHandler.name);
-
+    private readonly logger = new Logger(RemoveUserFromNodeHandler.name);
     constructor(
         private readonly nodesRepository: NodesRepository,
         private readonly nodesQueuesService: NodesQueuesService,
     ) {}
-    async handle(event: RemoveUserFromNodeEvent) {
+    async handle(_event: RemoveUserFromNodeEvent) {
+        // Rebuild the current authorized set, including removals after squad/credential changes.
+        // No stale password or historical add/remove ordering enters the node queue.
         try {
-            const nodes = await this.nodesRepository.findConnectedNodesWithoutInbounds();
-
-            if (nodes.length === 0) {
-                return;
+            const nodes = await this.nodesRepository.findByCriteria({ isDisabled: false });
+            for (const node of nodes) {
+                if (node.activeConfigProfileUuid && node.activeInbounds.length)
+                    await this.nodesQueuesService.reconcileNodeUsers(node.uuid);
             }
-
-            const userData: RemoveUserFromNodeCommandSdk.Request = {
-                username: event.id.toString(),
-                hashData: {
-                    vlessUuid: event.vlessUuid,
-                },
-            };
-
-            await this.nodesQueuesService.removeUserFromNodeBulk(
-                nodes.map((node) => ({
-                    data: userData,
-                    node: node.connectionOpts,
-                })),
-            );
-
-            return;
-        } catch (error) {
-            this.logger.error(`Error in Event RemoveUserFromNodeHandler: ${error}`);
+        } catch {
+            this.logger.error('User authorization reconcile request could not be persisted');
         }
     }
 }

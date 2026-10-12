@@ -26,3 +26,4 @@ export * from './system';
 export * from './users';
 export * from './management';
 export * from './node-benchmarks';
+export * from './node-deployments';

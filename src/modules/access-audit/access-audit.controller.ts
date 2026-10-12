@@ -1,3 +1,5 @@
+import type { Response } from 'express';
+
 import { createZodDto } from 'nestjs-zod';
 
 import {
@@ -8,6 +10,7 @@ import {
     Param,
     Query,
     Req,
+    Res,
     UseFilters,
     UseGuards,
 } from '@nestjs/common';
@@ -28,6 +31,8 @@ import {
     SetAuditPolicyCommand as Set,
     GetAuditRecordsCommand as List,
     GetAuditDomainsCommand as Domains,
+    GetAuditSummaryCommand as Summary,
+    ExportAuditRecordsCommand as Export,
 } from '@libs/contracts/commands';
 import { ROLE } from '@libs/contracts/constants';
 
@@ -40,6 +45,7 @@ class AuditQuery extends createZodDto(AuditQuerySchema) {}
 class PolicyResponse extends createZodDto(Get.ResponseSchema) {}
 class RecordsResponse extends createZodDto(List.ResponseSchema) {}
 class DomainsResponse extends createZodDto(Domains.ResponseSchema) {}
+class SummaryResponse extends createZodDto(Summary.ResponseSchema) {}
 @ApiBearerAuth('Authorization')
 @ApiTags('User Access Audit')
 @ApiScopeResource('access-audit')
@@ -76,5 +82,25 @@ export class AccessAuditController {
         const result = await this.service.domains(q);
         this.audit('access-audit-ranking-read', req.user, q.userId);
         return { response: result };
+    }
+    @Endpoint({ command: Summary, type: SummaryResponse, httpCode: HttpStatus.OK })
+    async summary(@Query() q: AuditQuery, @Req() req: { user: IJWTAuthPayload }) {
+        const result = await this.service.summary(q);
+        this.audit('access-audit-summary-read', req.user, q.userId);
+        return { response: result };
+    }
+    @Endpoint({ command: Export, type: String, httpCode: HttpStatus.OK })
+    async export(
+        @Query() q: AuditQuery,
+        @Req() req: { user: IJWTAuthPayload },
+        @Res() res: Response,
+    ) {
+        const result = await this.service.exportRecords(q);
+        this.audit('access-audit-export', req.user, q.userId);
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="access-audit.csv"');
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.send(result.csv);
     }
 }

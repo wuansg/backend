@@ -1,7 +1,6 @@
 import { load } from 'js-yaml';
 import assert from 'node:assert/strict';
 
-import { AddNodeUserRequest, AddNodeUsersRequest } from '@common/axios/node-user-requests';
 import { SingBoxConfig } from '@common/helpers/sing-box-config';
 import { getSnellPsk, assertSnellAgentCompatibility } from '@common/helpers/snell';
 import { ResolvedProxyConfigSchema } from '@libs/contracts/models';
@@ -48,43 +47,28 @@ async function main(): Promise<void> {
         tag: type,
         rawInbound: {},
     }));
-    const resolvedUser = { ...user, inbounds };
     const nodes = {
-        findConnectedNodes: async () => [
-            { activeInbounds: inbounds, activeConfigProfileUuid: 'profile' },
+        findByCriteria: async () => [
+            { uuid: 'snell-node', activeInbounds: inbounds, activeConfigProfileUuid: 'profile' },
         ],
     };
-    let single: AddNodeUserRequest | undefined;
-    let bulk: AddNodeUsersRequest | undefined;
+    const reconciled: string[] = [];
     const queues = {
-        addUserToNode: async (payload: { data: AddNodeUserRequest }) => {
-            single = payload.data;
-        },
-        addUsersToNode: async (payload: { data: AddNodeUsersRequest }) => {
-            bulk = payload.data;
+        reconcileNodeUsers: async (uuid: string) => {
+            reconciled.push(uuid);
         },
     };
-    await new AddUserToNodeHandler(
-        nodes as never,
-        queues as never,
-        { execute: async () => ({ isOk: true, response: resolvedUser }) } as never,
-    ).handle(new AddUserToNodeEvent(18n));
-    assert.ok(single);
-    assert.equal(
-        (single.data.find((entry) => entry.type === 'snell') as { password: string }).password,
-        psk,
+    await new AddUserToNodeHandler(nodes as never, queues as never).handle(
+        new AddUserToNodeEvent(18n),
     );
-    assert.equal(
-        (single.data.find((entry) => entry.type === 'tuic') as { password: string }).password,
-        user.trojanPassword,
+    await new AddUsersToNodeHandler(nodes as never, queues as never).handle(
+        new AddUsersToNodeEvent([18n]),
     );
-    await new AddUsersToNodeHandler(
-        nodes as never,
-        queues as never,
-        { execute: async () => ({ isOk: true, response: [resolvedUser] }) } as never,
-    ).handle(new AddUsersToNodeEvent([18n]));
-    assert.equal(bulk?.users[0].userData.snellPsk, psk);
-    assert.equal(bulk?.users[0].inboundData[0].type, 'snell');
+    assert.deepEqual(
+        reconciled,
+        ['snell-node', 'snell-node'],
+        'Single and bulk Snell changes must reconcile the current authorization set, not replay legacy credential payloads',
+    );
     assert.notEqual(psk, getSnellPsk({ anytlsPassword: 'rotated-secret' }));
     assert.throws(() => getSnellPsk({ anytlsPassword: '' }));
     const config = new SingBoxConfig({ inbounds: [raw] });

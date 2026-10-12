@@ -19,6 +19,7 @@ import { KeygenModule } from './keygen/keygen.module';
 import { ManagementModule } from './management/management.module';
 import { MetadataModule } from './metadata/metadata.module';
 import { NodeBenchmarksModule } from './node-benchmarks/benchmarks.module';
+import { NodeDeploymentsModule } from './node-deployments/node-deployments.module';
 import { NodeObservabilityModule } from './node-observability';
 import { NodePluginModule } from './node-plugins';
 import { NodesUsageHistoryModule } from './nodes-usage-history/nodes-usage-history.module';
@@ -52,6 +53,7 @@ import { UsersModule } from './users/users.module';
         KeygenModule,
         NodesModule,
         NodeObservabilityModule,
+        NodeDeploymentsModule,
         NodePluginModule,
         HostsModule,
         NodesUserUsageHistoryModule,

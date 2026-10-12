@@ -1,7 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { IEventHandler, EventsHandler } from '@nestjs/cqrs';
-
-import { RemoveUsersCommand as RemoveUsersFromNodeCommandSdk } from '@remnawave/node-contract';
+import { EventsHandler, IEventHandler } from '@nestjs/cqrs';
 
 import { NodesQueuesService } from '@queue/_nodes';
 
@@ -10,37 +8,22 @@ import { RemoveUsersFromNodeEvent } from './remove-users-from-node.event';
 
 @EventsHandler(RemoveUsersFromNodeEvent)
 export class RemoveUsersFromNodeHandler implements IEventHandler<RemoveUsersFromNodeEvent> {
-    public readonly logger = new Logger(RemoveUsersFromNodeHandler.name);
-
+    private readonly logger = new Logger(RemoveUsersFromNodeHandler.name);
     constructor(
         private readonly nodesRepository: NodesRepository,
         private readonly nodesQueuesService: NodesQueuesService,
     ) {}
-    async handle(event: RemoveUsersFromNodeEvent) {
+    async handle(_event: RemoveUsersFromNodeEvent) {
+        // Rebuild the current authorized set, including removals after squad/credential changes.
+        // No stale password or historical add/remove ordering enters the node queue.
         try {
-            const nodes = await this.nodesRepository.findConnectedNodesWithoutInbounds();
-
-            if (nodes.length === 0 || event.users.length === 0) {
-                return;
-            }
-
-            const userData: RemoveUsersFromNodeCommandSdk.Request = {
-                users: event.users.map((user) => ({
-                    userId: user.id.toString(),
-                    hashUuid: user.vlessUuid,
-                })),
-            };
-
+            const nodes = await this.nodesRepository.findByCriteria({ isDisabled: false });
             for (const node of nodes) {
-                await this.nodesQueuesService.removeUsersFromNode({
-                    data: userData,
-                    node: node.connectionOpts,
-                });
+                if (node.activeConfigProfileUuid && node.activeInbounds.length)
+                    await this.nodesQueuesService.reconcileNodeUsers(node.uuid);
             }
-
-            return;
-        } catch (error) {
-            this.logger.error(`Error in Event RemoveUsersFromNodeHandler: ${error}`);
+        } catch {
+            this.logger.error('User authorization reconcile request could not be persisted');
         }
     }
 }

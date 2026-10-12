@@ -17,8 +17,8 @@ export namespace UpdateNodeCommand {
     export const RequestBodySchema = NodesSchema.pick({
         uuid: true,
     }).extend({
-        name: z.optional(z.string().min(3).max(30)),
-        address: z.optional(z.string().min(2)),
+        name: z.optional(z.string().trim().min(3).max(30)),
+        address: z.optional(z.string().trim().min(2)),
         port: z.optional(z.number().min(1).max(65535)),
         proxyUrl: z
             .string()

@@ -16,8 +16,8 @@ export namespace CreateNodeCommand {
     );
 
     export const RequestBodySchema = z.object({
-        name: z.string().min(3).max(30),
-        address: z.string().min(2),
+        name: z.string().trim().min(3).max(30),
+        address: z.string().trim().min(2),
         port: z.int().min(1).max(65535).optional(),
         proxyUrl: z
             .string()

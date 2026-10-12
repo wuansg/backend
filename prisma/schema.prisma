@@ -42,6 +42,7 @@ model UserAccessAuditPolicy {
   retentionDays Int       @default(7) @map("retention_days")
   windowId      String?   @map("window_id") @db.Uuid
   enabledAt     DateTime? @map("enabled_at") @db.Timestamptz(3)
+  enabledUntil  DateTime? @map("enabled_until") @db.Timestamptz(3)
   updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
   user          Users     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -301,6 +302,9 @@ model Nodes {
   forwardingUsageHistory       NodeForwardingUsageHistory[]
   accessAuditState             NodeAccessAuditState?
   accessAuditRecords           UserAccessAuditRecord[]
+  configState                  NodeConfigState?
+  configRevisions              NodeConfigRevision[]
+  configDeployments            NodeConfigDeployment[]
 
   activeConfigProfile ConfigProfiles? @relation(fields: [activeConfigProfileUuid], references: [uuid], onDelete: SetNull)
   provider            InfraProviders? @relation(fields: [providerUuid], references: [uuid], onDelete: SetNull)
@@ -309,6 +313,90 @@ model Nodes {
   @@index([id])
   @@index([tags], type: Gin)
   @@map("nodes")
+}
+
+model NodeConfigState {
+  nodeUuid                   String    @id @map("node_uuid") @db.Uuid
+  requestedSeq               BigInt    @default(0) @map("requested_seq")
+  processedSeq               BigInt    @default(0) @map("processed_seq")
+  requestedAt                DateTime  @default(now()) @map("requested_at") @db.Timestamptz(3)
+  dueAt                      DateTime  @default(now()) @map("due_at") @db.Timestamptz(3)
+  reason                     String    @default("CONFIG_APPLY") @db.VarChar(64)
+  actorUuid                  String?   @map("actor_uuid") @db.Uuid
+  force                      Boolean   @default(false)
+  pinnedRevisionUuid         String?   @map("pinned_revision_uuid") @db.Uuid
+  previousPinnedRevisionUuid String?   @map("previous_pinned_revision_uuid") @db.Uuid
+  blocked                    Boolean   @default(false)
+  appliedRevisionUuid        String?   @map("applied_revision_uuid") @db.Uuid
+  batchUuid                  String?   @map("batch_uuid") @db.Uuid
+  leaseOwner                 String?   @map("lease_owner") @db.Uuid
+  leaseUntil                 DateTime? @map("lease_until") @db.Timestamptz(3)
+  attempts                   Int       @default(0)
+  lastError                  String?   @map("last_error") @db.VarChar(64)
+  node                       Nodes     @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+
+  @@map("node_config_state")
+}
+
+model NodeConfigRevision {
+  uuid              String                 @id @default(uuid()) @db.Uuid
+  nodeUuid          String                 @map("node_uuid") @db.Uuid
+  profileUuid       String                 @map("profile_uuid") @db.Uuid
+  templateHash      String                 @map("template_hash") @db.VarChar(64)
+  encryptedSnapshot String                 @map("encrypted_snapshot") @db.Text
+  inboundTags       String[]               @map("inbound_tags")
+  changedSections   String[]               @map("changed_sections")
+  createdAt         DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  node              Nodes                  @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+  deployments       NodeConfigDeployment[]
+
+  @@unique([nodeUuid, profileUuid, templateHash])
+  @@index([nodeUuid, createdAt], map: "node_config_revisions_node_created_idx")
+  @@map("node_config_revisions")
+}
+
+model NodeConfigDeployment {
+  uuid          String              @id @default(uuid()) @db.Uuid
+  nodeUuid      String              @map("node_uuid") @db.Uuid
+  revisionUuid  String?             @map("revision_uuid") @db.Uuid
+  batchUuid     String?             @map("batch_uuid") @db.Uuid
+  requestSeq    BigInt              @map("request_seq")
+  actorUuid     String?             @map("actor_uuid") @db.Uuid
+  reason        String              @db.VarChar(64)
+  state         String              @default("APPLYING") @db.VarChar(32)
+  requestedHash String?             @map("requested_hash") @db.VarChar(64)
+  activeHash    String?             @map("active_hash") @db.VarChar(64)
+  errorCode     String?             @map("error_code") @db.VarChar(64)
+  rollback      String?             @db.VarChar(32)
+  startedAt     DateTime            @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt    DateTime?           @map("finished_at") @db.Timestamptz(3)
+  durationMs    Int?                @map("duration_ms")
+  node          Nodes               @relation(fields: [nodeUuid], references: [uuid], onDelete: Cascade)
+  revision      NodeConfigRevision? @relation(fields: [revisionUuid], references: [uuid], onDelete: SetNull)
+
+  @@index([nodeUuid, startedAt], map: "node_config_deployments_node_started_idx")
+  @@index([batchUuid, startedAt], map: "node_config_deployments_batch_started_idx")
+  @@map("node_config_deployments")
+}
+
+model NodeConfigBatch {
+  uuid             String    @id @default(uuid()) @db.Uuid
+  profileUuid      String    @map("profile_uuid") @db.Uuid
+  sourceHash       String    @map("source_hash") @db.VarChar(64)
+  nodeUuids        String[]  @map("node_uuids") @db.Uuid
+  revisionUuids    String[]  @map("revision_uuids") @db.Uuid
+  actorUuid        String?   @map("actor_uuid") @db.Uuid
+  state            String    @default("PENDING") @db.VarChar(32)
+  nextIndex        Int       @default(0) @map("next_index")
+  activeNodeUuid   String?   @map("active_node_uuid") @db.Uuid
+  activeRequestSeq BigInt?   @map("active_request_seq")
+  leaseOwner       String?   @map("lease_owner") @db.Uuid
+  leaseUntil       DateTime? @map("lease_until") @db.Timestamptz(3)
+  errorCode        String?   @map("error_code") @db.VarChar(64)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  finishedAt       DateTime? @map("finished_at") @db.Timestamptz(3)
+
+  @@map("node_config_batches")
 }
 
 model NodeUsageSnapshotState {

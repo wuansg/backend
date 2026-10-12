@@ -9,7 +9,11 @@ const bytes = z
     .refine((v) => BigInt(v) <= 9223372036854775807n);
 export const AuditUserParamSchema = z.object({ userId: id });
 export const AuditPolicyBodySchema = z
-    .object({ enabled: z.boolean(), retentionDays: z.int().min(1).max(30).default(7) })
+    .object({
+        enabled: z.boolean(),
+        retentionDays: z.int().min(1).max(30).default(7),
+        enabledUntil: z.iso.datetime({ offset: true }).nullable().optional(),
+    })
     .strict();
 export const AuditQuerySchema = z
     .object({
@@ -24,6 +28,7 @@ export const AuditQuerySchema = z
             .optional(),
         limit: z.coerce.number().int().min(1).max(100).default(50),
         userId: id.optional(),
+        direction: z.enum(['total', 'upload', 'download']).default('total'),
     })
     .superRefine((v, ctx) => {
         if (
@@ -87,6 +92,7 @@ export const AuditPolicyViewSchema = z.object({
     enabled: z.boolean(),
     retentionDays: z.int().min(1).max(30),
     enabledAt: z.iso.datetime({ offset: true }).nullable(),
+    enabledUntil: z.iso.datetime({ offset: true }).nullable(),
     nodes: z.array(
         z.object({
             uuid: z.uuid(),
@@ -160,4 +166,31 @@ export namespace GetAuditDomainsCommand {
         { scope: 'domains-read', kind: 'read' },
     );
     export const ResponseSchema = z.object({ response: AuditDomainsViewSchema });
+}
+export const AuditSummaryViewSchema = z.object({
+    connections: z.string().regex(/^(0|[1-9][0-9]*)$/),
+    targets: z.string().regex(/^(0|[1-9][0-9]*)$/),
+    users: z.string().regex(/^(0|[1-9][0-9]*)$/),
+    nodes: z.string().regex(/^(0|[1-9][0-9]*)$/),
+    partial: z.string().regex(/^(0|[1-9][0-9]*)$/),
+    upload: z.string().regex(/^(0|[1-9][0-9]*)$/),
+    download: z.string().regex(/^(0|[1-9][0-9]*)$/),
+});
+export namespace GetAuditSummaryCommand {
+    export const endpointDetails = getEndpointDetails(
+        'summary',
+        'get',
+        'Summarize the complete filtered access audit range',
+        { scope: 'summary-read', kind: 'read' },
+    );
+    export const ResponseSchema = z.object({ response: AuditSummaryViewSchema });
+}
+export namespace ExportAuditRecordsCommand {
+    export const endpointDetails = getEndpointDetails(
+        'export',
+        'get',
+        'Export up to 5000 filtered access audit records as CSV',
+        { scope: 'export-read', kind: 'read' },
+    );
+    export const ResponseSchema = z.string();
 }

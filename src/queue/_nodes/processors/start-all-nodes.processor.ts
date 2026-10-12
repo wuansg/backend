@@ -42,7 +42,9 @@ export class StartAllNodesQueueProcessor extends WorkerHost {
         }
     }
 
-    private async handleStartAllNodes(job: Job<{ emitter: string; force?: boolean }>) {
+    private async handleStartAllNodes(
+        job: Job<{ emitter: string; force?: boolean; actorUuid?: string | null }>,
+    ) {
         try {
             const result = await this.queryBus.execute(
                 new FindNodesByCriteriaQuery({
@@ -70,6 +72,7 @@ export class StartAllNodesQueueProcessor extends WorkerHost {
                     await this.nodesQueuesService.startNode({
                         nodeUuid: node.uuid,
                         force: forceRestart,
+                        actorUuid: job.data.actorUuid,
                     });
                     continue;
                 }
@@ -83,6 +86,7 @@ export class StartAllNodesQueueProcessor extends WorkerHost {
                     profileUuid: profile,
                     emitter: 'StartAllNodesQueueProcessor',
                     force: forceRestart,
+                    actorUuid: job.data.actorUuid,
                 });
             }
         } catch (error) {

@@ -104,6 +104,17 @@ async function main() {
     assert.equal(allowed(['access-audit:read']), true);
     assert.equal(allowed(['access-audit:records-read']), true);
     assert.equal(allowed([], ROLE.ADMIN), true);
+    const exportAllowed = (scopes: string[]) =>
+        guard.canActivate({
+            getHandler: () => AccessAuditController.prototype.export,
+            getClass: () => AccessAuditController,
+            switchToHttp: () => ({
+                getRequest: () => ({ user: { uuid: randomUUID(), role: ROLE.API, scopes } }),
+            }),
+        } as any);
+    assert.equal(exportAllowed(['users:read']), false);
+    assert.equal(exportAllowed(['access-audit:records-read']), false);
+    assert.equal(exportAllowed(['access-audit:export-read']), true);
     console.log('Audit contract, module/guard startup and independent permissions passed');
     const fixtureURL = process.env.AUDIT_TEST_DATABASE_URL;
     if (!fixtureURL) {
@@ -193,6 +204,25 @@ async function main() {
         const rank = await service.domains({ userId: Number(selected) });
         assert.equal(rank[0].connections, 1);
         assert.equal(rank[0].upload, '20');
+        const filter = { userId: Number(selected), nodeUuid, limit: 1, cursor: '1' };
+        assert.deepEqual(
+            await service.summary(filter),
+            {
+                connections: '1',
+                targets: '1',
+                users: '1',
+                nodes: '1',
+                partial: '0',
+                upload: '20',
+                download: '200',
+            },
+            'Range summary must ignore pagination',
+        );
+        assert.equal(
+            (await service.exportRecords(filter)).count,
+            1,
+            'Export must ignore cursor and page limit',
+        );
         const otherConnection = randomUUID();
         await service.ingest(nodeUuid, {
             ...batch,
@@ -211,6 +241,129 @@ async function main() {
         });
         assert.equal(nextPage.records.length, 1);
         assert.notEqual(firstPage.records[0].id, nextPage.records[0].id);
+        const expiry = new Date(Date.now() + 60000).toISOString();
+        await service.setPolicy(Number(selected), {
+            enabled: true,
+            retentionDays: 7,
+            enabledUntil: expiry,
+        });
+        await service.setPolicy(Number(selected), { enabled: true, retentionDays: 14 });
+        assert.equal(
+            (await service.policy(Number(selected))).enabledUntil,
+            expiry,
+            'Retention edit must preserve audit deadline',
+        );
+        await assert.rejects(() =>
+            service.setPolicy(Number(selected), {
+                enabled: true,
+                enabledUntil: new Date(Date.now() - 1000).toISOString(),
+            }),
+        );
+        await db.userAccessAuditPolicy.update({
+            where: { userId: selected },
+            data: { enabledUntil: new Date(Date.now() - 1) },
+        });
+        const beforeExpiry = await db.userAccessAuditRecord.count();
+        await service.ingest(nodeUuid, {
+            ...batch,
+            records: [{ ...item, connectionId: randomUUID() }],
+        });
+        assert.equal(
+            await db.userAccessAuditRecord.count(),
+            beforeExpiry,
+            'Expiry must reject ingestion before the scheduler runs',
+        );
+        assert.equal((await service.policy(Number(selected))).enabled, false);
+        await service.expirePolicies();
+        assert.equal(
+            (await db.userAccessAuditPolicy.findUniqueOrThrow({ where: { userId: selected } }))
+                .enabled,
+            false,
+        );
+        await service.setPolicy(Number(selected), { enabled: true, enabledUntil: null });
+        const temporaryWindow = await db.userAccessAuditPolicy.findUniqueOrThrow({
+            where: { userId: selected },
+        });
+        assert.notEqual(
+            temporaryWindow.windowId,
+            p.windowId,
+            'Re-enable after expiry must rotate opt-in window',
+        );
+        assert.equal((await service.policy(Number(selected))).enabledUntil, null);
+        const fixtureRows = Array.from({ length: 25 }, (_, i) => ({
+            userId: selected,
+            nodeUuid,
+            windowId: temporaryWindow.windowId!,
+            connectionId: randomUUID(),
+            domain: `ranking-${i}.example`,
+            destinationIp: '203.0.113.9',
+            destinationPort: 443,
+            inbound: 'fixture',
+            network: 'tcp',
+            protocol: 'tls',
+            startedAt: at,
+            observedAt: at,
+            expiresAt: new Date(Date.now() + 86400000),
+            uploadBytes: i === 24 ? 9007199254740993n : BigInt(25 - i),
+            downloadBytes: i === 23 ? 9007199254740993n : BigInt(i),
+            partial: i === 24,
+        }));
+        await db.userAccessAuditRecord.createMany({ data: fixtureRows });
+        assert.equal(
+            (await service.domains({ userId: Number(selected), direction: 'upload' }))[0].domain,
+            'ranking-24.example',
+        );
+        assert.equal(
+            (await service.domains({ userId: Number(selected), direction: 'download' }))[0].domain,
+            'ranking-23.example',
+        );
+        const fullSummary = await service.summary(filter);
+        assert.equal(fullSummary.connections, '27');
+        assert.equal(fullSummary.targets, '26');
+        assert.equal(fullSummary.partial, '1');
+        assert.ok(BigInt(fullSummary.upload) > 9007199254740993n);
+        assert.equal((await service.summary({ ...filter, domain: 'RANKING-24' })).connections, '1');
+        const exported = await service.exportRecords(filter);
+        assert.equal(exported.count, 27);
+        assert.ok(exported.csv.includes('9007199254740993'));
+        await db.userAccessAuditRecord.createMany({
+            data: ['literal_100%.example', 'literalx100y.example'].map((domain) => ({
+                ...fixtureRows[0],
+                connectionId: randomUUID(),
+                domain,
+            })),
+        });
+        const literalFilter = { ...filter, domain: 'literal_100%' };
+        assert.equal((await service.summary(literalFilter)).connections, '1');
+        assert.equal(
+            (await service.records({ ...literalFilter, cursor: undefined })).records.length,
+            1,
+            'Records and summaries must both use literal domain filtering',
+        );
+        assert.equal(
+            (await service.exportRecords(literalFilter)).count,
+            1,
+            'Export must not expand literal domain filters as SQL wildcards',
+        );
+        await db.userAccessAuditRecord.createMany({
+            data: Array.from({ length: 5001 }, () => ({
+                ...fixtureRows[0],
+                connectionId: randomUUID(),
+                domain: 'export-limit.example',
+            })),
+        });
+        await assert.rejects(
+            () => service.exportRecords({ ...filter, domain: 'export-limit' }),
+            /5000/,
+        );
+        assert.equal(
+            (await db.nodes.findUniqueOrThrow({ where: { uuid: nodeUuid } })).trafficUsedBytes,
+            1234n,
+            'Summary/ranking/export must never mutate billing',
+        );
+        await db.userAccessAuditRecord.deleteMany({
+            where: { nodeUuid, domain: { not: 'example.com' } },
+        });
         await db.userAccessAuditRecord.deleteMany({ where: { connectionId: otherConnection } });
         await service.setPolicy(Number(selected), { enabled: false });
         await service.ingest(nodeUuid, {
