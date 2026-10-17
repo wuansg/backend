@@ -61,6 +61,7 @@ export const REST_API = {
         DELETE: (uuid: string) =>
             `${ROOT}/${CONTROLLERS.NODES_CONTROLLER}/${CONTROLLERS.NODES_ROUTES.DELETE(uuid)}`,
         FORWARDING: {
+            TOPOLOGY: `${ROOT}/${CONTROLLERS.NODES_CONTROLLER}/${CONTROLLERS.NODES_ROUTES.FORWARDING.TOPOLOGY}`,
             GET: (uuid: string) =>
                 `${ROOT}/${CONTROLLERS.NODES_CONTROLLER}/${CONTROLLERS.NODES_ROUTES.FORWARDING.GET(uuid)}`,
             GET_USAGE: (uuid: string) =>

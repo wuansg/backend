@@ -38,6 +38,7 @@ import {
     BulkNodesActionsCommand,
     BulkNodesUpdateCommand,
     GetNodeForwardingCommand,
+    GetForwardingTopologyCommand,
     GetNodeForwardingUsageCommand,
     SyncNodeForwardingCommand,
     UpdateNodeForwardingCommand,
@@ -69,6 +70,8 @@ import {
     ReorderNodesResponseDto,
     NodeResponseDto,
     GetNodeForwardingParamDto,
+    GetForwardingTopologyQueryDto,
+    GetForwardingTopologyResponseDto,
     GetNodeForwardingResponseDto,
     GetNodeForwardingUsageParamDto,
     GetNodeForwardingUsageQueryDto,
@@ -85,6 +88,7 @@ import {
     AcknowledgeNodeGeocheckDriftResponseDto,
 } from './dtos';
 import { NodeForwardingService } from './forwarding';
+import { ForwardingTopologyService } from './forwarding/forwarding-topology.service';
 import { GetAllNodesTagsResponseModel } from './models';
 import { NodesService } from './nodes.service';
 
@@ -100,7 +104,19 @@ export class NodesController {
         private readonly nodesService: NodesService,
         private readonly nodeForwardingService: NodeForwardingService,
         private readonly nodeObservabilityService: NodeObservabilityService,
+        private readonly forwardingTopologyService: ForwardingTopologyService,
     ) {}
+
+    @Endpoint({
+        type: GetForwardingTopologyResponseDto,
+        command: GetForwardingTopologyCommand,
+        httpCode: HttpStatus.OK,
+    })
+    async getForwardingTopology(
+        @Query() query: GetForwardingTopologyQueryDto,
+    ): Promise<GetForwardingTopologyResponseDto> {
+        return { response: await this.forwardingTopologyService.get(query) };
+    }
 
     @Endpoint({
         type: GetNodeForwardingResponseDto,

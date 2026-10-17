@@ -1,5 +1,6 @@
 import {
     GetNodeForwardingCommand,
+    GetForwardingTopologyCommand,
     GetNodeForwardingUsageCommand,
     SyncNodeForwardingCommand,
     UpdateNodeForwardingCommand,
@@ -8,6 +9,12 @@ import { createZodDto } from 'nestjs-zod';
 
 export class GetNodeForwardingParamDto extends createZodDto(
     GetNodeForwardingCommand.RequestParamSchema,
+) {}
+export class GetForwardingTopologyQueryDto extends createZodDto(
+    GetForwardingTopologyCommand.RequestQuerySchema,
+) {}
+export class GetForwardingTopologyResponseDto extends createZodDto(
+    GetForwardingTopologyCommand.ResponseSchema,
 ) {}
 export class GetNodeForwardingResponseDto extends createZodDto(
     GetNodeForwardingCommand.ResponseSchema,

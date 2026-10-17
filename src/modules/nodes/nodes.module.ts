@@ -6,6 +6,7 @@ import { AxiosModule } from '@common/axios';
 import { COMMANDS } from './commands';
 import { EVENTS } from './events';
 import { NodeForwardingService } from './forwarding';
+import { ForwardingTopologyService } from './forwarding/forwarding-topology.service';
 import { NodesSystemCacheService } from './nodes-system-cache.service';
 import { NodesController } from './nodes.controller';
 import { NodesConverter } from './nodes.converter';
@@ -22,6 +23,7 @@ import { NodesRepository } from './repositories/nodes.repository';
         NodesService,
         NodesSystemCacheService,
         NodeForwardingService,
+        ForwardingTopologyService,
         ...EVENTS,
         ...QUERIES,
         ...COMMANDS,

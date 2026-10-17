@@ -11,6 +11,7 @@ export const NODES_ROUTES = {
     DELETE: (uuid: string) => `${uuid}`, // delete by UUID
 
     FORWARDING: {
+        TOPOLOGY: 'forwarding/topology',
         GET: (uuid: string) => `${uuid}/forwarding`,
         GET_USAGE: (uuid: string) => `${uuid}/forwarding/usage`,
         UPDATE: (uuid: string) => `${uuid}/forwarding`,

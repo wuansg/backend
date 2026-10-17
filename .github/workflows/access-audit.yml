@@ -21,6 +21,9 @@ on:
       - 'prisma/**'
       - 'scripts/test-access-audit.ts'
       - 'scripts/test-node-deployments.ts'
+      - 'scripts/test-forwarding-topology.ts'
+      - 'libs/contract/api/controllers/nodes.ts'
+      - 'libs/contract/api/routes.ts'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/access-audit.yml'
@@ -47,6 +50,7 @@ jobs:
       DATABASE_URL: postgresql://audit_test:isolated-fixture-only@127.0.0.1:5432/audit_test
       AUDIT_TEST_DATABASE_URL: postgresql://audit_test:isolated-fixture-only@127.0.0.1:5432/audit_test
       NODE_DEPLOYMENTS_TEST_DATABASE_URL: postgresql://audit_test:isolated-fixture-only@127.0.0.1:5432/audit_test
+      TOPOLOGY_TEST_DATABASE_URL: postgresql://audit_test:isolated-fixture-only@127.0.0.1:5432/audit_test
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -57,5 +61,6 @@ jobs:
       - run: npx prisma generate && npx prisma migrate deploy
       - run: npm run test:access-audit
       - run: npm run test:node-deployments
+      - run: npm run test:forwarding-topology
       - run: npm run test:opaque-json && npm run test:api-scope-catalog
       - run: npm run build
