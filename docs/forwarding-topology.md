@@ -59,3 +59,46 @@ Frontend 类型检查及生产构建成功。不是线上故障，也没有调�
 面板数据库、Compose、环境和节点基线，再以版本标签附固定 digest 更新面板。
 本次没有数据库迁移，不升级 Agent，不更改节点配置、用户授权、审计策略、APP_SECRET 或统计口径。
 实际镜像、提交、Actions 和线上验收结果完成后另行记录。
+
+## 已发布与线上验收（2026-10-17）
+
+北京时间 20:22 完成 HostDZire SG 面板切换，20:23 完成线上验收。
+
+- Backend：`3.20.0-anytls`，源码提交 `b337a694d1e9349ee5a789af039085d849a9c767`。
+- Frontend：`3.19.0`，源码提交 `4de8d0e3555de300ea36eed81edab4d75a7792e3`，版本 tag 已推送。
+- Contract：`3.20.0-anytls.0`，GitHub 产物发布成功。
+- 实际部署镜像（amd64，OCI 版本及前后端提交均核对一致）：
+  `ghcr.io/wuansg/backend:3.20.0-anytls@sha256:c91ddf9fc642e0752b625bdb50034e82c42eee78981a52c665852b3e61b9979e`。
+- GitHub 全部成功：
+  [Backend 回归](https://github.com/wuansg/backend/actions/runs/39031748934)、
+  [Contract 发布](https://github.com/wuansg/backend/actions/runs/39031748993)、
+  [Frontend UI 回归](https://github.com/wuansg/frontend/actions/runs/39031745614)、
+  [日期快捷栏回归](https://github.com/wuansg/frontend/actions/runs/39031745581)、
+  [Frontend 发布](https://github.com/wuansg/frontend/actions/runs/39031745962)、
+  [amd64 镜像构建](https://github.com/wuansg/backend/actions/runs/39031765640)。
+
+升级前的私有备份位于面板主机 `/opt/remnawave/backups/release-3.20.0-20261017`，
+包含数据库、Compose、环境、容器信息与校验基线；旧镜像及此前备份保留。
+数据库备份约 25 MiB，`pg_restore --list` 成功（499 行），SHA-256：
+`814ef602798887596f539c73d2dd0360726fb9ee17eeb2b16aadf167e7bc45b4`。
+环境和基线只在私有备份中保存，未输出敏感内容。
+
+线上验收结果：
+
+- 仅重建 `remnawave`；其他容器 ID、环境文件和 APP_SECRET 不变。
+  新容器 healthy，API / jobs / scheduler 均 online、重启次数 0。
+- 节点 13 个，原在线 12 个全部在线；CloudSilk 仍为流量耗尽停机状态，本次未处理。
+  原在线节点的核心/转发、审计及流量同步均正常，无待应用快照或序列缺口。
+- 节点配置、Agent/核心版本、快照 generation、用户审计策略、Host 与 profile 均与升级前一致；
+  配额计数没有回退，审计启用用户仍为 10 个，新增数据库迁移 0。
+- 新 API 默认当天 UTC、指定日期均返回 200；13 个节点、39 个 Host、9 条规则、0 条孤立历史规则。
+  昨日的核心、转发、Host 上传/下载/总量与独立 SQL 汇总一致，共享归因一致；配额独立验证。
+- 未认证 401、不相关权限及只读令牌写入 403，无效/超限日期 400；响应无敏感配置字段。
+  所有临时验证令牌已清理，数据库和缓存均无遗留验证授权。
+- 公网首页与拓扑路由均为 200，返回新构建入口；公网 JavaScript 与镜像中资源逐字节一致。
+  新拓扑入口、现有用户流量详情跳转及 Surge `currentColor` 同色图标均在实际产物中。
+- 当前 34 个 Host 的入口无法凭已有数据唯一确定，UI 按未知/候选展示，不使用 Host 绑定伪造链路。
+  当前规则目标没有多节点歧义。这是已有地址观测的覆盖限制，不会为完善图形而额外查询 DNS 或改配置。
+
+回退范围为上一个固定 digest 的面板镜像与原 Compose；本次没有迁移，不自动回滚数据库。
+Agent 无需升级，未重启节点或改动 DWHK/Nikki 分组。
