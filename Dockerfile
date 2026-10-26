@@ -1,4 +1,6 @@
-FROM --platform=$BUILDPLATFORM node:24.14-alpine AS frontend
+ARG NODE_VERSION=24.22.1
+
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS frontend
 WORKDIR /opt/frontend
 
 ARG BRANCH=main
@@ -20,7 +22,7 @@ RUN apk add --no-cache curl unzip ca-certificates git \
     fi \
     && test -d frontend_temp/dist
 
-FROM node:24.19-trixie-slim AS backend-build
+FROM node:${NODE_VERSION}-trixie-slim AS backend-build
 WORKDIR /opt/app
 
 COPY package*.json ./
@@ -59,7 +61,7 @@ RUN cd node_modules/@prisma/client/runtime && \
     find node_modules \( -name '*.js.map' -o -name '*.mjs.map' \) -delete && \
     find node_modules \( -name '*.d.ts' -o -name '*.d.cts' -o -name '*.d.mts' \) -delete
 
-FROM node:24.19-trixie-slim
+FROM node:${NODE_VERSION}-trixie-slim
 
 LABEL org.opencontainers.image.title="Remnawave"
 LABEL org.opencontainers.image.description="Powerful proxy management tool"
