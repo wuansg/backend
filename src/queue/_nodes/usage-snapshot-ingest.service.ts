@@ -461,7 +461,13 @@ export class UsageSnapshotIngestService {
             `);
         }
 
-        const hosts = batch.hosts.filter((host) => host.usage.uplink + host.usage.downlink > 0n);
+        const userHosts = batch.userHosts.filter(
+            (userHost) => userHost.usage.uplink + userHost.usage.downlink > 0n,
+        );
+        const hosts = withHostRowsForUserUsage(
+            batch.hosts.filter((host) => host.usage.uplink + host.usage.downlink > 0n),
+            userHosts,
+        );
         if (hosts.length > 0) {
             await tx.$executeRaw(Prisma.sql`
                 WITH mapped AS (${this.hostsByInboundSql(nodeUuid)})
@@ -487,18 +493,17 @@ export class UsageSnapshotIngestService {
             `);
         }
 
-        const userHosts = batch.userHosts.filter(
-            (userHost) => userHost.usage.uplink + userHost.usage.downlink > 0n,
-        );
         if (userHosts.length > 0) {
+            // One row per inbound; user_hosts_usage_history (a view) fans it
+            // out to the Hosts recorded for the same inbound and hour above.
             await tx.$executeRaw(Prisma.sql`
                 WITH mapped AS (${this.hostsByInboundSql(nodeUuid)})
-                INSERT INTO user_hosts_usage_history (
-                    user_id, host_uuid, node_uuid, inbound_tag, download_bytes,
-                    upload_bytes, total_bytes, is_shared, created_at
+                INSERT INTO user_inbound_usage_history (
+                    user_id, node_uuid, inbound_tag, download_bytes,
+                    upload_bytes, total_bytes, created_at
                 )
-                SELECT b.user_id, m.host_uuid, ${nodeUuid}::uuid, b.tag, b.download,
-                       b.upload, b.upload + b.download, m.is_shared,
+                SELECT b.user_id, ${nodeUuid}::uuid, b.tag, b.download,
+                       b.upload, b.upload + b.download,
                        b.hour::timestamptz AT TIME ZONE 'UTC'
                 FROM unnest(
                     ${userHosts.map((userHost) => userHost.userId.toString())}::bigint[],
@@ -507,14 +512,14 @@ export class UsageSnapshotIngestService {
                     ${userHosts.map((userHost) => userHost.usage.uplink.toString())}::bigint[],
                     ${userHosts.map((userHost) => userHost.usage.downlink.toString())}::bigint[]
                 ) AS b(user_id, tag, hour, upload, download)
-                JOIN mapped m ON m.tag = b.tag
-                WHERE EXISTS (SELECT 1 FROM users u WHERE u.id = b.user_id)
-                ORDER BY b.user_id, m.host_uuid, b.tag, b.hour
-                ON CONFLICT (user_id, host_uuid, node_uuid, inbound_tag, created_at) DO UPDATE SET
-                    download_bytes = user_hosts_usage_history.download_bytes + EXCLUDED.download_bytes,
-                    upload_bytes = user_hosts_usage_history.upload_bytes + EXCLUDED.upload_bytes,
-                    total_bytes = user_hosts_usage_history.total_bytes + EXCLUDED.total_bytes,
-                    is_shared = EXCLUDED.is_shared, updated_at = now()
+                WHERE EXISTS (SELECT 1 FROM mapped m WHERE m.tag = b.tag)
+                  AND EXISTS (SELECT 1 FROM users u WHERE u.id = b.user_id)
+                ORDER BY b.user_id, b.tag, b.hour
+                ON CONFLICT (user_id, node_uuid, inbound_tag, created_at) DO UPDATE SET
+                    download_bytes = user_inbound_usage_history.download_bytes + EXCLUDED.download_bytes,
+                    upload_bytes = user_inbound_usage_history.upload_bytes + EXCLUDED.upload_bytes,
+                    total_bytes = user_inbound_usage_history.total_bytes + EXCLUDED.total_bytes,
+                    updated_at = now()
             `);
         }
 
@@ -608,4 +613,28 @@ export class UsageSnapshotIngestService {
 
 function isCapturing(status: { active: boolean; capturing?: boolean }): boolean {
     return status.capturing ?? status.active;
+}
+
+/**
+ * user_hosts_usage_history joins user usage to Host rows of the same inbound
+ * and hour, so every (inbound, hour) with user usage needs a Host row even if
+ * its inbound counter stayed at zero. Zero-byte rows do not change any sum.
+ */
+function withHostRowsForUserUsage(
+    hosts: UsageSnapshotWriteBatch['hosts'],
+    userHosts: UsageSnapshotWriteBatch['userHosts'],
+): UsageSnapshotWriteBatch['hosts'] {
+    const keys = new Set(hosts.map((host) => `${host.tag}\u0000${host.hour.toISOString()}`));
+    const result = [...hosts];
+    for (const userHost of userHosts) {
+        const key = `${userHost.tag}\u0000${userHost.hour.toISOString()}`;
+        if (keys.has(key)) continue;
+        keys.add(key);
+        result.push({
+            tag: userHost.tag,
+            hour: userHost.hour,
+            usage: { uplink: 0n, downlink: 0n },
+        });
+    }
+    return result;
 }

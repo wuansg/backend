@@ -84,7 +84,7 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         inbounds: IInboundUsageStat[],
         createdAt: Date,
     ): Promise<void> {
-        createdAt.setMinutes(0, 0, 0);
+        createdAt.setUTCMinutes(0, 0, 0);
 
         const inboundStats = new Map<
             string,
@@ -167,17 +167,12 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
         userInbounds: IUserInboundUsageStat[],
         createdAt: Date,
     ): Promise<void> {
-        createdAt.setMinutes(0, 0, 0);
+        createdAt.setUTCMinutes(0, 0, 0);
 
-        const inboundStats = new Map<
+        const usage = new Map<
             string,
-            Array<{
-                userId: bigint;
-                downloadBytes: bigint;
-                uploadBytes: bigint;
-            }>
+            { userId: bigint; tag: string; downloadBytes: bigint; uploadBytes: bigint }
         >();
-
         for (const inbound of userInbounds) {
             if (!inbound.inbound) {
                 continue;
@@ -196,95 +191,70 @@ export class HostsUsageHistoryRepository implements ICrudHistoricalRecords<Hosts
                 continue;
             }
 
-            const stats = inboundStats.get(inbound.inbound) ?? [];
-            stats.push({ userId, downloadBytes, uploadBytes });
-            inboundStats.set(inbound.inbound, stats);
+            const key = `${userId}\u0000${inbound.inbound}`;
+            const current = usage.get(key);
+            if (current) {
+                current.downloadBytes += downloadBytes;
+                current.uploadBytes += uploadBytes;
+            } else {
+                usage.set(key, { userId, tag: inbound.inbound, downloadBytes, uploadBytes });
+            }
         }
 
-        if (inboundStats.size === 0) {
+        if (usage.size === 0) {
             return;
         }
 
-        const hosts = await this.prisma.tx.hosts.findMany({
-            where: {
-                isDisabled: false,
-                configProfileInboundUuid: { not: null },
-                nodes: {
-                    some: {
-                        nodeUuid,
-                    },
-                },
-            },
-            select: {
-                uuid: true,
-                configProfileInbounds: {
-                    select: {
-                        tag: true,
-                    },
-                },
-            },
-        });
+        const rows = [...usage.values()];
+        const hour = createdAt.toISOString();
+        const hostsByInbound = Prisma.sql`
+            SELECT h.uuid AS host_uuid, cpi.tag,
+                   count(*) OVER (PARTITION BY cpi.tag) > 1 AS is_shared
+            FROM hosts h
+            JOIN hosts_to_nodes htn ON htn.host_uuid = h.uuid AND htn.node_uuid = ${nodeUuid}::uuid
+            JOIN config_profile_inbounds cpi ON cpi.uuid = h.config_profile_inbound_uuid
+            WHERE NOT h.is_disabled
+        `;
 
-        const hostsByInbound = new Map<string, string[]>();
-        for (const host of hosts) {
-            const tag = host.configProfileInbounds?.tag;
-            if (!tag || !inboundStats.has(tag)) {
-                continue;
-            }
-            hostsByInbound.set(tag, [...(hostsByInbound.get(tag) ?? []), host.uuid]);
-        }
-
-        const rows: Prisma.Sql[] = [];
-        for (const [inboundTag, hostUuids] of hostsByInbound) {
-            const stats = inboundStats.get(inboundTag);
-            if (!stats) {
-                continue;
-            }
-
-            const isShared = hostUuids.length > 1;
-
-            for (const stat of stats) {
-                const totalBytes = stat.downloadBytes + stat.uploadBytes;
-                for (const hostUuid of hostUuids) {
-                    rows.push(Prisma.sql`(
-                        ${stat.userId},
-                        ${hostUuid}::uuid,
-                        ${nodeUuid}::uuid,
-                        ${inboundTag},
-                        ${stat.downloadBytes},
-                        ${stat.uploadBytes},
-                        ${totalBytes},
-                        ${isShared},
-                        ${createdAt}
-                    )`);
-                }
-            }
-        }
-
-        if (rows.length === 0) {
-            return;
-        }
+        // user_hosts_usage_history is a view joining user usage to the Host
+        // rows of the same inbound and hour. Inbound usage is recorded by a
+        // separate job here, so make sure those Host rows exist.
+        await this.prisma.tx.$executeRaw(Prisma.sql`
+            WITH mapped AS (${hostsByInbound})
+            INSERT INTO hosts_usage_history (
+                host_uuid, node_uuid, inbound_tag, download_bytes, upload_bytes,
+                total_bytes, is_shared, created_at
+            )
+            SELECT m.host_uuid, ${nodeUuid}::uuid, m.tag, 0, 0, 0, m.is_shared,
+                   ${hour}::timestamptz AT TIME ZONE 'UTC'
+            FROM mapped m
+            WHERE m.tag = ANY(${[...new Set(rows.map((row) => row.tag))]}::text[])
+            ORDER BY m.host_uuid
+            ON CONFLICT (host_uuid, node_uuid, inbound_tag, created_at) DO NOTHING
+        `);
 
         await this.prisma.tx.$executeRaw(Prisma.sql`
-            INSERT INTO user_hosts_usage_history (
-                user_id,
-                host_uuid,
-                node_uuid,
-                inbound_tag,
-                download_bytes,
-                upload_bytes,
-                total_bytes,
-                is_shared,
-                created_at
+            WITH mapped AS (${hostsByInbound})
+            INSERT INTO user_inbound_usage_history (
+                user_id, node_uuid, inbound_tag, download_bytes, upload_bytes,
+                total_bytes, created_at
             )
-            VALUES ${Prisma.join(rows)}
-            ON CONFLICT ON CONSTRAINT user_hosts_usage_history_pkey
-            DO UPDATE SET
-                download_bytes = user_hosts_usage_history.download_bytes + EXCLUDED.download_bytes,
-                upload_bytes = user_hosts_usage_history.upload_bytes + EXCLUDED.upload_bytes,
-                total_bytes = user_hosts_usage_history.total_bytes + EXCLUDED.total_bytes,
-                is_shared = EXCLUDED.is_shared,
-                updated_at = now();
+            SELECT b.user_id, ${nodeUuid}::uuid, b.tag, b.download, b.upload,
+                   b.upload + b.download, ${hour}::timestamptz AT TIME ZONE 'UTC'
+            FROM unnest(
+                ${rows.map((row) => row.userId.toString())}::bigint[],
+                ${rows.map((row) => row.tag)}::text[],
+                ${rows.map((row) => row.uploadBytes.toString())}::bigint[],
+                ${rows.map((row) => row.downloadBytes.toString())}::bigint[]
+            ) AS b(user_id, tag, upload, download)
+            WHERE EXISTS (SELECT 1 FROM mapped m WHERE m.tag = b.tag)
+              AND EXISTS (SELECT 1 FROM users u WHERE u.id = b.user_id)
+            ORDER BY b.user_id, b.tag
+            ON CONFLICT (user_id, node_uuid, inbound_tag, created_at) DO UPDATE SET
+                download_bytes = user_inbound_usage_history.download_bytes + EXCLUDED.download_bytes,
+                upload_bytes = user_inbound_usage_history.upload_bytes + EXCLUDED.upload_bytes,
+                total_bytes = user_inbound_usage_history.total_bytes + EXCLUDED.total_bytes,
+                updated_at = now()
         `);
     }
 
