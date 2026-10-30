@@ -39,6 +39,13 @@ export class ServiceQueueService extends AbstractQueueService implements OnAppli
         });
     }
 
+    public async compactUsageHistory(payload: Record<string, string>) {
+        return this.addJob(ServiceJobNames.COMPACT_USAGE_HISTORY, payload, {
+            removeOnComplete: true,
+            removeOnFail: true,
+        });
+    }
+
     public async vacuumTables(payload: Record<string, string>) {
         return this.addJob(ServiceJobNames.VACUUM_TABLES, payload);
     }

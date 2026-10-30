@@ -533,6 +533,7 @@ model HostsUsageHistory {
   @@id([hostUuid, nodeUuid, inboundTag, createdAt])
   @@index([hostUuid, createdAt(sort: Desc)])
   @@index([nodeUuid, inboundTag, createdAt(sort: Desc)])
+  @@index([createdAt], type: Brin, map: "hosts_usage_history_created_at_brin_idx")
   @@map("hosts_usage_history")
 }
 
@@ -555,7 +556,16 @@ model UserInboundUsageHistory {
   @@id([userId, nodeUuid, inboundTag, createdAt])
   @@index([userId, createdAt(sort: Desc)])
   @@index([nodeUuid, inboundTag, createdAt(sort: Desc)])
+  @@index([createdAt], type: Brin, map: "user_inbound_usage_history_created_at_brin_idx")
   @@map("user_inbound_usage_history")
+}
+
+model UsageHistoryCompactionState {
+  id              Int       @id @default(1)
+  compactedBefore DateTime? @map("compacted_before") @db.Date
+  updatedAt       DateTime  @default(now()) @map("updated_at")
+
+  @@map("usage_history_compaction_state")
 }
 
 model Hosts {

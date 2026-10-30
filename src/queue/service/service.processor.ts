@@ -14,6 +14,7 @@ import { UsersQueuesService } from '@queue/_users';
 
 import { QUEUES_NAMES } from '../queue.enum';
 import { ServiceJobNames } from './enums';
+import { compactUsageHistory } from './usage-history-compaction';
 
 @Processor(QUEUES_NAMES.SERVICE, {
     autorun: false,
@@ -36,6 +37,8 @@ export class ServiceQueueProcessor extends WorkerHost {
                 return await this.handleCleanAppliedUsageSnapshotsJob();
             case ServiceJobNames.CLEAN_OLD_USAGE_RECORDS:
                 return await this.handleCleanOldUsageRecordsJob();
+            case ServiceJobNames.COMPACT_USAGE_HISTORY:
+                return await this.handleCompactUsageHistoryJob();
             case ServiceJobNames.VACUUM_TABLES:
                 return await this.handleVacuumTablesJob();
             default:
@@ -76,6 +79,22 @@ export class ServiceQueueProcessor extends WorkerHost {
         } catch (error) {
             this.logger.error(
                 `Error handling "${ServiceJobNames.CLEAN_APPLIED_USAGE_SNAPSHOTS}" job: ${error}`,
+            );
+            throw error;
+        }
+    }
+
+    private async handleCompactUsageHistoryJob() {
+        try {
+            const { compactedDays } = await compactUsageHistory(this.prisma);
+            if (compactedDays.length > 0) {
+                this.logger.log(
+                    `Compacted hourly user inbound usage into daily rows for ${compactedDays.join(', ')}.`,
+                );
+            }
+        } catch (error) {
+            this.logger.error(
+                `Error handling "${ServiceJobNames.COMPACT_USAGE_HISTORY}" job: ${error}`,
             );
             throw error;
         }
