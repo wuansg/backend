@@ -16,7 +16,6 @@ import {
 } from './usage-snapshot-transaction.util';
 import {
     buildUsageSnapshotWriteBatch,
-    UsageDelta,
     UsageSnapshotWriteBatch,
 } from './usage-snapshot-write-batch.util';
 
@@ -25,6 +24,9 @@ type SnapshotStateRow = {
     receivedThrough: bigint;
     appliedThrough: bigint;
 };
+
+/** Upper bound of stored (compressed) inbox payload applied per transaction. */
+const APPLY_MAX_STORED_PAYLOAD_BYTES = 2 * 1024 * 1024;
 
 type InboxRow = {
     generation: string;
@@ -228,13 +230,34 @@ export class UsageSnapshotIngestService {
                     WHERE node_uuid = ${nodeUuid}::uuid
                     FOR UPDATE
                 `);
+                // Loading and aggregating payloads dominates this transaction,
+                // so a backlog is applied in slices bounded by stored payload
+                // size. The first row is always taken so a large one still
+                // makes progress.
                 const rows = await tx.$queryRaw<InboxRow[]>(Prisma.sql`
-                    SELECT generation, sequence, payload
-                    FROM node_usage_snapshot_inbox
-                    WHERE node_uuid = ${nodeUuid}::uuid AND applied_at IS NULL
-                    ORDER BY received_at, sequence
-                    LIMIT 500
-                    FOR UPDATE
+                    WITH candidates AS (
+                        SELECT generation, sequence, received_at,
+                               pg_column_size(payload) AS stored_bytes
+                        FROM node_usage_snapshot_inbox
+                        WHERE node_uuid = ${nodeUuid}::uuid AND applied_at IS NULL
+                        ORDER BY received_at, sequence
+                        LIMIT 500
+                    ), bounded AS (
+                        SELECT generation, sequence, received_at,
+                               sum(stored_bytes) OVER (ORDER BY received_at, sequence)
+                                   - stored_bytes AS bytes_before
+                        FROM candidates
+                    )
+                    SELECT inbox.generation, inbox.sequence, inbox.payload
+                    FROM node_usage_snapshot_inbox AS inbox
+                    JOIN bounded
+                      ON bounded.generation = inbox.generation
+                     AND bounded.sequence = inbox.sequence
+                    WHERE inbox.node_uuid = ${nodeUuid}::uuid
+                      AND (bounded.bytes_before = 0
+                           OR bounded.bytes_before < ${APPLY_MAX_STORED_PAYLOAD_BYTES})
+                    ORDER BY bounded.received_at, bounded.sequence
+                    FOR UPDATE OF inbox
                 `);
                 const snapshots = rows.map((row) => row.payload as UsageSnapshot);
                 const userIds = collectSortedUsageUserIds(snapshots);
@@ -266,22 +289,8 @@ export class UsageSnapshotIngestService {
                     ),
                 );
 
-                for (let index = 0; index < rows.length; index++) {
-                    const row = rows[index];
-                    await tx.$executeRaw(Prisma.sql`
-                        UPDATE node_usage_snapshot_inbox SET applied_at = now()
-                        WHERE node_uuid = ${nodeUuid}::uuid
-                          AND generation = ${row.generation}
-                          AND sequence = ${row.sequence}
-                    `);
-                    await tx.$executeRaw(Prisma.sql`
-                        UPDATE node_usage_snapshot_state SET
-                            applied_through = CASE WHEN generation = ${row.generation}
-                                THEN GREATEST(applied_through, ${row.sequence}) ELSE applied_through END,
-                            last_error = NULL,
-                            updated_at = now()
-                        WHERE node_uuid = ${nodeUuid}::uuid
-                    `);
+                if (rows.length > 0) {
+                    await this.markInboxApplied(tx, nodeUuid, rows);
                 }
                 return snapshots;
             }),
@@ -332,17 +341,56 @@ export class UsageSnapshotIngestService {
         return periodStart;
     }
 
+    private async markInboxApplied(
+        tx: Prisma.TransactionClient,
+        nodeUuid: string,
+        rows: InboxRow[],
+    ): Promise<void> {
+        const generations = rows.map((row) => row.generation);
+        const sequences = rows.map((row) => row.sequence.toString());
+        await tx.$executeRaw(Prisma.sql`
+            UPDATE node_usage_snapshot_inbox AS inbox SET applied_at = now()
+            FROM unnest(${generations}::text[], ${sequences}::bigint[]) AS applied(generation, sequence)
+            WHERE inbox.node_uuid = ${nodeUuid}::uuid
+              AND inbox.generation = applied.generation
+              AND inbox.sequence = applied.sequence
+        `);
+        await tx.$executeRaw(Prisma.sql`
+            UPDATE node_usage_snapshot_state AS state SET
+                applied_through = GREATEST(state.applied_through, COALESCE((
+                    SELECT max(applied.sequence)
+                    FROM unnest(${generations}::text[], ${sequences}::bigint[]) AS applied(generation, sequence)
+                    WHERE applied.generation = state.generation
+                ), state.applied_through)),
+                last_error = NULL,
+                updated_at = now()
+            WHERE state.node_uuid = ${nodeUuid}::uuid
+        `);
+    }
+
+    /**
+     * One statement per target table. Every list in the batch is already
+     * unique per conflict key, which ON CONFLICT DO UPDATE requires. Times are
+     * bound as ISO strings and converted explicitly: usage history stores UTC
+     * in timestamp/date columns, and an implicit timestamptz cast would use
+     * the database session time zone.
+     */
     private async applyWriteBatch(
         tx: Prisma.TransactionClient,
         nodeUuid: string,
         nodeId: bigint,
         batch: UsageSnapshotWriteBatch,
     ): Promise<void> {
-        for (const { hour, usage } of batch.nodeHours) {
-            const total = usage.uplink + usage.downlink;
+        if (batch.nodeHours.length > 0) {
             await tx.$executeRaw(Prisma.sql`
                 INSERT INTO nodes_usage_history (node_uuid, download_bytes, upload_bytes, total_bytes, created_at)
-                VALUES (${nodeUuid}::uuid, ${usage.downlink}, ${usage.uplink}, ${total}, ${hour})
+                SELECT ${nodeUuid}::uuid, b.download, b.upload, b.upload + b.download,
+                       b.hour::timestamptz AT TIME ZONE 'UTC'
+                FROM unnest(
+                    ${batch.nodeHours.map((item) => item.hour.toISOString())}::text[],
+                    ${batch.nodeHours.map((item) => item.usage.uplink.toString())}::bigint[],
+                    ${batch.nodeHours.map((item) => item.usage.downlink.toString())}::bigint[]
+                ) AS b(hour, upload, download)
                 ON CONFLICT (node_uuid, created_at) DO UPDATE SET
                     download_bytes = nodes_usage_history.download_bytes + EXCLUDED.download_bytes,
                     upload_bytes = nodes_usage_history.upload_bytes + EXCLUDED.upload_bytes,
@@ -358,34 +406,53 @@ export class UsageSnapshotIngestService {
             `);
         }
 
-        for (const user of batch.users) {
+        if (batch.users.length > 0) {
             await tx.$executeRaw(Prisma.sql`
-                UPDATE user_traffic SET
-                    used_traffic_bytes = used_traffic_bytes + ${user.multipliedTotal},
-                    lifetime_used_traffic_bytes = lifetime_used_traffic_bytes + ${user.multipliedTotal},
-                    used_upload_traffic_bytes = used_upload_traffic_bytes + ${user.multipliedUpload},
-                    used_download_traffic_bytes = used_download_traffic_bytes + ${user.multipliedDownload},
-                    lifetime_upload_traffic_bytes = lifetime_upload_traffic_bytes + ${user.multipliedUpload},
-                    lifetime_download_traffic_bytes = lifetime_download_traffic_bytes + ${user.multipliedDownload},
+                UPDATE user_traffic AS ut SET
+                    used_traffic_bytes = ut.used_traffic_bytes + b.total,
+                    lifetime_used_traffic_bytes = ut.lifetime_used_traffic_bytes + b.total,
+                    used_upload_traffic_bytes = ut.used_upload_traffic_bytes + b.upload,
+                    used_download_traffic_bytes = ut.used_download_traffic_bytes + b.download,
+                    lifetime_upload_traffic_bytes = ut.lifetime_upload_traffic_bytes + b.upload,
+                    lifetime_download_traffic_bytes = ut.lifetime_download_traffic_bytes + b.download,
                     last_connected_node_uuid = CASE
-                        WHEN online_at IS NULL OR online_at <= ${user.lastCapturedAt}
-                        THEN ${nodeUuid}::uuid ELSE last_connected_node_uuid END,
-                    online_at = GREATEST(COALESCE(online_at, ${user.lastCapturedAt}), ${user.lastCapturedAt}),
-                    first_connected_at = CASE WHEN first_connected_at IS NULL
-                        THEN ${user.firstCapturedAt}
-                        ELSE LEAST(first_connected_at, ${user.firstCapturedAt}) END
-                WHERE id = ${user.userId}
+                        WHEN ut.online_at IS NULL OR ut.online_at <= b.last_at
+                        THEN ${nodeUuid}::uuid ELSE ut.last_connected_node_uuid END,
+                    online_at = GREATEST(COALESCE(ut.online_at, b.last_at), b.last_at),
+                    first_connected_at = CASE WHEN ut.first_connected_at IS NULL
+                        THEN b.first_at
+                        ELSE LEAST(ut.first_connected_at, b.first_at) END
+                FROM (
+                    SELECT id, total, upload, download,
+                           first_at::timestamptz AT TIME ZONE 'UTC' AS first_at,
+                           last_at::timestamptz AT TIME ZONE 'UTC' AS last_at
+                    FROM unnest(
+                        ${batch.users.map((user) => user.userId.toString())}::bigint[],
+                        ${batch.users.map((user) => user.multipliedTotal.toString())}::bigint[],
+                        ${batch.users.map((user) => user.multipliedUpload.toString())}::bigint[],
+                        ${batch.users.map((user) => user.multipliedDownload.toString())}::bigint[],
+                        ${batch.users.map((user) => user.firstCapturedAt.toISOString())}::text[],
+                        ${batch.users.map((user) => user.lastCapturedAt.toISOString())}::text[]
+                    ) AS input(id, total, upload, download, first_at, last_at)
+                ) AS b
+                WHERE ut.id = b.id
             `);
         }
-        for (const userDay of batch.userDays) {
+        if (batch.userDays.length > 0) {
+            // Users deleted after the node sampled them would violate the FK
+            // and poison this node's inbox; their history is cascaded away anyway.
             await tx.$executeRaw(Prisma.sql`
                 INSERT INTO nodes_user_usage_history (
                     node_id, user_id, upload_bytes, download_bytes, total_bytes, created_at
                 )
-                VALUES (
-                    ${nodeId}, ${userDay.userId}, ${userDay.upload}, ${userDay.download},
-                    ${userDay.total}, ${userDay.day}
-                )
+                SELECT ${nodeId}, b.user_id, b.upload, b.download, b.upload + b.download, b.day
+                FROM unnest(
+                    ${batch.userDays.map((item) => item.userId.toString())}::bigint[],
+                    ${batch.userDays.map((item) => item.day.toISOString().slice(0, 10))}::date[],
+                    ${batch.userDays.map((item) => item.upload.toString())}::bigint[],
+                    ${batch.userDays.map((item) => item.download.toString())}::bigint[]
+                ) AS b(user_id, day, upload, download)
+                WHERE EXISTS (SELECT 1 FROM users u WHERE u.id = b.user_id)
                 ON CONFLICT (node_id, created_at, user_id) DO UPDATE SET
                     upload_bytes = nodes_user_usage_history.upload_bytes + EXCLUDED.upload_bytes,
                     download_bytes = nodes_user_usage_history.download_bytes + EXCLUDED.download_bytes,
@@ -394,31 +461,81 @@ export class UsageSnapshotIngestService {
             `);
         }
 
-        for (const host of batch.hosts) {
-            await this.applyHostUsage(tx, nodeUuid, host.tag, host.usage, host.hour);
+        const hosts = batch.hosts.filter((host) => host.usage.uplink + host.usage.downlink > 0n);
+        if (hosts.length > 0) {
+            await tx.$executeRaw(Prisma.sql`
+                WITH mapped AS (${this.hostsByInboundSql(nodeUuid)})
+                INSERT INTO hosts_usage_history (
+                    host_uuid, node_uuid, inbound_tag, download_bytes, upload_bytes,
+                    total_bytes, is_shared, created_at
+                )
+                SELECT m.host_uuid, ${nodeUuid}::uuid, b.tag, b.download, b.upload,
+                       b.upload + b.download, m.is_shared, b.hour::timestamptz AT TIME ZONE 'UTC'
+                FROM unnest(
+                    ${hosts.map((host) => host.tag)}::text[],
+                    ${hosts.map((host) => host.hour.toISOString())}::text[],
+                    ${hosts.map((host) => host.usage.uplink.toString())}::bigint[],
+                    ${hosts.map((host) => host.usage.downlink.toString())}::bigint[]
+                ) AS b(tag, hour, upload, download)
+                JOIN mapped m ON m.tag = b.tag
+                ORDER BY m.host_uuid, b.tag, b.hour
+                ON CONFLICT (host_uuid, node_uuid, inbound_tag, created_at) DO UPDATE SET
+                    download_bytes = hosts_usage_history.download_bytes + EXCLUDED.download_bytes,
+                    upload_bytes = hosts_usage_history.upload_bytes + EXCLUDED.upload_bytes,
+                    total_bytes = hosts_usage_history.total_bytes + EXCLUDED.total_bytes,
+                    is_shared = EXCLUDED.is_shared, updated_at = now()
+            `);
         }
-        for (const userHost of batch.userHosts) {
-            await this.applyUserHostUsage(
-                tx,
-                nodeUuid,
-                userHost.userId,
-                userHost.tag,
-                userHost.usage,
-                userHost.hour,
-            );
+
+        const userHosts = batch.userHosts.filter(
+            (userHost) => userHost.usage.uplink + userHost.usage.downlink > 0n,
+        );
+        if (userHosts.length > 0) {
+            await tx.$executeRaw(Prisma.sql`
+                WITH mapped AS (${this.hostsByInboundSql(nodeUuid)})
+                INSERT INTO user_hosts_usage_history (
+                    user_id, host_uuid, node_uuid, inbound_tag, download_bytes,
+                    upload_bytes, total_bytes, is_shared, created_at
+                )
+                SELECT b.user_id, m.host_uuid, ${nodeUuid}::uuid, b.tag, b.download,
+                       b.upload, b.upload + b.download, m.is_shared,
+                       b.hour::timestamptz AT TIME ZONE 'UTC'
+                FROM unnest(
+                    ${userHosts.map((userHost) => userHost.userId.toString())}::bigint[],
+                    ${userHosts.map((userHost) => userHost.tag)}::text[],
+                    ${userHosts.map((userHost) => userHost.hour.toISOString())}::text[],
+                    ${userHosts.map((userHost) => userHost.usage.uplink.toString())}::bigint[],
+                    ${userHosts.map((userHost) => userHost.usage.downlink.toString())}::bigint[]
+                ) AS b(user_id, tag, hour, upload, download)
+                JOIN mapped m ON m.tag = b.tag
+                WHERE EXISTS (SELECT 1 FROM users u WHERE u.id = b.user_id)
+                ORDER BY b.user_id, m.host_uuid, b.tag, b.hour
+                ON CONFLICT (user_id, host_uuid, node_uuid, inbound_tag, created_at) DO UPDATE SET
+                    download_bytes = user_hosts_usage_history.download_bytes + EXCLUDED.download_bytes,
+                    upload_bytes = user_hosts_usage_history.upload_bytes + EXCLUDED.upload_bytes,
+                    total_bytes = user_hosts_usage_history.total_bytes + EXCLUDED.total_bytes,
+                    is_shared = EXCLUDED.is_shared, updated_at = now()
+            `);
         }
-        for (const forwardingRule of batch.forwardingRules) {
-            const total = forwardingRule.usage.uplink + forwardingRule.usage.downlink;
-            if (total === 0n) continue;
+
+        const forwardingRules = batch.forwardingRules.filter(
+            (rule) => rule.usage.uplink + rule.usage.downlink > 0n,
+        );
+        if (forwardingRules.length > 0) {
             await tx.$executeRaw(Prisma.sql`
                 INSERT INTO node_forwarding_usage_history (
                     node_uuid, rule_id, protocol, upload_bytes, download_bytes,
                     total_bytes, created_at
-                ) VALUES (
-                    ${nodeUuid}::uuid, ${forwardingRule.ruleId}::uuid,
-                    ${forwardingRule.protocol}, ${forwardingRule.usage.uplink},
-                    ${forwardingRule.usage.downlink}, ${total}, ${forwardingRule.hour}
                 )
+                SELECT ${nodeUuid}::uuid, b.rule_id, b.protocol, b.upload, b.download,
+                       b.upload + b.download, b.hour
+                FROM unnest(
+                    ${forwardingRules.map((rule) => rule.ruleId)}::uuid[],
+                    ${forwardingRules.map((rule) => rule.protocol)}::text[],
+                    ${forwardingRules.map((rule) => rule.hour.toISOString())}::timestamptz[],
+                    ${forwardingRules.map((rule) => rule.usage.uplink.toString())}::bigint[],
+                    ${forwardingRules.map((rule) => rule.usage.downlink.toString())}::bigint[]
+                ) AS b(rule_id, protocol, hour, upload, download)
                 ON CONFLICT (node_uuid, rule_id, protocol, created_at) DO UPDATE SET
                     upload_bytes = node_forwarding_usage_history.upload_bytes + EXCLUDED.upload_bytes,
                     download_bytes = node_forwarding_usage_history.download_bytes + EXCLUDED.download_bytes,
@@ -428,63 +545,16 @@ export class UsageSnapshotIngestService {
         }
     }
 
-    private async applyHostUsage(
-        tx: Prisma.TransactionClient,
-        nodeUuid: string,
-        tag: string,
-        usage: UsageDelta,
-        hour: Date,
-    ) {
-        const total = usage.uplink + usage.downlink;
-        if (total === 0n) return;
-        await tx.$executeRaw(Prisma.sql`
-            INSERT INTO hosts_usage_history (
-                host_uuid, node_uuid, inbound_tag, download_bytes, upload_bytes,
-                total_bytes, is_shared, created_at
-            )
-            SELECT h.uuid, ${nodeUuid}::uuid, ${tag}, ${usage.downlink}, ${usage.uplink},
-                   ${total}, count(*) OVER () > 1, ${hour}
+    /** Enabled Hosts on this node per inbound tag, with the shared-inbound flag. */
+    private hostsByInboundSql(nodeUuid: string): Prisma.Sql {
+        return Prisma.sql`
+            SELECT h.uuid AS host_uuid, cpi.tag,
+                   count(*) OVER (PARTITION BY cpi.tag) > 1 AS is_shared
             FROM hosts h
             JOIN hosts_to_nodes htn ON htn.host_uuid = h.uuid AND htn.node_uuid = ${nodeUuid}::uuid
             JOIN config_profile_inbounds cpi ON cpi.uuid = h.config_profile_inbound_uuid
-            WHERE NOT h.is_disabled AND cpi.tag = ${tag}
-            ORDER BY h.uuid
-            ON CONFLICT (host_uuid, node_uuid, inbound_tag, created_at) DO UPDATE SET
-                download_bytes = hosts_usage_history.download_bytes + EXCLUDED.download_bytes,
-                upload_bytes = hosts_usage_history.upload_bytes + EXCLUDED.upload_bytes,
-                total_bytes = hosts_usage_history.total_bytes + EXCLUDED.total_bytes,
-                is_shared = EXCLUDED.is_shared, updated_at = now()
-        `);
-    }
-
-    private async applyUserHostUsage(
-        tx: Prisma.TransactionClient,
-        nodeUuid: string,
-        userId: bigint,
-        tag: string,
-        usage: UsageDelta,
-        hour: Date,
-    ) {
-        const total = usage.uplink + usage.downlink;
-        if (total === 0n) return;
-        await tx.$executeRaw(Prisma.sql`
-            INSERT INTO user_hosts_usage_history (
-                user_id, host_uuid, node_uuid, inbound_tag, download_bytes,
-                upload_bytes, total_bytes, is_shared, created_at
-            )
-            SELECT ${userId}, h.uuid, ${nodeUuid}::uuid, ${tag}, ${usage.downlink},
-                   ${usage.uplink}, ${total}, count(*) OVER () > 1, ${hour}
-            FROM hosts h
-            JOIN hosts_to_nodes htn ON htn.host_uuid = h.uuid AND htn.node_uuid = ${nodeUuid}::uuid
-            JOIN config_profile_inbounds cpi ON cpi.uuid = h.config_profile_inbound_uuid
-            WHERE NOT h.is_disabled AND cpi.tag = ${tag}
-            ORDER BY h.uuid
-            ON CONFLICT (user_id, host_uuid, node_uuid, inbound_tag, created_at) DO UPDATE SET
-                download_bytes = user_hosts_usage_history.download_bytes + EXCLUDED.download_bytes,
-                upload_bytes = user_hosts_usage_history.upload_bytes + EXCLUDED.upload_bytes,
-                total_bytes = user_hosts_usage_history.total_bytes + EXCLUDED.total_bytes,
-                is_shared = EXCLUDED.is_shared, updated_at = now()
-        `);
+            WHERE NOT h.is_disabled
+        `;
     }
 
     private async updateNodeStatus(
@@ -511,11 +581,13 @@ export class UsageSnapshotIngestService {
         return retryDatabaseTransaction(operation, {
             onRetry: async () => {
                 await this.prisma
-                    .$executeRaw(Prisma.sql`
+                    .$executeRaw(
+                        Prisma.sql`
                         UPDATE node_usage_snapshot_state
                         SET database_retries = database_retries + 1, updated_at = now()
                         WHERE node_uuid = ${nodeUuid}::uuid
-                    `)
+                    `,
+                    )
                     .catch(() => undefined);
             },
         });
