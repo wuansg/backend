@@ -6,6 +6,7 @@ export const SUBSCRIPTION_TEMPLATE_TYPE = {
     STASH: 'STASH',
     CLASH: 'CLASH',
     SURGE: 'SURGE',
+    SHADOWROCKET: 'SHADOWROCKET',
 
     SINGBOX: 'SINGBOX',
 } as const;

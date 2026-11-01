@@ -192,6 +192,9 @@ export class ResponseRulesMatcherService {
             case REQUEST_TEMPLATE_TYPE.SURGE:
                 matchedResponse.responseType = SUBSCRIPTION_TEMPLATE_TYPE.SURGE;
                 break;
+            case REQUEST_TEMPLATE_TYPE.SHADOWROCKET:
+                matchedResponse.responseType = SUBSCRIPTION_TEMPLATE_TYPE.SHADOWROCKET;
+                break;
             default:
                 matchedResponse.responseType = 'BLOCK';
                 break;

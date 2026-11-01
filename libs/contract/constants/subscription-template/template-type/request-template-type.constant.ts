@@ -4,6 +4,7 @@ export const REQUEST_TEMPLATE_TYPE = {
     MIHOMO: 'mihomo',
     CLASH: 'clash',
     SURGE: 'surge',
+    SHADOWROCKET: 'shadowrocket',
 } as const;
 
 export type TRequestTemplateType = [keyof typeof REQUEST_TEMPLATE_TYPE][number];

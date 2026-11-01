@@ -61,7 +61,8 @@
     "test:base64-generator": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-base64-generator.ts",
     "test:xray-cleanup": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-xray-cleanup.ts",
     "test:retired-node-plugins": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-retired-node-plugins.ts",
-    "test:snell": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-snell.ts"
+    "test:snell": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-snell.ts",
+    "test:shadowrocket": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-shadowrocket.ts"
   },
   "dependencies": {
     "@bull-board/api": "8.3.0",

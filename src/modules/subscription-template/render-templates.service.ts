@@ -4,6 +4,7 @@ import { SUBSCRIPTION_CONFIG_TYPES } from './constants/config-types';
 import { Base64GeneratorService } from './generators/base64.generator.service';
 import { ClashGeneratorService } from './generators/clash.generator.service';
 import { MihomoGeneratorService } from './generators/mihomo.generator.service';
+import { ShadowrocketGeneratorService } from './generators/shadowrocket.generator.service';
 import { SingBoxGeneratorService } from './generators/singbox.generator.service';
 import { SurgeGeneratorService } from './generators/surge.generator.service';
 import { IGenerateSubscription } from './interfaces';
@@ -20,6 +21,7 @@ export class RenderTemplatesService {
         private readonly mihomoGeneratorService: MihomoGeneratorService,
         private readonly clashGeneratorService: ClashGeneratorService,
         private readonly surgeGeneratorService: SurgeGeneratorService,
+        private readonly shadowrocketGeneratorService: ShadowrocketGeneratorService,
         private readonly base64GeneratorService: Base64GeneratorService,
         private readonly singBoxGeneratorService: SingBoxGeneratorService,
     ) {}
@@ -66,6 +68,15 @@ export class RenderTemplatesService {
                         srrContext.overrideTemplateName,
                     ),
                     contentType: SUBSCRIPTION_CONFIG_TYPES['SURGE'].CONTENT_TYPE,
+                };
+
+            case 'SHADOWROCKET':
+                return {
+                    subscription: await this.shadowrocketGeneratorService.generateConfig(
+                        formattedHosts,
+                        srrContext.overrideTemplateName,
+                    ),
+                    contentType: SUBSCRIPTION_CONFIG_TYPES['SHADOWROCKET'].CONTENT_TYPE,
                 };
 
             case 'MIHOMO':

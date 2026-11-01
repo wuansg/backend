@@ -14,6 +14,7 @@ import {
     DEFAULT_TEMPLATE_MIHOMO,
     DEFAULT_TEMPLATE_SINGBOX,
     DEFAULT_TEMPLATE_STASH,
+    DEFAULT_TEMPLATE_SHADOWROCKET,
     DEFAULT_TEMPLATE_SURGE,
 } from './constants';
 import { ReorderSubscriptionTemplatesBodyDto } from './dtos';
@@ -80,7 +81,8 @@ export class SubscriptionTemplateService {
                 template.templateType === 'MIHOMO' ||
                 template.templateType === 'STASH' ||
                 template.templateType === 'CLASH' ||
-                template.templateType === 'SURGE';
+                template.templateType === 'SURGE' ||
+                template.templateType === 'SHADOWROCKET';
 
             const isJsonTemplate = template.templateType === 'SINGBOX';
 
@@ -216,6 +218,9 @@ export class SubscriptionTemplateService {
                     break;
                 case 'SURGE':
                     templateYaml = DEFAULT_TEMPLATE_SURGE;
+                    break;
+                case 'SHADOWROCKET':
+                    templateYaml = DEFAULT_TEMPLATE_SHADOWROCKET;
                     break;
                 case 'SINGBOX':
                     templateJson = DEFAULT_TEMPLATE_SINGBOX;

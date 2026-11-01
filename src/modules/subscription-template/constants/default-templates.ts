@@ -434,3 +434,230 @@ export const DEFAULT_TEMPLATE_SINGBOX = {
         },
     },
 };
+
+// Shadowrocket native profile translated from the "selfcore" Mihomo template.
+// Nodes normally come from the user's node subscription; group members are
+// filled with the panel's node names so the profile works on its own as well.
+// Shadowrocket has no GEOSITE rules, so v2fly categories map to blackmatrix7
+// rule sets (RULE-SET for typed rules, DOMAIN-SET for their large domain parts).
+export const DEFAULT_TEMPLATE_SHADOWROCKET = `[General]
+bypass-system = true
+ipv6 = false
+prefer-ipv6 = false
+private-ip-answer = true
+dns-server = https://doh.pub/dns-query, https://dns.alidns.com/dns-query
+fallback-dns-server = system
+hijack-dns = 8.8.8.8:53, 8.8.4.4:53
+skip-proxy = 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, localhost, *.local, captive.apple.com
+tun-excluded-routes = 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.88.99.0/24, 192.168.0.0/16, 198.51.100.0/24, 203.0.113.0/24, 224.0.0.0/4, 255.255.255.255/32, 239.255.255.250/32
+udp-policy-not-supported-behaviour = REJECT
+
+[Proxy Group]
+APAC = url-test,#!remnawave-proxy-names,interval=600,tolerance=50,timeout=5,url=https://www.gstatic.com/generate_204
+YouTube = url-test,#!remnawave-proxy-names,interval=600,tolerance=50,timeout=5,url=https://www.gstatic.com/generate_204
+Telegram = url-test,interval=600,tolerance=50,timeout=5,url=https://flora.web.telegram.org/apiw,policy-regex-filter=(?i)hkg|sin|tyo|🇭🇰|🇸🇬|🇯🇵
+AI = select,#!remnawave-proxy-names,policy-regex-filter=(?i)^((?!hkg).)*$
+Steam = select,DIRECT,#!remnawave-proxy-names
+SteamCN = select,DIRECT,#!remnawave-proxy-names
+Emby = select,DIRECT,#!remnawave-proxy-names
+speedtest = select,#!remnawave-proxy-names
+Europe = url-test,interval=600,tolerance=50,timeout=5,url=https://www.gstatic.com/generate_204,policy-regex-filter=(?i)fra|🇩🇪
+America = url-test,interval=600,tolerance=50,timeout=5,url=https://www.gstatic.com/generate_204,policy-regex-filter=(?i)lax|🇺🇸
+苹果服务 = select,DIRECT,#!remnawave-proxy-names
+微软服务 = select,DIRECT,#!remnawave-proxy-names
+
+[Rule]
+# Cloudflare Tunnel (cloudflared)
+DOMAIN-SUFFIX,argotunnel.com,APAC
+DOMAIN-SUFFIX,cftunnel.com,APAC
+IP-CIDR,198.41.192.0/16,APAC,no-resolve
+IP-CIDR6,2606:4700:a0::/44,APAC,no-resolve
+IP-CIDR6,2606:4700:a8::/44,APAC,no-resolve
+
+DOMAIN-SUFFIX,nodeseek.com,Europe
+
+# Own proxy CloudFront endpoints: bypass other proxies
+DOMAIN,d23n4ybafu40b0.cloudfront.net,DIRECT
+DOMAIN,d2k5w4v5vmzrsb.cloudfront.net,DIRECT
+DOMAIN,d2qfe69g6bw5hw.cloudfront.net,DIRECT
+DOMAIN,d3hpyc0owkykx2.cloudfront.net,DIRECT
+DOMAIN,d3ofljyr18lykj.cloudfront.net,DIRECT
+DOMAIN,dhwz8xjxh53nl.cloudfront.net,DIRECT
+DOMAIN,dpie9xf9b7ufr.cloudfront.net,DIRECT
+
+# 必要放行与自有域名
+DOMAIN,pbh.mugi.uk,DIRECT
+DOMAIN,aiyunfra.mugi.uk,DIRECT
+DOMAIN,fra.mugi.uk,DIRECT
+DOMAIN,htv.mugi.uk,DIRECT
+DOMAIN-SUFFIX,iplark.com,DIRECT
+DOMAIN,download.docker.com,DIRECT
+DOMAIN-SUFFIX,misaka.be,DIRECT
+DOMAIN-SUFFIX,wnacg.com,APAC
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Lan/Lan.list,DIRECT
+
+# 广告、跟踪及恶意请求拦截 (geosite:category-ads-all)
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/AdvertisingLite/AdvertisingLite.list,REJECT
+DOMAIN-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/AdvertisingLite/AdvertisingLite_Domain.list,REJECT
+
+# YouTube
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Google/Google.list,YouTube
+DOMAIN-SUFFIX,ggpht.com,YouTube
+DOMAIN-SUFFIX,google.com,YouTube
+DOMAIN,dns.google,YouTube
+DOMAIN-SUFFIX,ytimg.com,YouTube
+DOMAIN,proactivebackend-pa.googleapis.com,YouTube
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/YouTube/YouTube.list,YouTube
+
+# AI (geosite:category-ai-!cn)
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/OpenAI/OpenAI.list,AI
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Claude/Claude.list,AI
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Gemini/Gemini.list,AI
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Copilot/Copilot.list,AI
+
+# Emby
+DOMAIN,rule34video.mugi.uk,Emby
+DOMAIN-KEYWORD,htv,Emby
+DOMAIN-SUFFIX,dav.mugi.uk,Emby
+DOMAIN-SUFFIX,aemby.de,Emby
+DOMAIN-SUFFIX,miraiemby.com,Emby
+DOMAIN-SUFFIX,emby.my,Emby
+DOMAIN-SUFFIX,emby.pro,Emby
+DOMAIN-KEYWORD,emby,Emby
+DOMAIN-SUFFIX,876645.xyz,Emby
+DOMAIN-SUFFIX,boomio-cdn.com,Emby
+DOMAIN-SUFFIX,us-storage.mugi.uk,Emby
+DOMAIN-SUFFIX,zdbb.net,Emby
+DOMAIN-SUFFIX,feiyue.lol,Emby
+DOMAIN-SUFFIX,heisi.org,Emby
+DOMAIN-SUFFIX,cn2gias.uk,Emby
+DOMAIN-SUFFIX,apple-cdn.net,Emby
+DOMAIN-SUFFIX,28.al,Emby
+DOMAIN-SUFFIX,startspoint.com,Emby
+DOMAIN-SUFFIX,xxlb.net,Emby
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Emby/Emby.list,Emby
+
+# 测速及媒体服务器
+DOMAIN,tp1.chtm.hinet.net,speedtest
+DOMAIN-SUFFIX,ziffstatic.com,speedtest
+DOMAIN-KEYWORD,speedtest,speedtest
+DOMAIN-KEYWORD,ookla,speedtest
+DOMAIN-WILDCARD,speed*.*,speedtest
+DOMAIN-WILDCARD,*.speed*.*,speedtest
+DOMAIN,speed.cloudflare.com,speedtest
+DOMAIN-SUFFIX,ooklaserver.net,speedtest
+DOMAIN,speedtest.net,speedtest
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Speedtest/Speedtest.list,speedtest
+
+# 应用与服务分流
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/NetEase/NetEase.list,DIRECT
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/SteamCN/SteamCN.list,SteamCN
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Steam/Steam.list,Steam
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Telegram/Telegram.list,Telegram
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Netflix/Netflix.list,YouTube
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/PrimeVideo/PrimeVideo.list,YouTube
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Disney/Disney.list,YouTube
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/HBO/HBO.list,YouTube
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Hulu/Hulu.list,YouTube
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Spotify/Spotify.list,YouTube
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/AbemaTV/AbemaTV.list,YouTube
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/DAZN/DAZN.list,YouTube
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/DiscoveryPlus/DiscoveryPlus.list,YouTube
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/TikTok/TikTok.list,YouTube
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Twitch/Twitch.list,YouTube
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/GitHub/GitHub.list,APAC
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Apple/Apple.list,苹果服务
+DOMAIN-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Apple/Apple_Domain.list,苹果服务
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/Microsoft/Microsoft.list,微软服务
+
+# 最终规则
+DOMAIN-KEYWORD,cloudflare,APAC
+GEOIP,CN,DIRECT
+RULE-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/China/China.list,DIRECT
+DOMAIN-SET,https://cdn.jsdelivr.net/gh/blackmatrix7/ios_rule_script@master/rule/Shadowrocket/China/China_Domain.list,DIRECT
+DOMAIN-KEYWORD,ip,APAC
+DOMAIN-SUFFIX,mugi.uk,APAC
+
+# 地区分流(按目标 IP 归属地)
+GEOIP,HK,APAC
+GEOIP,MO,APAC
+GEOIP,TW,APAC
+GEOIP,JP,APAC
+GEOIP,KR,APAC
+GEOIP,SG,APAC
+GEOIP,MY,APAC
+GEOIP,TH,APAC
+GEOIP,VN,APAC
+GEOIP,PH,APAC
+GEOIP,ID,APAC
+GEOIP,KH,APAC
+GEOIP,MM,APAC
+GEOIP,LA,APAC
+GEOIP,BN,APAC
+GEOIP,IN,APAC
+GEOIP,PK,APAC
+GEOIP,BD,APAC
+GEOIP,LK,APAC
+GEOIP,NP,APAC
+GEOIP,MN,APAC
+GEOIP,AU,APAC
+GEOIP,NZ,APAC
+GEOIP,GB,Europe
+GEOIP,IE,Europe
+GEOIP,DE,Europe
+GEOIP,FR,Europe
+GEOIP,NL,Europe
+GEOIP,BE,Europe
+GEOIP,LU,Europe
+GEOIP,CH,Europe
+GEOIP,AT,Europe
+GEOIP,IT,Europe
+GEOIP,ES,Europe
+GEOIP,PT,Europe
+GEOIP,SE,Europe
+GEOIP,NO,Europe
+GEOIP,DK,Europe
+GEOIP,FI,Europe
+GEOIP,IS,Europe
+GEOIP,PL,Europe
+GEOIP,CZ,Europe
+GEOIP,SK,Europe
+GEOIP,HU,Europe
+GEOIP,RO,Europe
+GEOIP,BG,Europe
+GEOIP,GR,Europe
+GEOIP,HR,Europe
+GEOIP,SI,Europe
+GEOIP,RS,Europe
+GEOIP,EE,Europe
+GEOIP,LV,Europe
+GEOIP,LT,Europe
+GEOIP,UA,Europe
+GEOIP,MD,Europe
+GEOIP,BY,Europe
+GEOIP,RU,Europe
+GEOIP,TR,Europe
+GEOIP,CY,Europe
+GEOIP,MT,Europe
+GEOIP,US,America
+GEOIP,CA,America
+GEOIP,MX,America
+GEOIP,BR,America
+GEOIP,AR,America
+GEOIP,CL,America
+GEOIP,CO,America
+GEOIP,PE,America
+GEOIP,VE,America
+GEOIP,EC,America
+GEOIP,UY,America
+GEOIP,PY,America
+GEOIP,BO,America
+GEOIP,PA,America
+GEOIP,CR,America
+GEOIP,GT,America
+GEOIP,DO,America
+GEOIP,PR,America
+GEOIP,JM,America
+
+FINAL,APAC
+`;

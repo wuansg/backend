@@ -11,6 +11,7 @@ import {
     DEFAULT_TEMPLATE_MIHOMO,
     DEFAULT_TEMPLATE_SINGBOX,
     DEFAULT_TEMPLATE_STASH,
+    DEFAULT_TEMPLATE_SHADOWROCKET,
     DEFAULT_TEMPLATE_SURGE,
 } from '@modules/subscription-template/constants';
 
@@ -88,6 +89,21 @@ export async function seedSubscriptionTemplate(prisma: PrismaClient) {
 
                 await prisma.subscriptionTemplate.create({
                     data: { templateType, name: 'Default', templateYaml: DEFAULT_TEMPLATE_SURGE },
+                });
+
+                break;
+            case SUBSCRIPTION_TEMPLATE_TYPE.SHADOWROCKET:
+                if (existingConfig) {
+                    consola.info(`Default ${templateType} config already exists`);
+                    continue;
+                }
+
+                await prisma.subscriptionTemplate.create({
+                    data: {
+                        templateType,
+                        name: 'Default',
+                        templateYaml: DEFAULT_TEMPLATE_SHADOWROCKET,
+                    },
                 });
 
                 break;
