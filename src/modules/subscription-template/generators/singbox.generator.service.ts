@@ -13,6 +13,7 @@ import { ResolvedProxyConfig } from '../resolve-proxy/interfaces';
 interface OutboundConfig {
     psk?: string;
     obfs_mode?: string;
+    reuse?: boolean;
     alter_id?: number;
     brutal_debug?: boolean;
     congestion_control?: string;
@@ -212,6 +213,7 @@ export class SingBoxGeneratorService {
                 // The upstream v4 client speaks to a v5 server without QUIC proxy mode.
                 config.version = 4;
                 config.psk = host.protocolOptions.psk;
+                config.reuse = true;
                 if (host.protocolOptions.obfs === 'http') config.obfs_mode = 'http';
                 return true;
             case 'vless':

@@ -158,7 +158,7 @@ export class MihomoGeneratorService {
                 if (UNSUPPORTED_PROTOCOLS.has(host.protocol)) continue;
                 if (isStash && host.transport === 'xhttp') continue;
 
-                const node = this.buildProxyNode(host, isExtendedClient);
+                const node = this.buildProxyNode(host, isExtendedClient, isStash);
                 if (!node) continue;
 
                 data.proxies.push(node);
@@ -172,8 +172,12 @@ export class MihomoGeneratorService {
         }
     }
 
-    private buildProxyNode(host: ResolvedProxyConfig, isExtendedClient: boolean): ProxyNode | null {
-        const node = this.buildBaseProxyNode(host, isExtendedClient);
+    private buildProxyNode(
+        host: ResolvedProxyConfig,
+        isExtendedClient: boolean,
+        isStash: boolean,
+    ): ProxyNode | null {
+        const node = this.buildBaseProxyNode(host, isExtendedClient, isStash);
 
         if (!node) return null;
 
@@ -183,6 +187,7 @@ export class MihomoGeneratorService {
     private buildBaseProxyNode(
         host: ResolvedProxyConfig,
         isExtendedClient: boolean,
+        isStash: boolean,
     ): ProxyNode | null {
         if (host.protocol === 'snell' && (host.security !== 'none' || host.transport !== 'tcp'))
             return null;
@@ -203,6 +208,9 @@ export class MihomoGeneratorService {
         if (!this.applyProtocolFields(node, host)) {
             return null;
         }
+
+        // Mihomo pools Snell v4/v5 connections when asked; Stash documents no such option.
+        if (host.protocol === 'snell' && !isStash) node.reuse = true;
 
         this.applySecurityFields(node, host);
         this.applyTransportOpts(node, host);

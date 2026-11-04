@@ -171,6 +171,7 @@ async function main(): Promise<void> {
     assert.equal(outbound.psk, psk);
     assert.equal(outbound.version, 4);
     assert.equal(outbound.obfs_mode, 'http');
+    assert.equal(outbound.reuse, true);
     assert.equal(outbound.userkey, undefined);
     assert.equal(outbound.multiplex, undefined);
     const mihomo = load(await new MihomoGeneratorService(templates).generateConfig([host])) as {
@@ -178,6 +179,7 @@ async function main(): Promise<void> {
     };
     assert.equal(mihomo.proxies[0].psk, psk);
     assert.equal(mihomo.proxies[0].version, 5);
+    assert.equal(mihomo.proxies[0].reuse, true);
     assert.equal(mihomo.proxies[0].smux, undefined);
     assert.deepEqual(mihomo.proxies[0]['obfs-opts'], { mode: 'http' });
     const stashGenerator = new MihomoGeneratorService(templates);
@@ -190,6 +192,7 @@ async function main(): Promise<void> {
     assert.equal(stash.proxies[0].psk, psk);
     assert.equal(stash.proxies[0].udp, true);
     assert.equal(stash.proxies[0].network, undefined);
+    assert.equal(stash.proxies[0].reuse, undefined);
     assert.equal(stash.proxies[0].smux, undefined);
     assert.deepEqual(stash.proxies[0]['obfs-opts'], { mode: 'http' });
     const excludedStash = load(
