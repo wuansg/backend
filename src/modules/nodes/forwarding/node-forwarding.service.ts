@@ -303,7 +303,10 @@ export class NodeForwardingService {
     }
 
     private ensureJwt(): Promise<void> {
-        this.jwtReady ??= this.axios.setJwt();
+        this.jwtReady ??= this.axios.setJwt().catch((error) => {
+            this.jwtReady = undefined;
+            throw error;
+        });
         return this.jwtReady;
     }
 

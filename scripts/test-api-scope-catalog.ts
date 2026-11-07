@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import * as commandExports from '@libs/contracts/commands';
 import { EndpointDetails } from '@libs/contracts/constants';
@@ -50,6 +52,63 @@ assert.ok(
     endpointCount > 120,
     `Expected to validate all exported endpoint commands, found ${endpointCount}.`,
 );
+
+function collectControllerFiles(dir: string): string[] {
+    const out: string[] = [];
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            out.push(...collectControllerFiles(fullPath));
+        } else if (entry.isFile() && /\.controllers?\.ts$/.test(entry.name)) {
+            out.push(fullPath);
+        }
+    }
+    return out;
+}
+
+const modulesRoot = path.resolve(__dirname, '../src/modules');
+const controllerFiles = collectControllerFiles(modulesRoot);
+let apiControllerCount = 0;
+
+for (const file of controllerFiles) {
+    const source = fs.readFileSync(file, 'utf8');
+    if (!source.includes('ROLE.API')) continue;
+    apiControllerCount++;
+    const relPath = path.relative(modulesRoot, file);
+    assert.ok(
+        source.includes('@ApiScopeResource('),
+        `Controller ${relPath} grants ROLE.API without @ApiScopeResource`,
+    );
+    assert.ok(
+        source.includes('ScopesGuard'),
+        `Controller ${relPath} grants ROLE.API without ScopesGuard`,
+    );
+}
+
+assert.ok(
+    apiControllerCount >= 20,
+    `Expected to check all ROLE.API controllers, found ${apiControllerCount}.`,
+);
+
+const forwardingSource = fs.readFileSync(
+    path.join(modulesRoot, 'nodes/forwarding/node-forwarding.service.ts'),
+    'utf8',
+);
+assert.ok(
+    forwardingSource.includes('this.jwtReady = undefined;'),
+    'NodeForwardingService.ensureJwt must reset jwtReady on setJwt failure',
+);
+
+const nodePluginsSource = fs.readFileSync(
+    path.join(modulesRoot, 'node-plugins/node-plugins.service.ts'),
+    'utf8',
+);
+assert.ok(
+    nodePluginsSource.includes('await this.ensureJwt();') &&
+        nodePluginsSource.includes('this.jwtReady = undefined;'),
+    'NodePluginService.preview must initialize node JWT and reset jwtReady on failure',
+);
+
 process.stdout.write(
-    `API scope catalog uniqueness validation passed (${endpointCount} endpoints)\n`,
+    `API scope catalog uniqueness validation passed (${endpointCount} endpoints, ${apiControllerCount} API controllers)\n`,
 );

@@ -33,6 +33,7 @@ import {
 @Injectable()
 export class NodePluginService {
     private readonly logger = new Logger(NodePluginService.name);
+    private jwtReady?: Promise<void>;
 
     constructor(
         private readonly nodePluginRepository: NodePluginRepository,
@@ -42,6 +43,14 @@ export class NodePluginService {
         private readonly axios: AxiosService,
         private readonly nodeObservabilityRepository: NodeObservabilityRepository,
     ) {}
+
+    private async ensureJwt(): Promise<void> {
+        this.jwtReady ??= this.axios.setJwt().catch((error) => {
+            this.jwtReady = undefined;
+            throw error;
+        });
+        await this.jwtReady;
+    }
 
     public async getAllConfigs(): Promise<TResult<GetNodePluginsResponseModel>> {
         try {
@@ -305,6 +314,7 @@ export class NodePluginService {
             if (compileNodeUuid) {
                 const node = await this.queryBus.execute(new GetNodeByUuidQuery(compileNodeUuid));
                 if (!node.isOk) return fail(ERRORS.NODE_NOT_FOUND);
+                await this.ensureJwt();
                 const result = await this.axios.compileNodePlugin(
                     {
                         plugin: {
