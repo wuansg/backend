@@ -116,7 +116,12 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
 
             if (!expectsCore) {
                 await this.clearCoreFailureState(nodeUuid);
-                return await this.handleCorelessNode(healthResult.response, nodeUuid, isConnected);
+                return await this.handleCorelessNode(
+                    connectionOpts,
+                    healthResult.response,
+                    nodeUuid,
+                    isConnected,
+                );
             }
 
             if (!runtimeStatus.coreOnline) {
@@ -181,12 +186,33 @@ export class NodeHealthCheckQueueProcessor extends WorkerHost {
     }
 
     private async handleCorelessNode(
+        connectionOpts: INodeConnectionOpts,
         health: NodeAgentHealthResponse,
         nodeUuid: string,
         isConnected: boolean,
     ) {
+        // A coreless node (e.g. forwarding only) still reports its machine stats
+        // when the agent can serve them without a core.
+        const hostStats = health.capabilities.includes('host_stats_v1')
+            ? await this.axios.getHostStats(connectionOpts)
+            : null;
+
+        if (hostStats?.isOk) {
+            await this.rawCacheService.setMany([
+                {
+                    key: CACHE_KEYS.NODE_SYSTEM_INFO(nodeUuid),
+                    value: hostStats.response.system.info,
+                },
+                {
+                    key: CACHE_KEYS.NODE_SYSTEM_STATS(nodeUuid),
+                    value: hostStats.response.system.stats,
+                    ttlSeconds: CACHE_KEYS_TTL.NODE_SYSTEM_STATS,
+                },
+            ]);
+        }
+
         await this.rawCacheService.delMany([
-            CACHE_KEYS.NODE_SYSTEM_STATS(nodeUuid),
+            ...(hostStats?.isOk ? [] : [CACHE_KEYS.NODE_SYSTEM_STATS(nodeUuid)]),
             CACHE_KEYS.NODE_USERS_ONLINE(nodeUuid),
             CACHE_KEYS.NODE_CORE_UPTIME(nodeUuid),
         ]);

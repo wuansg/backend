@@ -20,6 +20,8 @@ export const NodeRuntimeStatusSchema = z.object({
             dnsStale: z.boolean().optional(),
             dnsLastResolvedAt: z.iso.datetime().nullable().optional(),
             dnsFailureCount: z.number().int().nonnegative().optional(),
+            // Distinct client addresses recently seen on forwarded flows.
+            activeClients: z.number().int().nonnegative().optional(),
         })
         .nullable(),
     usageSnapshot: z

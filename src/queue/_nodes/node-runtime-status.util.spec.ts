@@ -1,3 +1,4 @@
+import { NodeRuntimeStatusSchema } from '@contract/models';
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
@@ -16,6 +17,7 @@ const health = {
         configuredRules: 2,
         enabledRules: 2,
         dnsResults: { edge: '198.51.100.10' },
+        activeClients: 3,
     },
     usageSnapshot: {
         supported: true,
@@ -32,6 +34,8 @@ describe('resolveNodeRuntimeStatus', () => {
 
         assert.equal(result.mode, 'FORWARDING_ONLY');
         assert.equal(result.forwarding?.enabledRules, 2);
+        // The API schema must not strip the forwarded clients count.
+        assert.equal(NodeRuntimeStatusSchema.parse(result).forwarding?.activeClients, 3);
         assert.deepEqual(result.supportedCores, ['SING_BOX']);
         assert.equal(result.usageSnapshot?.capturing, false);
     });

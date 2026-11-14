@@ -159,6 +159,8 @@ export type NodeSystemStatsResponse = {
     system: { stats: TNodeSystem['stats'] };
 };
 
+export type NodeHostStatsResponse = { system: TNodeSystem };
+
 export interface GetUsersInboundStatsResponse {
     response: {
         users: Array<{
@@ -605,6 +607,19 @@ export class AxiosService {
         return this.request<{ response: NodeSystemStatsResponse }>({
             label: 'GET SYSTEM STATS',
             path: '/node/stats/get-system-stats',
+            opts,
+            method: 'get',
+            handle500: true,
+            logAxiosError: false,
+            timeout: 15_000,
+        });
+    }
+
+    /** Machine info and load from agents with `host_stats_v1`; needs no running core. */
+    public async getHostStats(opts: INodeConnectionOpts): Promise<TResult<NodeHostStatsResponse>> {
+        return this.request<{ response: NodeHostStatsResponse }>({
+            label: 'GET HOST STATS',
+            path: '/node/stats/get-host-stats',
             opts,
             method: 'get',
             handle500: true,
