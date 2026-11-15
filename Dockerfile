@@ -1,4 +1,4 @@
-ARG NODE_VERSION=24.22.1
+ARG NODE_VERSION=24.22.3
 
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS frontend
 WORKDIR /opt/frontend
