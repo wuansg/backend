@@ -43,6 +43,7 @@ COPY scripts/test-node-benchmarks.ts ./scripts/test-node-benchmarks.ts
 RUN npm run migrate:generate \
     && npm run test:snell \
     && npm run test:node-benchmarks \
+    && npm run test:pre-parse-auth \
     && npm run build \
     && npm prune --omit=dev \
     && npm cache clean --force

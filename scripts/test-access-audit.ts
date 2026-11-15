@@ -10,6 +10,7 @@ import { AxiosService } from '@common/axios';
 import { PrismaService } from '@common/database/prisma.service';
 import { ScopesGuard } from '@common/guards/scopes';
 import { RawCacheService } from '@common/raw-cache/raw-cache.service';
+import { RequestAuthService } from '@common/request-auth/request-auth.service';
 import {
     AuditPolicyBodySchema,
     AuditQuerySchema,
@@ -74,8 +75,9 @@ async function main() {
         providers: [
             { provide: PrismaService, useValue: {} },
             { provide: RawCacheService, useValue: {} },
+            { provide: RequestAuthService, useValue: {} },
         ],
-        exports: [PrismaService, RawCacheService],
+        exports: [PrismaService, RawCacheService, RequestAuthService],
     })
     class Dependencies {}
     @Module({ imports: [Dependencies, AccessAuditModule] })

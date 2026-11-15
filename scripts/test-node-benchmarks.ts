@@ -2,13 +2,12 @@ import { PrismaClient } from '@prisma/client';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Global, Module } from '@nestjs/common';
-import { CqrsModule } from '@nestjs/cqrs';
 import { NestFactory } from '@nestjs/core';
-import { MODULE_METADATA } from '@nestjs/common/constants';
 
 import { AxiosService } from '@common/axios';
 import { PrismaService } from '@common/database/prisma.service';
 import { RawCacheService } from '@common/raw-cache/raw-cache.service';
+import { RequestAuthService } from '@common/request-auth/request-auth.service';
 import { BenchmarkRequestSchema, BenchmarkTargetSchema } from '@libs/contracts/commands';
 
 import { NodeBenchmarksService } from '../src/modules/node-benchmarks/benchmarks.service';
@@ -37,14 +36,15 @@ assert.equal(
 );
 async function main() {
     // Instantiate the real controller and its guards, not only the service with
-    // manual mocks. A missing CqrsModule breaks JwtDefaultGuard at REST startup.
+    // manual mocks. JwtDefaultGuard needs the global RequestAuthService at REST startup.
     @Global()
     @Module({
         providers: [
             { provide: PrismaService, useValue: {} },
             { provide: RawCacheService, useValue: {} },
+            { provide: RequestAuthService, useValue: {} },
         ],
-        exports: [PrismaService, RawCacheService],
+        exports: [PrismaService, RawCacheService, RequestAuthService],
     })
     class FixtureDependencies {}
     @Module({ imports: [FixtureDependencies, NodeBenchmarksModule] })
@@ -58,21 +58,23 @@ async function main() {
     } finally {
         await app.close();
     }
+    @Global()
     @Module({
-        imports: (Reflect.getMetadata(MODULE_METADATA.IMPORTS, NodeBenchmarksModule) as unknown[])
-            .filter((module) => module !== CqrsModule),
-        providers: Reflect.getMetadata(MODULE_METADATA.PROVIDERS, NodeBenchmarksModule),
-        controllers: Reflect.getMetadata(MODULE_METADATA.CONTROLLERS, NodeBenchmarksModule),
+        providers: [
+            { provide: PrismaService, useValue: {} },
+            { provide: RawCacheService, useValue: {} },
+        ],
+        exports: [PrismaService, RawCacheService],
     })
-    class MissingCqrsModule {}
-    @Module({ imports: [FixtureDependencies, MissingCqrsModule] })
+    class MissingRequestAuthDependencies {}
+    @Module({ imports: [MissingRequestAuthDependencies, NodeBenchmarksModule] })
     class BrokenStartupFixture {}
     await assert.rejects(
         NestFactory.createApplicationContext(BrokenStartupFixture, {
             logger: false,
             abortOnError: false,
         }),
-        /QueryBus/,
+        /RequestAuthService/,
     );
     console.log('Benchmark module/controller/guard startup regression passed');
     let jwtInitializations = 0;

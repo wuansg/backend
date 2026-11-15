@@ -13,6 +13,7 @@ import { TypedConfigService } from '@common/config/app-config';
 import { PrismaService } from '@common/database/prisma.service';
 import { ScopesGuard } from '@common/guards/scopes';
 import { RawCacheService } from '@common/raw-cache';
+import { RequestAuthService } from '@common/request-auth/request-auth.service';
 import { stableJsonHash } from '@common/utils/stable-json-hash.util';
 import {
     CreateNodeCommand,
@@ -51,6 +52,7 @@ async function main() {
             { provide: AxiosService, useValue: {} },
             { provide: TypedConfigService, useValue: {} },
             { provide: RawCacheService, useValue: {} },
+            { provide: RequestAuthService, useValue: {} },
             { provide: getQueueToken(QUEUES_NAMES.NODES.START), useValue: {} },
         ],
     })
