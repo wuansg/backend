@@ -39,6 +39,7 @@ COPY src ./src
 COPY libs ./libs
 COPY scripts/test-snell.ts ./scripts/test-snell.ts
 COPY scripts/test-node-benchmarks.ts ./scripts/test-node-benchmarks.ts
+COPY scripts/test-pre-parse-auth.ts ./scripts/test-pre-parse-auth.ts
 
 RUN npm run migrate:generate \
     && npm run test:snell \
