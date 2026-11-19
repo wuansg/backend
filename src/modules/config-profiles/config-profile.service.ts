@@ -13,6 +13,10 @@ import { ERRORS } from '@libs/contracts/constants/errors';
 
 import { NodeDeploymentsService } from '@modules/node-deployments/node-deployments.service';
 import { NodeForwardingService } from '@modules/nodes/forwarding';
+import {
+    describeInboundListenerConflicts,
+    findInboundListenerConflicts,
+} from '@modules/nodes/inbound-listener-conflicts.util';
 import { NodesRepository } from '@modules/nodes/repositories/nodes.repository';
 
 import { NodesQueuesService } from '@queue/_nodes';
@@ -28,6 +32,7 @@ import { GetSnippetsQuery } from './queries/get-snippets';
 import { ConfigProfileRepository } from './repositories/config-profile.repository';
 
 class ForwardingPortConflictError extends Error {}
+class InboundPortConflictError extends Error {}
 
 @Injectable()
 export class ConfigProfileService {
@@ -296,6 +301,10 @@ export class ConfigProfileService {
                 }
             }
 
+            if (error instanceof InboundPortConflictError) {
+                return fail(ERRORS.INBOUND_PORT_CONFLICT.withMessage(error.message));
+            }
+
             if (error instanceof ForwardingPortConflictError) {
                 return fail(ERRORS.FORWARDING_PORT_CONFLICT.withMessage(error.message));
             }
@@ -355,6 +364,14 @@ export class ConfigProfileService {
                     const selectedInbounds = inboundsEntities.filter((inbound) =>
                         activeTags.has(inbound.tag),
                     );
+                    const listenerConflict = describeInboundListenerConflicts(
+                        findInboundListenerConflicts(selectedInbounds),
+                    );
+                    if (listenerConflict) {
+                        throw new InboundPortConflictError(
+                            `Node ${node.name}: ${listenerConflict}`,
+                        );
+                    }
                     const conflict = this.nodeForwardingService.validateNodeInbounds(
                         node,
                         selectedInbounds,

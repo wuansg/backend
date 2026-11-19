@@ -25,6 +25,10 @@ import {
 } from './dtos';
 import { NodesEntity } from './entities';
 import { NodeForwardingService } from './forwarding';
+import {
+    describeInboundListenerConflicts,
+    findInboundListenerConflicts,
+} from './inbound-listener-conflicts.util';
 import { NodeResponseModel } from './models';
 import { nodeUpdateNeedsApply } from './node-update-policy.util';
 import { NodesSystemCacheService } from './nodes-system-cache.service';
@@ -60,8 +64,6 @@ export class NodesService {
                 activeConfigProfileUuid: configProfile.activeConfigProfileUuid,
             });
 
-            const result = await this.nodesRepository.create(nodeEntity);
-
             if (configProfile) {
                 const configProfileResponse = await this.queryBus.execute(
                     new GetConfigProfileByUuidQuery(configProfile.activeConfigProfileUuid),
@@ -75,15 +77,30 @@ export class NodesService {
                             inbounds.some((inbound) => inbound.uuid === activeInboundUuid),
                     );
 
-                    if (areAllInboundsFromConfigProfile) {
-                        await this.nodesRepository.addInboundsToNode(
-                            result.uuid,
-                            configProfile.activeInbounds,
-                        );
-                    } else {
+                    if (!areAllInboundsFromConfigProfile) {
                         return fail(ERRORS.CONFIG_PROFILE_INBOUND_NOT_FOUND_IN_SPECIFIED_PROFILE);
                     }
+
+                    const listenerConflict = describeInboundListenerConflicts(
+                        findInboundListenerConflicts(
+                            inbounds.filter((inbound) =>
+                                configProfile.activeInbounds.includes(inbound.uuid),
+                            ),
+                        ),
+                    );
+                    if (listenerConflict) {
+                        return fail(ERRORS.INBOUND_PORT_CONFLICT.withMessage(listenerConflict));
+                    }
                 }
+            }
+
+            const result = await this.nodesRepository.create(nodeEntity);
+
+            if (configProfile) {
+                await this.nodesRepository.addInboundsToNode(
+                    result.uuid,
+                    configProfile.activeInbounds,
+                );
             }
 
             const node = await this.nodesRepository.findByUUID(result.uuid);
@@ -299,6 +316,12 @@ export class NodesService {
                         const selectedInbounds = inbounds.filter((inbound) =>
                             configProfile.activeInbounds.includes(inbound.uuid),
                         );
+                        const listenerConflict = describeInboundListenerConflicts(
+                            findInboundListenerConflicts(selectedInbounds),
+                        );
+                        if (listenerConflict) {
+                            return fail(ERRORS.INBOUND_PORT_CONFLICT.withMessage(listenerConflict));
+                        }
                         const forwardingConflict = this.nodeForwardingService.validateNodeInbounds(
                             node,
                             selectedInbounds,
@@ -534,6 +557,32 @@ export class NodesService {
 
             if (!allActiveInboundsExistInProfile) {
                 return fail(ERRORS.CONFIG_PROFILE_INBOUND_NOT_FOUND_IN_SPECIFIED_PROFILE);
+            }
+
+            const selectedInbounds = inbounds.filter((inbound) =>
+                configProfile.activeInbounds.includes(inbound.uuid),
+            );
+            const listenerConflict = describeInboundListenerConflicts(
+                findInboundListenerConflicts(selectedInbounds),
+            );
+            if (listenerConflict) {
+                return fail(ERRORS.INBOUND_PORT_CONFLICT.withMessage(listenerConflict));
+            }
+
+            for (const uuid of uuids) {
+                const node = await this.nodesRepository.findByUUID(uuid);
+                if (!node) return fail(ERRORS.NODE_NOT_FOUND);
+                const forwardingConflict = this.nodeForwardingService.validateNodeInbounds(
+                    node,
+                    selectedInbounds,
+                );
+                if (forwardingConflict) {
+                    return fail(
+                        ERRORS.FORWARDING_PORT_CONFLICT.withMessage(
+                            `Node ${node.name}: ${forwardingConflict}`,
+                        ),
+                    );
+                }
             }
 
             for (const uuid of uuids)
