@@ -1,6 +1,6 @@
 {
   "name": "@remnawave/backend",
-  "version": "3.24.2",
+  "version": "3.24.3",
   "private": false,
   "description": "Remnawave Panel Backend",
   "homepage": "https://github.com/remnawave",
@@ -43,6 +43,7 @@
     "test:host-mapper": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-host-mapper.ts",
     "test:subscription-remarks": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-subscription-remarks.ts",
     "test:pre-parse-auth": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-pre-parse-auth.ts",
+    "test:inbound-port-conflicts": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-inbound-port-conflicts.ts",
     "test:node-ips-shared-lists": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-node-ips-shared-lists.ts",
     "test:stage-13-15": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-stage-13-15.ts",
     "test:api-scope-catalog": "ts-node --transpile-only --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"Node\"}' -r tsconfig-paths/register scripts/test-api-scope-catalog.ts",

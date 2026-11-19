@@ -18,6 +18,7 @@ import { ConfigProfileInboundEntity } from '@modules/config-profiles/entities';
 import { hashNodeForwardingConfig } from '@queue/_nodes/forwarding-sync.util';
 
 import { NodesEntity } from '../entities';
+import { inboundListenerProtocol } from '../inbound-listener-conflicts.util';
 import { NodesRepository } from '../repositories/nodes.repository';
 
 const FORWARDING_CAPABILITY = 'port_forwarding_v1';
@@ -351,25 +352,7 @@ export class NodeForwardingService {
     }
 
     private inboundProtocol(inbound: ConfigProfileInboundEntity): 'TCP' | 'UDP' | 'TCP_UDP' {
-        const network = inbound.network?.toLowerCase();
-        if (network === 'quic' || network === 'kcp' || network === 'udp') return 'UDP';
-        if (
-            network === 'tcp' ||
-            network === 'raw' ||
-            network === 'ws' ||
-            network === 'grpc' ||
-            network === 'httpupgrade' ||
-            network === 'splithttp' ||
-            network === 'xhttp'
-        ) {
-            return 'TCP';
-        }
-        const type = inbound.type.toLowerCase();
-        if (['hysteria', 'hysteria2', 'tuic', 'quic'].includes(type)) return 'UDP';
-        if (['snell', 'anytls', 'trojan', 'vless', 'http', 'naive', 'shadowtls'].includes(type)) {
-            return 'TCP';
-        }
-        return 'TCP_UDP';
+        return inboundListenerProtocol(inbound);
     }
 
     private protocolsOverlap(left: string, right: string): boolean {

@@ -1250,4 +1250,10 @@ export const ERRORS = {
         httpCode: 400,
         withMessage: (message: string) => ({ code: 'A249', message, httpCode: 400 }),
     },
+    INBOUND_PORT_CONFLICT: {
+        code: 'A250',
+        message: 'Two inbounds on the same node listen on the same port',
+        httpCode: 409,
+        withMessage: (message: string) => ({ code: 'A250', message, httpCode: 409 }),
+    },
 } as const;

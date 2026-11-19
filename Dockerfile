@@ -40,11 +40,13 @@ COPY libs ./libs
 COPY scripts/test-snell.ts ./scripts/test-snell.ts
 COPY scripts/test-node-benchmarks.ts ./scripts/test-node-benchmarks.ts
 COPY scripts/test-pre-parse-auth.ts ./scripts/test-pre-parse-auth.ts
+COPY scripts/test-inbound-port-conflicts.ts ./scripts/test-inbound-port-conflicts.ts
 
 RUN npm run migrate:generate \
     && npm run test:snell \
     && npm run test:node-benchmarks \
     && npm run test:pre-parse-auth \
+    && npm run test:inbound-port-conflicts \
     && npm run build \
     && npm prune --omit=dev \
     && npm cache clean --force
